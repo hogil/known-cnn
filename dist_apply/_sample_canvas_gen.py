@@ -314,10 +314,10 @@ def alpha_row(rng):
 
     핵심 spec (사용자 명시):
     - PIL ImageDraw.line 직접 (alpha-based stochastic X)
-    - **y 값 변하지 않고 x 값만 변함** — angle ±0.08 rad (≈ ±4.6°), 거의 horizontal
+    - **y 값 strict 동일, x 값만 변함** (round 27: angle = 0 fix per user)
     - line_len = chip * uniform(1/6, 1/4) — chip 1/6 ~ 1/4 매우 짧음
     - width 1-2 px (매우 얇음)
-    - n_lines 20-39 random scatter inside wafer
+    - n_lines 40-69 random scatter inside wafer
     - alpha = 1.0 binary (line pixel) → grade 7 dominant (CLASS_PEAK_DIST)
     - chip border decision: alpha mean 작아도 alpha max 1.0 → max bonus 적용
     """
@@ -334,11 +334,11 @@ def alpha_row(rng):
             if (ly-cy)**2 + (lx-cx)**2 < (R*0.85)**2:
                 break
         line_len = CHIP * rng.uniform(1/6, 1/4)              # chip 1/6 ~ 1/4 (사용자 spec)
-        angle = rng.uniform(-0.08, 0.08)                      # almost horizontal
-        x0 = lx - line_len/2 * np.cos(angle)
-        x1 = lx + line_len/2 * np.cos(angle)
-        y0 = ly - line_len/2 * np.sin(angle)
-        y1 = ly + line_len/2 * np.sin(angle)
+        # angle = 0 strict horizontal (round 27 user spec: y 동일, x 만 변함)
+        x0 = lx - line_len/2
+        x1 = lx + line_len/2
+        y0 = ly
+        y1 = ly
         width = int(rng.integers(1, 3))                       # 1-2 px thin
         draw.line([(x0, y0), (x1, y1)], fill=255, width=width)
     arr = (np.array(img) > 0).astype(np.float32)              # binary line mask
