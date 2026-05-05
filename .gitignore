@@ -1,0 +1,59 @@
+# ===== large or per-run output (절대 commit 금지, 절대 삭제 금지) =====
+log/
+logs_chip/
+logs_wafer/
+logs_compound/
+logs_chipgrid/
+logs_chipgrid_fusion/
+logs_chipgrid_kde_gmm/
+logs_chipgrid_smoke/
+logs_objid_ablation/
+logs_obj/
+logs_multilabel/
+logs_e2e/
+logs_predict_chip/
+logs_predict_wafer/
+logs_predict_compound/
+logs_compound_queue/
+logs_contrastive/
+result_wafer/
+result_chip/
+result_compound/
+outputs/
+
+# multi-label ablation outputs (Stage 1+)
+_dist_heatmaps_per_class/
+plots/
+results/
+results_uncertainty/
+results_ensemble/
+results_ensemble_ep10/
+results_selective/
+TEST_image_root/
+TEST_positions_root/
+TEST_result_*/
+TEST_logs_predict_*/
+models/
+_dist_heatmaps/
+_resize_compare/
+_resize_compare1024/
+_resize_compare4/
+_resize_compare512/
+
+# ===== python =====
+__pycache__/
+*.pyc
+*.pyo
+
+# ===== local-only / sensitive =====
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
+real.png
+
+# ===== editor / OS =====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

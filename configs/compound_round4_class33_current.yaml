@@ -1,0 +1,37 @@
+# Round4 current 33-class wafer set for compound/wafer fair comparison.
+# Current labels use fork/scratch_rot in place of the older particle_blast/scratch_21deg names.
+# Canvas-only classes are intentionally excluded to match the 33-class comparison size.
+classes:
+  - Center_bank_boundary
+  - Center_fork
+  - Center_invalid_main
+  - Center_scratch
+  - Center_scratch_rot
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Ring_bank_boundary
+  - Edge-Ring_fork
+  - Edge-Ring_invalid_main
+  - Edge-Ring_scratch
+  - Edge-Ring_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  - Full_bank_boundary
+  - Full_fork
+  - Full_invalid_main
+  - Full_scratch
+  - Full_scratch_rot
+  - Normal_bank_boundary
+  - Thick-Edge_fork
+  - Thick-Edge_invalid_main

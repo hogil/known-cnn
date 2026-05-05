@@ -1,0 +1,10 @@
+# M5 — BCE warmup → ASL fine-tune
+# 가설: warmup 으로 ASL 의 noisy gradient 회피. 안정성 ↑ + +1% mAP.
+loss: bce_warmup_asl
+warmup_epochs: 5
+gamma_pos: 1.0
+gamma_neg: 4.0
+clip: 0.05
+class_weight: effective
+class_weight_beta: 0.999
+label_smoothing: 0.05

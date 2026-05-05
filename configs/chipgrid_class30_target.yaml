@@ -1,0 +1,35 @@
+# Target active-class list after adding 8 new object-less wafer-canvas classes.
+# This config intentionally fails with the default strict active-class behavior until
+# DiagonalSmear/CrossScratch/CrescentArc/SpiralTrail/ParallelScratches/EdgeSmudge/
+# BlobChain/BrokenRing have been generated in the data root.
+classes:
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_particle_blast
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_21deg
+  - Edge-Top_bank_boundary
+  - Edge-Top_invalid_main
+  - Edge-Top_particle_blast
+  - Edge-Top_scratch
+  - Edge-Top_scratch_21deg
+  - Donut_bank_boundary
+  - Donut_invalid_main
+  - Donut_particle_blast
+  - Donut_scratch
+  - Donut_scratch_21deg
+  - Center_invalid_main
+  - Edge-Ring_invalid_main
+  - Full_invalid_main
+  - Thick-Edge_invalid_main
+  - Edge-Ring_particle_blast
+  - Starburst
+  - CommaCluster
+  - DiagonalSmear
+  - CrossScratch
+  - CrescentArc
+  - SpiralTrail
+  - ParallelScratches
+  - EdgeSmudge
+  - BlobChain
+  - BrokenRing

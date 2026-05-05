@@ -1,0 +1,11 @@
+# M2 — Single SOTA: Asymmetric Loss (Ridnik et al. ICCV 2021)
+# Default: γ_pos=1, γ_neg=4, clip=0.05 (학계 default)
+# 학계 결과: COCO mAP 81.3 (BCE) → 86.6 (ASL) +5.3.
+loss: asl
+gamma_pos: 1.0
+gamma_neg: 4.0
+clip: 0.05
+class_weight: effective
+class_weight_beta: 0.999
+label_smoothing: 0.05
+warmup_epochs: 0

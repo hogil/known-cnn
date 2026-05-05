@@ -1,0 +1,10 @@
+# M3 — ASL + effective(0.9999) + ls=0.05
+# 가설: M2 + class imbalance 강화. +2% mAP over M2.
+loss: asl
+gamma_pos: 1.0
+gamma_neg: 4.0
+clip: 0.05
+class_weight: effective
+class_weight_beta: 0.9999
+label_smoothing: 0.05
+warmup_epochs: 0

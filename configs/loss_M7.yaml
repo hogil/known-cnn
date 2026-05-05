@@ -1,0 +1,10 @@
+# M7 — AdaGC + label_smoothing 0.1
+# 가설: SPML + 강한 calibration. ECE ↓ + threshold sweep 효과 ↑.
+loss: adagc_ls
+lambda_gc: 0.5
+alpha_pred: 0.95
+lambda_warmup_epochs: 3
+class_weight: effective
+class_weight_beta: 0.9999
+label_smoothing: 0.1
+teacher_alpha: 0.99

@@ -1,0 +1,7 @@
+# Keep the chip classifier on the original 5-class setup.
+classes:
+  - bank_boundary
+  - fork
+  - invalid_main
+  - scratch
+  - scratch_rot

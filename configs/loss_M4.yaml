@@ -1,0 +1,15 @@
+# M4 — AdaGC + ASL hybrid (★ key contribution)
+# AdaGC for SPML correction + ASL for asymmetric focusing.
+# 가설: SPML + asymmetric 결합 → +3% over M2.
+loss: adagc_asl
+lambda_gc: 0.5
+alpha_pred: 0.95
+lambda_warmup_epochs: 3
+gamma_pos: 1.0
+gamma_neg: 4.0
+clip: 0.05
+class_weight: effective
+class_weight_beta: 0.999
+label_smoothing: 0.05
+aux_weight: 0.5
+teacher_alpha: 0.99

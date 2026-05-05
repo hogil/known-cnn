@@ -1,0 +1,24 @@
+# Active-class list for the current data root.
+# Purpose: keep object-confusable/special classes and remove saturated easy object classes
+# without deleting any data.
+classes:
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_particle_blast
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_21deg
+  - Edge-Top_bank_boundary
+  - Edge-Top_invalid_main
+  - Edge-Top_particle_blast
+  - Edge-Top_scratch
+  - Edge-Top_scratch_21deg
+  - Donut_bank_boundary
+  - Donut_invalid_main
+  - Donut_particle_blast
+  - Donut_scratch
+  - Donut_scratch_21deg
+  - Center_invalid_main
+  - Edge-Ring_invalid_main
+  - Full_invalid_main
+  - Thick-Edge_invalid_main
+  - Edge-Ring_particle_blast

@@ -1,0 +1,9 @@
+# M6 — Focal positive + ASL negative
+# 가설: hard positive + asymmetric negative. rare class F1 ↑ (+5%).
+loss: focal_asl
+gamma_pos: 2.0
+gamma_neg: 4.0
+clip: 0.05
+class_weight: effective
+class_weight_beta: 0.999
+label_smoothing: 0.05

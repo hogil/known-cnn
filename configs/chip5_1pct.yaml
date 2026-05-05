@@ -1,0 +1,7 @@
+# Approximately 1/100 of the current 5-class chip dataset.
+classes:
+  bank_boundary: 769
+  fork: 937
+  invalid_main: 2141
+  scratch: 771
+  scratch_rot: 772
