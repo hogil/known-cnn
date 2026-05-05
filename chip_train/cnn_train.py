@@ -220,19 +220,19 @@ def build_transforms(img_size: int):
     """Wafer fail-bit map augmentation — position + palette + angle safe.
     금지된 augmentation:
       - VFlip / 180° rotation: Edge-Top ↔ Edge-Bottom 클래스 뒤집힘
-      - HFlip: scratch_21deg 등 angle 자체가 클래스 정체성 — 21° → -21° 로 의미 변경
+      - HFlip: scratch_rot 등 angle 자체가 클래스 정체성 — 회전 angle → 반전 시 의미 변경
       - ColorJitter: palette index의 grade 의미(0=정상, 1-7=결함 강도) 손상
       - MixUp/CutMix/Cutout: palette pixel 평균이 무의미한 grade 생성
     안전한 augmentation:
       - 소각도 rotation ±15°: 검사장비 stage 회전 오차 범위 내 — angle 클래스
-        (scratch_21deg) 도 작은 회전 robustness 정도는 OK
+        (scratch_rot) 도 작은 회전 robustness 정도는 OK
       - 작은 translate/scale ±3%: alignment / magnification 검사장비 variability
       - Gaussian noise σ=0.01: sensor pixel-level noise
     """
     norm = transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
     train_tfm = transforms.Compose([
         transforms.Resize((img_size, img_size), interpolation=transforms.InterpolationMode.BICUBIC),
-        # NO HFlip — scratch_21deg 21° → -21° 같이 angle 클래스 정체성 변경
+        # NO HFlip — scratch_rot 같은 angle 클래스 정체성 변경
         transforms.RandomRotation(degrees=15, fill=0),                                 # 소각도만 — stage 회전 오차 모사
         transforms.RandomAffine(degrees=0, translate=(0.03, 0.03), scale=(0.97, 1.03), fill=0),
         transforms.ToTensor(),

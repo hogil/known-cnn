@@ -29,8 +29,8 @@ OUT_NPY_ROOT   = "dist_learn/_dist_heatmaps_per_class"
 OUT_PLOT_ROOT  = "plots/dist_compare"
 OUT_CSV        = "results/stage1_distribution.csv"
 
-OBJECTS        = ("bank_boundary", "invalid_main", "particle_blast",
-                  "scratch", "scratch_21deg")
+OBJECTS        = ("bank_boundary", "invalid_main", "fork",
+                  "scratch", "scratch_rot")                                              # round 26: particle_blast→fork, scratch_21deg→scratch_rot
 GRID           = 32
 MIN_DEFECT_BIN = 200
 DATA_AMOUNTS   = (10, 30, 50, 100, None)              # None = full

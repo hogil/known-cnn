@@ -48,8 +48,8 @@ SYS_DEFECT_BINS = {
 
 EXPECTED_CLASSES = ['Center', 'Donut', 'Edge-Ring', 'Edge-Bottom', 'Edge-Top',
                     'Full', 'Thick-Edge']
-EXPECTED_OBJECTS = ['bank_boundary', 'particle_blast', 'scratch',
-                    'scratch_21deg', 'invalid_main']
+EXPECTED_OBJECTS = ['bank_boundary', 'fork', 'scratch',
+                    'scratch_rot', 'invalid_main']                                       # round 26: particle_blast→fork, scratch_21deg→scratch_rot
 SPECIAL_CLASSES = ['Normal', 'Starburst', 'CommaCluster']                                # object 없는 단독
 
 # generation spec

@@ -227,7 +227,7 @@ def fmt_data_dist(comp: dict) -> str:
             lines.append(f"- per-class count: 모두 {max_c} (균일)")
     if comp.get("obj_hist_sampled"):
         labels = {0: "none", 1: "bank_boundary", 2: "invalid_main",
-                  3: "particle_blast", 4: "scratch", 5: "scratch_21deg"}
+                  3: "fork", 4: "scratch", 5: "scratch_rot"}                            # round 26
         h = comp["obj_hist_sampled"]
         total_pix = sum(h.values()) or 1
         nz = sum(v for k, v in h.items() if k > 0) or 1

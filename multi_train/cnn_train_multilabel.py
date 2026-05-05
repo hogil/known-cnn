@@ -60,7 +60,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
 
 DISTRIBUTIONS = ["Center", "Donut", "Edge-Ring", "Edge-Bottom", "Edge-Top", "Full", "Thick-Edge"]
-OBJECTS = ["bank_boundary", "particle_blast", "scratch", "scratch_21deg", "invalid_main"]
+OBJECTS = ["bank_boundary", "fork", "scratch", "scratch_rot", "invalid_main"]            # round 26: particle_blast→fork, scratch_21deg→scratch_rot
 DEFAULT_BACKBONE = "convnextv2_base.fcmae_ft_in22k_in1k_384"
 DEFAULT_LOG_ROOT = "logs_multilabel"
 

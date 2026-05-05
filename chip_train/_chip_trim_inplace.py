@@ -13,6 +13,9 @@ import numpy as np
 from PIL import Image
 
 CLASSES = ['bank_boundary', 'fork', 'invalid_main', 'scratch', 'scratch_rot']
+# legacy round 25 names — this list is for DELETION (auto-cleanup if stubs reappear).
+# generation pipeline uses CHIP_OBJECT_LABELS filter (round 26) so these can no longer be created;
+# kept here as defense-in-depth.
 STUB_DIRS = ['particle_blast', 'scratch_21deg']
 SRC_DIR = Path("D:/project/data/wm-811k/classification_chips")
 

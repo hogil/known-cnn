@@ -38,7 +38,7 @@ DEFAULT_OBJ_PROB_DIR = "D:/project/data/wm-811k/obj_prob_maps"
 DEFAULT_LOG_ROOT    = "logs_chipgrid"
 EXCLUDE_CLASSES     = {"Normal", "classification", "classification_chips"}
 CHIP_OBJ_IDS        = {0: "none", 1: "bank_boundary", 2: "invalid_main",
-                       3: "particle_blast", 4: "scratch", 5: "scratch_21deg"}
+                       3: "fork", 4: "scratch", 5: "scratch_rot"}                       # round 26: particle_blast→fork, scratch_21deg→scratch_rot
 CHIP_OBJ_LABELS     = tuple(CHIP_OBJ_IDS[i] for i in range(1, 6))
 GRID_SIZE           = 32
 PALETTE_MAX         = 31
@@ -49,7 +49,7 @@ def parse_args():
     p.add_argument("--variant", type=str, default="V0",
                    choices=["V0", "V1", "V2", "V3", "V4", "V5", "V6"])
     p.add_argument("--target-id", type=int, default=3,
-                   help="V2 only: chip object id 1..5 (3=particle_blast default)")
+                   help="V2 only: chip object id 1..5 (3=fork default; round 26 spec)")
     p.add_argument("--obj-norm", type=float, default=5.0,
                    help="V1 only: divisor for obj_id integer normalization")
     p.add_argument("--n-per-class", type=int, default=30)

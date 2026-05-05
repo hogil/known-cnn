@@ -88,13 +88,6 @@ def alpha_bank_boundary_t(rng):
         a = torch.maximum(a, line)
     return a
 
-def alpha_particle_blast_t(rng):
-    a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
-    cx = float(rng.uniform(50, 150)); cy = float(rng.uniform(50, 150))
-    sigma = float(rng.uniform(22, 35))
-    blob = torch.exp(-((XC_2D_T - cx)**2 + (YC_2D_T - cy)**2) / (2*sigma**2))
-    return torch.maximum(a, blob)
-
 def alpha_scratch_t(rng):
     a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
     n_lines = int(rng.integers(5, 16))
@@ -104,21 +97,6 @@ def alpha_scratch_t(rng):
         in_range = ((YC_2D_T >= y_start) & (YC_2D_T <= y_end)).to(DTYPE)
         s = float(rng.uniform(0.80, 1.0))
         line = _perp_profile_t(XC_2D_T - cx, 1.0, 2.0, 4.0) * in_range * s
-        a = torch.maximum(a, line)
-    return a
-
-def alpha_scratch_21deg_t(rng):
-    a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
-    n_lines = int(rng.integers(12, 19))
-    theta = np.deg2rad(21.0)
-    cos_t, sin_t = float(np.cos(theta)), float(np.sin(theta))
-    cy = 100; span_lo, span_hi = 15, 185
-    spacing = (span_hi - span_lo) / (n_lines + 1)
-    for i in range(n_lines):
-        cx = span_lo + (i + 1) * spacing
-        d_perp = (XC_2D_T - cx) * cos_t - (YC_2D_T - cy) * sin_t
-        s = float(rng.uniform(0.92, 1.0))
-        line = _perp_profile_t(d_perp, 0.7, 1.5, 3.0) * s
         a = torch.maximum(a, line)
     return a
 
@@ -192,10 +170,8 @@ def alpha_ring_small_t(rng):
     ring = torch.exp(-(d_r - r)**2 / (2*thick**2))
     return torch.maximum(a, ring)
 
-ALPHA_FNS_T = {
+ALPHA_FNS_T = {                                                                          # round 26 only — particle_blast / scratch_21deg removed (CHIP_OBJECT_LABELS filter)
     'bank_boundary':    alpha_bank_boundary_t,
-    # round 26: 'particle_blast' / 'scratch_21deg' deprecated.
-    # GPU pipeline currently lacks 'fork' / 'scratch_rot' alpha kernels — fall back to scratch_t for both.
     'fork':             alpha_scratch_t,                                                # round 26 fork ≈ scratch (line pattern, main grade 3)
     'scratch':          alpha_scratch_t,
     'scratch_rot':      alpha_scratch_t,                                                # round 26 — angle differentiation TBD; using scratch as placeholder

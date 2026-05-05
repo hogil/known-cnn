@@ -2,7 +2,7 @@
 
 Class set:
   Non-invalid_main objects (00P 또는 00C kind 가능):
-    bank_boundary, particle_blast, scratch
+    bank_boundary, fork, scratch, scratch_rot                                          (round 26: particle_blast→fork, scratch_21deg→scratch_rot)
   Invalid-main object (00C kind 전용):
     invalid_main  ← 분포에 따라 invalid chip 클러스터로 wafer 패턴 형성
   Wafer distributions (WM-811K cca/* heatmaps):
@@ -109,7 +109,7 @@ def save_chip_crops(img, chip_meta: dict, base: str, out_root: str = CHIP_OBJ_OU
     chip_meta entry: {'kind': 'defect'|'invalid', 'obj': <obj_name|None>, 'bin': int, 'inside': bool}
     - kind=='defect': crop labeled with chip_meta['obj'] (handles 75% primary + 25% mixed correctly)
     - kind=='invalid': crop labeled 'invalid_main'
-    - obj NOT in CHIP_OBJECT_LABELS (e.g. legacy particle_blast/scratch_21deg) skipped
+    - obj NOT in CHIP_OBJECT_LABELS skipped (legacy round 25 names removed in round 26)
     - per-class cap CHIP_OBJ_PER_CLASS_CAP (default 100): if class folder already has >= cap files, skip
     Returns counts dict: {label: count}.
     """
@@ -171,7 +171,7 @@ CUM_EDGE_LINE = np.cumsum(EDGE_LINE_DIST)
 # Object별 (main, sub) defect grade — main이 zone center에서 dominant, sub는 추가로 elevated
 PRIMARY_GRADE = {
     'bank_boundary':  (1, 2),  # main=1, sub=2 (사용자: "main pixel을 1로하고 sub는 2로하자")
-    'fork':           (3, 1),  # round 26: particle_blast 대체. main=3 (scratch 와 동일)
+    'fork':           (3, 1),  # round 26 — main=3 (scratch 와 동일)
     'scratch':        (3, 1),  # main=3
     'scratch_rot':  (3, 1),  # main=3 (scratch와 동일 grade, 라인 각도로 구분)
 }
@@ -630,7 +630,7 @@ ALPHA_FNS = {
     'ring_small':       alpha_ring_small,
 }
 
-CHIP_OBJECTS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']                   # round 26: particle_blast→fork
+CHIP_OBJECTS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']                   # round 26 spec
 # Normal 전용 = 등록된 4개 + 새로운 5개 novel (defect class와 구분)
 NORMAL_OBJECTS = CHIP_OBJECTS + ['geometric_random', 'small_dot', 'fragment', 'irregular', 'ring_small']
 
@@ -1024,7 +1024,7 @@ def render(class_name, object_name, seed):
 
 CLASSES = ['Center', 'Donut', 'Edge-Ring', 'Edge-Bottom', 'Edge-Top', 'Full', 'Thick-Edge',
            'Normal', 'Starburst', 'CommaCluster']
-OBJECTS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot', 'invalid_main']         # round 26: particle_blast→fork
+OBJECTS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot', 'invalid_main']         # round 26 spec
 
 # Build task list:
 #   6 정규 dist (Center/Donut/Edge-Ring/Edge-Bottom/Edge-Top/Full) × 5 obj = 30

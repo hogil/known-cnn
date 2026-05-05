@@ -75,24 +75,24 @@ from cnn_train_compound import (
 DEFAULT_LOG_ROOT = "logs_objid_ablation"
 RUN_TS = datetime.now().strftime("%y%m%d_%H%M%S")
 
-EDGE_OBJECT_CLASSES = [
+EDGE_OBJECT_CLASSES = [                                                                  # round 26: particle_blast→fork, scratch_21deg→scratch_rot
     "Edge-Top_bank_boundary",
-    "Edge-Top_particle_blast",
+    "Edge-Top_fork",
     "Edge-Top_scratch",
-    "Edge-Top_scratch_21deg",
+    "Edge-Top_scratch_rot",
     "Edge-Bottom_bank_boundary",
-    "Edge-Bottom_particle_blast",
+    "Edge-Bottom_fork",
     "Edge-Bottom_scratch",
-    "Edge-Bottom_scratch_21deg",
+    "Edge-Bottom_scratch_rot",
 ]
 
-FALLBACK_OBJ_ID_TO_LABEL = [
+FALLBACK_OBJ_ID_TO_LABEL = [                                                             # round 26
     "none",
     "bank_boundary",
     "invalid_main",
-    "particle_blast",
+    "fork",
     "scratch",
-    "scratch_21deg",
+    "scratch_rot",
 ]
 
 
@@ -116,9 +116,9 @@ def _candidate_table() -> Dict[str, CandidateConfig]:
         CandidateConfig("OH-S2", fusion_encoding="onehot", fusion_stage=1),
         CandidateConfig("OH-S3", fusion_encoding="onehot", fusion_stage=2),
         CandidateConfig("BIN-bank_boundary-S3", fusion_encoding="binary", fusion_stage=2, binary_label="bank_boundary"),
-        CandidateConfig("BIN-particle_blast-S3", fusion_encoding="binary", fusion_stage=2, binary_label="particle_blast"),
+        CandidateConfig("BIN-fork-S3", fusion_encoding="binary", fusion_stage=2, binary_label="fork"),                    # round 26
         CandidateConfig("BIN-scratch-S3", fusion_encoding="binary", fusion_stage=2, binary_label="scratch"),
-        CandidateConfig("BIN-scratch_21deg-S3", fusion_encoding="binary", fusion_stage=2, binary_label="scratch_21deg"),
+        CandidateConfig("BIN-scratch_rot-S3", fusion_encoding="binary", fusion_stage=2, binary_label="scratch_rot"),      # round 26
         CandidateConfig("BIN-invalid_main-S3", fusion_encoding="binary", fusion_stage=2, binary_label="invalid_main"),
         CandidateConfig("HIST-BAND", use_hist=True),
         CandidateConfig("OH-S3-HIST", fusion_encoding="onehot", fusion_stage=2, use_hist=True),
