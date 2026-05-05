@@ -1,6 +1,6 @@
 # Wafer Synthetic Image Generation — Design Overview
 
-이 문서는 contrastive learning용 wafer fail-bit 이미지를 처음부터 합성하는
+이 문서는 supervised CNN 학습용 wafer fail-bit 이미지를 처음부터 합성하는
 파이프라인 전체를 다음 세션에서도 그대로 재현할 수 있도록 상세히 기술한다.
 
 ## 위치

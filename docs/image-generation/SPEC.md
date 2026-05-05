@@ -67,7 +67,7 @@ while len(PALETTE) < 96: PALETTE.append(0)
 PALETTE[31*3:31*3+3] = [255, 255, 255]                 # idx 31 fill = white
 ```
 
-**저장 시 transparency 사용 금지**: contrastive 모델 입력으로 활용해야 하므로
+**저장 시 transparency 사용 금지**: CNN 모델 입력으로 활용해야 하므로
 모든 픽셀이 명시적 색을 가져야 한다. `img.save(path, optimize=True)` (transparency 인자 없음).
 
 ## 3. Baseline Grade Distribution (정상 chip 픽셀)

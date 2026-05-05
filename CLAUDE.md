@@ -5,11 +5,11 @@
 ## 이 repo가 하는 일 (현재)
 
 WM-811K wafer 분포를 학습하고 chip-internal 패턴을 합성해 36 클래스 fail-bit
-palette PNG + positions JSON 데이터셋을 생성. Contrastive learning용 합성 데이터.
+palette PNG + positions JSON 데이터셋을 생성 → supervised open-set CNN 분류기 학습.
+33 defect class 학습, Normal 은 inference 시 max_prob threshold 로 unknown 처리.
 
-git에 commit된 파일은 `contrastive.py`, `cnn_yolo.py` 2개뿐이지만 (사용자가 초기로
-reset 후 새로 시작) 실제 작업물은 untracked로 다수 존재. **모든 spec과 변경 history는
-docs/image-generation/ 와 .claude/ 에 기록**되어 있어 새 세션에서 즉시 이어 작업 가능.
+자매 repo: `unknown-contrastive` (contrastive learning + HDBSCAN unknown clustering).
+known-cnn 은 supervised side 만 담당.
 
 ## 새 세션 진입 순서
 
@@ -154,20 +154,9 @@ prod 모델 resolve: `--model-glob "logs_<kind>/{line}/overall/best_model.pth"` 
 
 운영: `/cnn-train-safe <cnn_train.py args>` — team_name=`cnn-team`. master가 monitor 호출해 시작 점검·학습 중 watchdog. 한계 초과 시 process kill + `log/<run>` `_PAUSED` rename(삭제 절대 금지) + 자원 회복 polling + 재시작.
 
-Contrastive (legacy):
-
-| Skill | Agent | 용도 |
-|---|---|---|
-| `model-training` | `model-training` | `contrastive.py` / `experiments/run_experiment.py` wrapper |
-| `evaluation` | `evaluation` | ARI/NMI/purity/silhouette → eval_summary.json |
-| `composite-map` | `composite-map` | cluster top-K medoid composite PNG |
-
-**백본 정책 (TAPT)**: contrastive.py의 `LOCAL_BACKBONE_WEIGHTS`는 ImageNet FCMAE pth가 아니라
-`cnn_train.py` 결과 `log/<run>/best_model.pth`를 가리킨다. 같은 wafer 데이터로 33-class
-supervised 학습된 backbone을 init으로 써서 도메인 정렬된 mid-level feature를 그대로 활용
-(sequential transfer / Task-Adaptive Pre-Training). backbone LR은 head 대비 낮게 (e.g.
-1e-6 vs 1e-3) 또는 마지막 stage만 unfreeze 권장. detail은
-`.claude/skills/model-training/SKILL.md` "백본 초기화 정책".
+**백본 정책**: `models/convnextv2_base.fcmae_ft_in22k_in1k_384.pth` (ImageNet FCMAE
+pretrained ConvNeXtV2-base, 88M). 모든 33-class wafer / 5-class chip / compound trainer
+의 init backbone. local-only — `cnn_train.py` 가 자동 로드.
 
 세부는 각 `.claude/skills/<name>/SKILL.md` 안에서 어떤 docs를 읽어야 하는지 명시.
 

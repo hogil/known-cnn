@@ -53,14 +53,13 @@ python _verify.py --sample 5
 
 ## 다음 stage (background 작업 끝난 후)
 
-1. 전체 검증 `python _verify.py` → 7200 / 7200 OK 확인
+1. 전체 검증 `python verify_tools/_verify.py` → 7200 / 7200 OK 확인
 2. 사용자 시각 spot-check (대표 클래스 1-2개)
-3. (다음 stage) contrastive learning 시작
-   - `contrastive.py` (이미 repo에 있음, 사용자 제공)
-   - 학습 데이터 = 위 7200장
-   - HDBSCAN 클러스터링 → centroids
-4. (다음 stage) composite map per cluster
-5. (다음 stage) evaluation
+3. supervised CNN 학습 — `wafer_train/cnn_train_wafer.py`, `chip_train/cnn_train_chip.py`,
+   `compound_train/cnn_train_compound.py` (3-stage chip → obj_id maps → compound)
+4. inference + threshold sweep — `wafer_predict/`, `chip_predict/`, `compound_predict/`
+
+(unsupervised contrastive 클러스터링 stage 는 sister repo `unknown-contrastive` 에서 진행)
 
 ## Open issues / TODO
 
