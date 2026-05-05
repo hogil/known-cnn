@@ -1,0 +1,63 @@
+# =============================================================================
+# Plan: active 22 = 30 - 8 obj-less unsynthesized (CLAUDE.md "Fair-eval immediate")
+# Status: 활성 (canvas 일부 합성 미완 시점의 fair-eval baseline)
+#         FROZEN at 2026-05-05; re-author after canvas synthesis 200/class for all.
+# Intent:
+#   Fair-eval protocol 의 "immediate" baseline. configs/chipgrid_class30_target.yaml
+#   의 30 class 중, _sample_canvas_gen.py 합성 미완료 8 obj-less canvas 를 제외해
+#   현재 즉시 학습 가능한 22 class.
+# Hypothesis:
+#   22 class 만으로도 V3 chipgrid val_f1 ≥ 0.99 도달 가능 (active 20 결과 참고).
+#   8 canvas 합성 끝나면 active_classes_30.yaml 로 전환.
+# Why these numbers:
+#   - 20 dist+obj-active = 15 obj-active (3 dist × 5 obj) + 4 *_invalid_main
+#     (Center, Edge-Ring, Full, Thick-Edge) + Edge-Ring_fork
+#   - + 2 canvas (Starburst, CommaCluster) = 22 (CLAUDE.md spec 시점 가정)
+#
+#   ⚠ 데이터 sync 주의:
+#     · Starburst : 18/200 (PID 33228 canvas gen 미완 시점)
+#     · CommaCluster : 폴더 부재 (round 26 spec 에서 archive 로 간주)
+#     → strict mode 통과를 위해선 D:/project/data/wm-811k/unknown/CommaCluster/,
+#       Starburst/ 200/class 채워야 함. 그렇지 않으면 trainer fail.
+#     → 임시로 사용하려면 fair-eval protocol 의 per_class_sample = min(현재 sample, 200)
+#       로 down-sample 하거나, --allow-missing-active-classes flag 적용.
+#
+# Run:
+#   python chipgrid_train/cnn_eval_chipgrid.py --variant V3 --no-r-channel \
+#       --active-classes-yaml experiments/active_classes_22.yaml \
+#       --n-per-class 200 --epochs 30 --seed 42 --model-tag v3_active22
+# Output 비교:
+#   logs_chipgrid/v3_active22_<TS>/best_history.txt vs logs_chipgrid/v3_full_*/
+#   (33-class) — class 줄여도 V3 saturated 영역 유지 확인.
+#
+# Chip object naming: data ground truth (`fork`, `scratch_rot`).
+#   configs/chipgrid_class30_target.yaml 의 옛 이름 (particle_blast, scratch_21deg)
+#   을 새 이름으로 매핑.
+# =============================================================================
+classes:
+  # 15 obj-active (3 dist × 5 chip obj)
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  # 4 *_invalid_main (configs/30 의 dist-only)
+  - Center_invalid_main
+  - Edge-Ring_invalid_main
+  - Full_invalid_main
+  - Thick-Edge_invalid_main
+  # 1 Edge-Ring × extra obj
+  - Edge-Ring_fork
+  # 2 canvas already-synthesized (현재 partial — Starburst 18/200, CommaCluster 부재)
+  - Starburst
+  - CommaCluster

@@ -1,0 +1,21 @@
+# =============================================================================
+# Plan: phase smoke n=20 (cnn_train_objonly.py default)
+# Status: 활성 (smoke baseline for objonly trainer)
+# Intent:
+#   `compound_train/cnn_train_objonly.py` (4-layer obj-only CNN, 0.4M params)
+#   학습 파이프라인 sanity test. 33 class × 20 sample = 660 → 빠른 smoke (~2-3 min).
+# Hypothesis:
+#   N/A. epoch 1 만에 best_model.pth + history.json + curves.png 정상 생성 확인.
+# Why these numbers:
+#   - default 20: stratified split 0.8/0.1/0.1 시 val/test ≥ 1 보장하는 최소.
+#   - 작은 모델 (0.4M) 이라 batch 64 OK.
+# Run:
+#   python compound_train/cnn_train_objonly.py --epochs 2 \
+#       --subset-config experiments/phase_smoke_n20.yaml \
+#       --batch 64 --model-tag _smoke_objonly
+# Output 비교:
+#   logs_objid_ablation/_smoke_objonly_<TS>/ 안 산출물 (curves.png, history.json,
+#   best_model.pth) 모두 존재 + nan 없음 확인.
+# =============================================================================
+classes:
+  default: 20

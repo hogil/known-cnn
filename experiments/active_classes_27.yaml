@@ -1,0 +1,61 @@
+# =============================================================================
+# Plan: active 27 = 18 obj-active + 9 wafer-canvas (CLAUDE.md "Active class policy")
+# Status: 활성 (round 12-25 wafer-canvas 9 추가 후)
+# Intent:
+#   _sample_canvas_gen.py 가 합성한 9 obj-less wafer-canvas + 핵심 18 obj-active
+#   조합. 33-class 의 saturated/redundant class 는 archive (active 20 정책 동일)
+#   하되, canvas 9 추가로 wafer-level spatial-only pattern 도 분류.
+# Hypothesis:
+#   18 obj-active (V3 chipgrid val_f1 0.9946 의 핵심) + 9 canvas → wafer-level
+#   spatial cue 학습 가능 + chip-level fail-bit 식별력 유지.
+# Why these numbers:
+#   - 18 obj-active = Donut/Edge-Bottom/Edge-Top × 5 chip obj + Edge-Ring × 2 + Thick-Edge_invalid_main
+#     · Edge-Ring 은 invalid_main + 1 obj (fork = 옛 particle_blast 의 새 이름) 만 활성
+#     · 다른 Edge-Ring × 3 obj 는 archive (saturated)
+#   - 9 canvas = DiagonalSmear, CrossScratch, CrescentArc, ParallelScratches,
+#                BrokenRing, RingDots, CenterDonut, Row, Starburst
+#     spec: docs/image-generation/CANVAS_9.md
+#   - 제외: Center_invalid_main, Full_invalid_main (V3 chipgrid saturated)
+# Run:
+#   python wafer_train/cnn_train_wafer.py --active-classes-yaml experiments/active_classes_27.yaml \
+#       --epochs 30 --batch 16 --model-tag wafer_active27
+#   python compound_train/cnn_train_compound.py --active-classes-yaml experiments/active_classes_27.yaml \
+#       --obj-id-dir D:/project/data/wm-811k/obj_id_maps --epochs 30 --batch 16 --model-tag compound_active27
+# Output 비교:
+#   logs_wafer/ vs logs_compound/ — canvas 9 가 wafer R-only 와 compound 양쪽에서
+#   학습되는지 (canvas chip obj=None → G channel 0).
+#
+# Chip object naming: data ground truth (`fork`, `scratch_rot`).
+# Strict mode 주의: Starburst (현재 18/200 합성 중), 다른 canvas 일부 < 200 → 학습
+#   재시작 전 sample 채워야 cnn_train 의 stratified split 안전.
+# =============================================================================
+classes:
+  # 18 obj-active
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  - Edge-Ring_invalid_main
+  - Edge-Ring_fork
+  - Thick-Edge_invalid_main
+  # 9 wafer-canvas
+  - BrokenRing
+  - CenterDonut
+  - CrescentArc
+  - CrossScratch
+  - DiagonalSmear
+  - ParallelScratches
+  - RingDots
+  - Row
+  - Starburst

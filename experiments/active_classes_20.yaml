@@ -1,0 +1,45 @@
+# =============================================================================
+# Plan: active 20 wafer class (CLAUDE.md "Active class policy")
+# Status: 활성 (V3 chipgrid val_f1 0.9946 saturated 결과 기반)
+# Intent:
+#   33-class wafer 분류 시 saturated class (Center×5, Full×5, Edge-Ring_invalid_main,
+#   Normal_bank_boundary, Starburst, CommaCluster = 14) 를 archive 처리하고
+#   학습/평가 시 본 list 만 active.
+# Hypothesis:
+#   Saturated 14 제외해도 V3 chipgrid 의 val/test F1 동일하거나 향상.
+#   학습 시간 ↓ (33 → 20 = 39% 감소).
+# Why these numbers:
+#   - 20 = Donut×5 + Edge-Bottom×5 + Edge-Ring×4 (-invalid_main) + Edge-Top×5 + Thick-Edge_invalid_main
+#   - Edge-Ring × 4 는 invalid_main 만 archive (Edge-Ring_invalid_main = saturated, V3 ~99%)
+#   - Thick-Edge × 1 = 외곽 고유 패턴 (다른 dist 없음)
+# Run:
+#   python wafer_train/cnn_train_wafer.py --active-classes-yaml experiments/active_classes_20.yaml \
+#       --epochs 30 --batch 16 --model-tag wafer_active20
+# Output 비교:
+#   logs_wafer/wafer_active20_<TS>/best_history.txt vs 기존 33-class run
+#   - per-class F1 동일/향상 + 학습 시간 ↓ 검증
+#
+# Chip object naming: data ground truth (`fork`, `scratch_rot`).
+#   사용자 결정 (이전 spec 의 `particle_blast` → `fork`, `scratch_21deg` → `scratch_rot`).
+# =============================================================================
+classes:
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Ring_bank_boundary
+  - Edge-Ring_fork
+  - Edge-Ring_scratch
+  - Edge-Ring_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  - Thick-Edge_invalid_main

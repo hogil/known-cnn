@@ -1,0 +1,33 @@
+# =============================================================================
+# Plan: imbalance v1 — minor class 시뮬레이션 (cnn-plan SKILL.md 예시)
+# Status: 활성 (예시 / pattern reference)
+# Intent:
+#   class imbalance 가 학습에 미치는 영향 측정. 3 minor class 만 30 sample (severe
+#   imbalance), 나머지 default 200. class_weight=effective vs none A/B 비교용.
+# Hypothesis:
+#   class_weight=effective 가 minor class 의 F1 ↑ (loss 보정).
+#   class_weight=none 은 minor class F1 ↓ (model 이 majority bias).
+# Why these numbers:
+#   - minor 30: stratified split 0.8/0.1/0.1 → train 24 / val 3 / test 3 (severe).
+#   - default 200: majority class baseline.
+#   - Donut_scratch / Edge-Bottom_scratch / Loc_invalid_main: 옛 spec 의 minor
+#     candidate 였던 3 class. (Loc_invalid_main 은 round 26 spec 에서 제외된 옛
+#     dist — 데이터 부재면 다른 active class 로 대체 권장.)
+# Run:
+#   # A: effective class weight
+#   python wafer_train/cnn_train_wafer.py --epochs 30 \
+#       --subset-config experiments/imbalance_v1.yaml --class-weight effective \
+#       --model-tag imbal_v1_eff
+#   # B: no class weight
+#   python wafer_train/cnn_train_wafer.py --epochs 30 \
+#       --subset-config experiments/imbalance_v1.yaml --class-weight none \
+#       --model-tag imbal_v1_none
+# Output 비교:
+#   logs_wafer/imbal_v1_eff_<TS>/best_history.txt vs logs_wafer/imbal_v1_none_<TS>/
+#   - per-class F1 표 의 minor 3 class F1 차이가 hypothesis 검증
+# =============================================================================
+classes:
+  Donut_scratch: 30
+  Edge-Bottom_scratch: 30
+  Loc_invalid_main: 50
+  default: 200

@@ -1,0 +1,86 @@
+# =============================================================================
+# Plan: fair-eval protocol spec (CLAUDE.md "★ Fair-eval protocol")
+# Status: 활성 (모든 backbone 비교 시 강제 적용)
+# Intent:
+#   서로 다른 backbone (R-only ConvNeXt 88M, V3 chipgrid 1.16M, obj-only 4-layer
+#   0.4M, compound 88M) 비교 시 동일 protocol 사용. 한 결과 표 row 들이 split /
+#   active class / epoch / sample 동일해야 비교 의미 있음. 다른 protocol 결과는
+#   별 표 분리 강제.
+# Hypothesis:
+#   동일 protocol 하에서 V3 chipgrid (1.16M) 가 R-only ConvNeXt (88M) 추월 검증.
+# Why these numbers (CLAUDE.md 정책 그대로):
+#   - per-class 200: 작은 class (200 미달) 제외 안 하고 전체 robustness 측정.
+#   - split 0.8/0.1/0.1 stratified seed 42 (deterministic).
+#   - 30 epoch + early stop OFF: best val_f1 epoch 의 model selection 으로 충분.
+#   - AdamW wd 0.05 + cosine warmup 3: 작은 데이터에 안전.
+#   - small (≤2M) 64/1e-3, large (>10M) 16 / head 1e-3 backbone 1e-4.
+#   - augment ±15°/±3°/σ0.01 만 (다른 augment 도메인 의미 손상).
+#   - TTA 절대 금지 (wafer class identity = angle/위치).
+# Run (모든 backbone 동일 인자):
+#   # 22 class baseline (현재):
+#   python chipgrid_train/cnn_eval_chipgrid.py --variant V3 --no-r-channel \
+#       --active-classes-yaml experiments/active_classes_22.yaml \
+#       --n-per-class 200 --epochs 30 --seed 42 --model-tag v3_fair22
+#   # 30 class target (canvas 8 합성 후):
+#   python chipgrid_train/cnn_eval_chipgrid.py --variant V3 --no-r-channel \
+#       --active-classes-yaml experiments/active_classes_30.yaml \
+#       --n-per-class 200 --epochs 30 --seed 42 --model-tag v3_fair30
+# Output 비교:
+#   docs/wafer-ensemble/RESULTS.md 표 — 동일 protocol row 들만 한 표 안 묶기.
+# =============================================================================
+
+protocol_name: fair_eval_v1
+
+# 데이터 split
+per_class_sample: 200            # 모든 class 통일 (sorted file pick, deterministic)
+split_ratios:                    # train / val / test
+  train: 0.8
+  val: 0.1
+  test: 0.1
+stratified: true
+seed: 42
+
+# 학습 setting
+epochs: 30
+early_stop: false                # 30 epoch full + best val_f1 epoch model
+optimizer:
+  name: AdamW
+  weight_decay: 0.05
+warmup:
+  scheduler: cosine
+  epochs: 3
+
+# Batch / lr (param size 별)
+batch_lr_policy:
+  small_model:                   # ≤ 2M params (V3 chipgrid 1.16M, obj-only 0.4M)
+    param_threshold_M: 2.0
+    batch: 64
+    lr_head: 1.0e-3
+    lr_backbone: 1.0e-3
+  large_model:                   # > 10M params (R-only ConvNeXt 88M, compound 88M)
+    param_threshold_M: 10.0
+    batch: 16
+    lr_head: 1.0e-3
+    lr_backbone: 1.0e-4
+
+# Augmentation (도메인 safe)
+augmentation:
+  rotation_deg: 15               # ±15° (검사장비 stage 회전 오차 범위)
+  translate_pct: 3               # ±3% (alignment / magnification)
+  scale_pct: 3                   # ±3%
+  gaussian_noise_sigma: 0.01     # sensor pixel noise
+  hflip: false                   # ❌ scratch_21deg 등 angle = 클래스 정체성
+  vflip: false                   # ❌ Edge-Top ↔ Edge-Bottom 뒤집힘
+  rotation_180: false            # ❌ Edge-Top ↔ Edge-Bottom 동일
+  color_jitter: false            # ❌ palette grade 의미 손상
+  mixup: false                   # ❌ palette pixel 평균 무의미
+  cutmix: false
+  cutout: false
+
+# TTA (Test-Time Augmentation)
+tta:
+  enabled: false                 # ❌ 절대 금지 — angle/위치 ensemble 시 다른 class 답
+  forbidden_reasons:
+    - scratch_21deg angle = class identity (21° → -21° = different class)
+    - Edge-Top ↔ Edge-Bottom rotation/flip changes class
+    - multi-crop / multi-scale 도 wafer 의 spatial cue 변형

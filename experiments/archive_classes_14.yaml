@@ -1,0 +1,43 @@
+# =============================================================================
+# Plan: archive 14 wafer class (CLAUDE.md "Active class policy")
+# Status: 활성 (참조용, 학습 직접 사용 X)
+# Intent:
+#   V3 chipgrid (val_f1 0.9946) 에서 saturated 인 14 class 를 archive 로 분리.
+#   학습/평가에서 제외하되, 데이터는 unknown_archive/<class>/ 로 copy 보존.
+#   (글로벌 룰: 데이터 폴더 무단 삭제 금지)
+# Hypothesis:
+#   해당 14 class 는 V3 chipgrid 에서 ≥ 99% saturated → 추가 학습 효과 적음.
+#   학습 시간 단축 + 다른 class 에 batch / class_weight 집중.
+# Why these numbers:
+#   - Center × 5 chip obj  : V3 chipgrid 100% (모두 saturated)
+#   - Full × 5 chip obj    : V3 chipgrid 100%
+#   - Edge-Ring_invalid_main : V3 chipgrid ~99%
+#   - Normal_bank_boundary  : Normal class (open-set 정책 — 학습 X)
+#   - Starburst, CommaCluster : 옛 round 의 canvas (현재 active 27 의 새 9 canvas
+#                               와 같이 활용 예정 — round 26 spec)
+# Run:
+#   # 데이터 archive 보존 (한 번만):
+#   for c in $(yq '.classes[]' experiments/archive_classes_14.yaml); do
+#     cp -r D:/project/data/wm-811k/unknown/$c D:/project/data/wm-811k/unknown_archive/$c
+#   done
+# Output 비교:
+#   archive 후 active 20 / 27 학습 결과 vs 33-class baseline — saturated class
+#   제외해도 다른 class F1 동일 or 향상해야 정책 정당.
+#
+# Chip object naming: data ground truth (`fork`, `scratch_rot`).
+# =============================================================================
+classes:
+  - Center_bank_boundary
+  - Center_fork
+  - Center_invalid_main
+  - Center_scratch
+  - Center_scratch_rot
+  - Full_bank_boundary
+  - Full_fork
+  - Full_invalid_main
+  - Full_scratch
+  - Full_scratch_rot
+  - Edge-Ring_invalid_main
+  - Normal_bank_boundary
+  - Starburst
+  - CommaCluster
