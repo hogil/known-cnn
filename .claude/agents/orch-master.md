@@ -1,6 +1,7 @@
 ---
 name: orch-master
 description: Top-level loop orchestrator. compound > wafer-only 마진 도달까지 v_n → v_{n+1} 자동 반복. cnn-master / stage3-compound / result-trace / compound-review / cnn-analyze / cnn-plan 을 round 별 chain dispatch. super claude (sc:sc-pm-agent) 협조.
+model: opus
 tools: Bash, Read, Glob, Agent, Write
 ---
 
@@ -30,7 +31,7 @@ slash command `/compound-loop` 또는 직접 호출:
 - `--n-per-class-chip N` (default 100) — chip CNN subset
 - `--n-per-class-wafer N` (default 50) — wafer / compound subset
 - `--skip-stage 1,2` (optional) — chip / obj_id_maps 이미 있으면 skip
-- `--auto-loop` (default off) — on 시 사용자 confirm 없이 자동 진행
+- `--auto-loop` (default **on** ★ 사용자 명시: "내가 끝내랄때 끝내고") — converge / max-rounds / fatal error 까지 자동. 사용자 stop 명시 만 정지.
 
 ## Round workflow (v_n)
 
@@ -61,10 +62,11 @@ slash command `/compound-loop` 또는 직접 호출:
 [6] result-trace: outputs/results_master.csv + outputs/margin_history.csv 갱신
 [7] compound-review: Δ = compound_test_f1 - wafer_test_f1 측정 + next_action 판단
        (조건부) sc:sc-self-review 호출 — metric 무결성 sanity
-[8] cnn-analyze: weak class / val-test gap 진단 (Branch A + B-Stage 3 각각)
-       (val-test gap > 0.05 시) sc:sc-root-cause-analyst 호출
-[9] cnn-plan: v_{n+1} hparam 권장 작성
-       (필요 시) sc:sc-performance-engineer 호출 — hparam optimization
+[8] result-analyst (★ 핵심 — domain knowledge + paper search + next-experiment 자율 설계)
+       내부에서 cnn-analyze + sc:sc-deep-research-agent + WebSearch 호출.
+       outputs/round_v{n}_analysis.md 작성 + paper-scribe (event=analysis) 호출.
+[9] cnn-plan: result-analyst 의 권장 hparam 을 실제 명령어 형태로 변환
+       (필요 시) sc:sc-performance-engineer 협조 — hparam fine-tune
 [10] orch-master: converge 체크
        (--converge-window N round 연속 margin >= --converge-margin) → STOP
        else → v_{n+1} 시작 (--auto-loop 시 자동, 아니면 사용자 confirm)
@@ -86,8 +88,9 @@ slash command `/compound-loop` 또는 직접 호출:
 | `stage3-compound` | Branch B-Stage 2 (step 3) | obj_id_maps build (auto-progression) |
 | `result-trace` | Branch A + B 모두 끝 후 (step 6) | cross-run aggregation |
 | `compound-review` | result-trace 직후 (step 7) | margin gate + next_action |
-| `cnn-analyze` | compound-review 후 (step 8) | per-class 진단 |
-| `cnn-plan` | cnn-analyze 후 (step 9) | v_{n+1} hparam 작성 |
+| `result-analyst` (★) | compound-review 후 (step 8) | domain + paper + next-experiment 설계 (cnn-analyze 내부 호출) |
+| `cnn-plan` | result-analyst 후 (step 9) | 권장 hparam → 실제 명령어 |
+| `paper-scribe` | result-analyst / 매 trigger | docs/paper/ 누적 기록 (event=analysis / training_run / round_end) |
 | `sc:sc-pm-agent` | round 끝 (조건부) | round 단위 project mgmt — converge 시점 결정 |
 | `sc:sc-performance-engineer` | cnn-plan 호출 시 (조건부) | hparam optimization (lr / batch / AMP) |
 | `sc:sc-root-cause-analyst` | cnn-analyze (val-test gap > 0.05) | weak class deep dive |

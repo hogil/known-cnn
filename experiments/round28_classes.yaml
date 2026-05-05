@@ -1,0 +1,59 @@
+# =============================================================================
+# Plan: round 28 active class list — 42 class frozen
+# Status: 활성 (★ 모든 v3+ 학습 시 강제 — 동일 조건 보장)
+# Intent:
+#   사용자 명시: "실험은 동일 조건에서 계속해야한다 동일 class 동일 class별 이미지"
+#   → 42 class freeze, cross-version 비교 가능 보장.
+#   data 추가 (새 canvas / 새 obj-active) 시에도 본 YAML 의 42 class 만 학습.
+#
+# Excluded (학습 X):
+#   - Normal_bank_boundary (open-set policy — inference 시 max_prob threshold)
+#   - classification, classification_chips (non-class dirs)
+#
+# Run:
+#   --active-classes-yaml experiments/round28_classes.yaml
+# =============================================================================
+
+classes:
+  - BrokenRing
+  - CenterCircle
+  - CenterDonut
+  - Center_bank_boundary
+  - Center_fork
+  - Center_invalid_main
+  - Center_scratch
+  - Center_scratch_rot
+  - CrescentArc
+  - CrossScratch
+  - DiagonalSmear
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Ring_bank_boundary
+  - Edge-Ring_fork
+  - Edge-Ring_invalid_main
+  - Edge-Ring_scratch
+  - Edge-Ring_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  - Full_bank_boundary
+  - Full_fork
+  - Full_invalid_main
+  - Full_scratch
+  - Full_scratch_rot
+  - ParallelScratches
+  - RingDots
+  - Row
+  - Starburst
+  - Thick-Edge_fork
+  - Thick-Edge_invalid_main

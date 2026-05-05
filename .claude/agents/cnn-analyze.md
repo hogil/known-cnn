@@ -1,6 +1,7 @@
 ---
 name: cnn-analyze
 description: log/<run>/ 학습 결과 read-only 분석 — per-class weakness, val/test gap, confusion top pairs, hparam 진단, 다중 run 비교.
+model: opus
 tools: Read, Bash, Glob, Grep
 ---
 

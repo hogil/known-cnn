@@ -359,18 +359,45 @@ def alpha_center_donut(rng):
 
 
 def alpha_center_circle(rng):
-    """가운데 solid disk — filled circle (CenterDonut 의 채워진 버전)."""
+    """center round patch — soft gradient core, irregular boundary, no sharp edge.
+
+    Round 28 (사용자 feedback):
+    - ❌ 컴퍼스 같은 완벽한 원 (옛: r = √(dy²+dx²) only)
+      → ✅ angular harmonics 3-5개 (1/k decreasing amp) 로 boundary irregular
+    - ❌ 영역 딱 끝남 (옛: inside boolean + narrow Gaussian σ=0.008-0.020 R)
+      → ✅ Gaussian sharp + Lorentzian heavy-tail 합 — boundary 없는 smooth gradient
+    - ❌ 안쪽 단순 채워짐 (옛: inside = 1.0 binary)
+      → ✅ profile(r_eff) center peak → 외곽 falloff continuous gradient
+    """
     yy, xx = _yy_xx_full()
     cy, cx = SIZE/2, SIZE/2
     R = SIZE/2
-    r_disk     = R * rng.uniform(0.10, 0.22)             # solid disk radius
-    sigma_edge = R * rng.uniform(0.008, 0.020)           # soft Gaussian falloff outside disk
-    peak = rng.uniform(0.35, 0.55)
     dy = yy - cy; dx = xx - cx
     r = np.sqrt(dy*dy + dx*dx)
-    inside  = (r <= r_disk).astype(np.float32)
-    outside = np.exp(-((r - r_disk) / sigma_edge) ** 2).astype(np.float32) * (r > r_disk)
-    return peak * (inside + outside)
+    theta = np.arctan2(dy, dx)
+
+    # angular perturbation — 3-5 harmonics, decreasing amp (1/k)
+    n_harm = int(rng.integers(3, 6))
+    angular = np.zeros_like(r)
+    for k in range(1, n_harm + 1):
+        amp = rng.uniform(0.06, 0.14) / k
+        ph = rng.uniform(0, 2 * np.pi)
+        angular += amp * np.sin(k * theta + ph)
+
+    # radial scales — sharp + wide heavy-tail
+    base = R * rng.uniform(0.15, 0.22)
+    sigma_sharp = base * rng.uniform(0.7, 1.0)
+    sigma_wide  = base * rng.uniform(2.0, 3.0)
+
+    # angular-perturbed effective radius (1 ± ~0.15)
+    r_eff = r * (1.0 + angular)
+
+    profile = (
+        rng.uniform(0.55, 0.70) * np.exp(- (r_eff / sigma_sharp) ** 2) +     # sharp center
+        rng.uniform(0.25, 0.40) / (1.0 + (r_eff / sigma_wide) ** 2)            # Lorentzian halo
+    )
+    peak = rng.uniform(0.45, 0.65)
+    return (peak * profile).astype(np.float32)
 
 
 ALPHA_FN = {

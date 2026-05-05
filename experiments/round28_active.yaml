@@ -1,0 +1,131 @@
+# =============================================================================
+# Plan: round 28 frozen active class — fair-eval + 도메인-realistic imbalance
+# Status: 활성 (★ 모든 v3+ wafer-only / compound 학습 시 강제 사용)
+# Intent:
+#   사용자 명시:
+#   1. "실험은 동일 조건에서 계속해야한다 동일 class 동일 class별 이미지"
+#      → 42 class frozen + cross-version 동일 sample distribution
+#   2. "wafer는 학습당 class 평균 50개 class 별 편차가있게해라 그래야 class weight도
+#      성능 확인되겠네"
+#      → 평균 50 + tiered imbalance (도메인 realistic) → class_weight=effective vs none A/B 가능
+#
+# Imbalance 설계 (도메인 근거):
+#   - Edge-* × 15 class @ 70  : 외곽 defect 가 실제 fab 에서 가장 흔함
+#                               (handling, bevel, 운송 결함)
+#   - Center/Donut/Canvas 20 class @ default 45 : 중앙·구조 defect 보통
+#   - Full/Thick-Edge × 7 class @ 20            : 전체 wafer 결함 / 두꺼운 외곽 매우 드뭄
+#   총 sample = 15*70 + 20*45 + 7*20 = 1050 + 900 + 140 = 2090
+#   평균 = 2090 / 42 ≈ 49.8 (target 50 ✓)
+#   imbalance ratio = 70/20 = 3.5x (class_weight 효과 측정에 충분)
+#
+# Hypothesis:
+#   - H1 (본질): compound (R+G+B) test_f1 > wafer-only (R only) test_f1
+#   - H2 (class_weight): class_weight=effective 가 minor (Full/Thick-Edge 20) F1 ↑
+#   - H3 (편차 효과): class별 편차 있어도 본 가설 H1 유효 (chip-level obj 정보 robust)
+#
+# Run (모든 v3+ 학습):
+#   # Branch A wafer-only
+#   python wafer_train/cnn_train_wafer.py --epochs 30 --batch 16 \
+#       --subset-config experiments/round28_active.yaml \
+#       --active-classes-yaml experiments/round28_active.yaml \
+#       --class-weight effective \
+#       --model-tag v3_wafer_eff
+#
+#   # Branch B Stage 3 compound
+#   python compound_train/cnn_train_compound.py --epochs 30 --batch 16 \
+#       --subset-config experiments/round28_active.yaml \
+#       --active-classes-yaml experiments/round28_active.yaml \
+#       --obj-id-dir D:/project/data/wm-811k/obj_id_maps \
+#       --class-weight effective \
+#       --model-tag v3_compound_eff
+#
+#   # class_weight 효과 A/B (도메인 realistic imbalance 상)
+#   --class-weight none      vs effective    : minor Full/Thick-Edge F1 차이
+#
+# Output 비교:
+#   logs_compound/v3_compound_eff_*/best_history.txt vs logs_wafer/v3_wafer_eff_*/
+#   - margin Δ = compound test_f1 - wafer test_f1 (본 프로젝트 본질)
+#   - per-class F1: minor 20-class 의 F1 (class_weight=none vs effective)
+#
+# 절대 금지:
+#   - 본 YAML 의 sample count / class list 변경 금지 (cross-version 비교 깨짐)
+#   - v4/v5 hparam 변경 시에도 본 YAML 그대로 사용
+#   - data 추가 후 새 class 학습 원할 시 round29_active.yaml 새로 작성 (본 YAML 보존)
+# =============================================================================
+
+# subset 분포 — per-class sample count
+classes:
+  # ── major (70 each, 15 class) ── 외곽 defect — 실제 fab 에서 가장 흔함
+  Edge-Bottom_bank_boundary: 70
+  Edge-Bottom_fork: 70
+  Edge-Bottom_invalid_main: 70
+  Edge-Bottom_scratch: 70
+  Edge-Bottom_scratch_rot: 70
+  Edge-Ring_bank_boundary: 70
+  Edge-Ring_fork: 70
+  Edge-Ring_invalid_main: 70
+  Edge-Ring_scratch: 70
+  Edge-Ring_scratch_rot: 70
+  Edge-Top_bank_boundary: 70
+  Edge-Top_fork: 70
+  Edge-Top_invalid_main: 70
+  Edge-Top_scratch: 70
+  Edge-Top_scratch_rot: 70
+
+  # ── minor (20 each, 7 class) ── 전체-wafer / thick-edge 결함 매우 드뭄
+  Full_bank_boundary: 20
+  Full_fork: 20
+  Full_invalid_main: 20
+  Full_scratch: 20
+  Full_scratch_rot: 20
+  Thick-Edge_fork: 20
+  Thick-Edge_invalid_main: 20
+
+  # ── mid (default 45, 20 class) ── 중앙 / 구조 결함 보통
+  default: 45
+
+# active class strict list — trainer 가 ImageFolder 로 발견한 class 와 매칭
+# (Normal_bank_boundary 제외 — open-set policy / classification, classification_chips 제외 — non-class dirs)
+active_classes:
+  - BrokenRing
+  - CenterCircle
+  - CenterDonut
+  - Center_bank_boundary
+  - Center_fork
+  - Center_invalid_main
+  - Center_scratch
+  - Center_scratch_rot
+  - CrescentArc
+  - CrossScratch
+  - DiagonalSmear
+  - Donut_bank_boundary
+  - Donut_fork
+  - Donut_invalid_main
+  - Donut_scratch
+  - Donut_scratch_rot
+  - Edge-Bottom_bank_boundary
+  - Edge-Bottom_fork
+  - Edge-Bottom_invalid_main
+  - Edge-Bottom_scratch
+  - Edge-Bottom_scratch_rot
+  - Edge-Ring_bank_boundary
+  - Edge-Ring_fork
+  - Edge-Ring_invalid_main
+  - Edge-Ring_scratch
+  - Edge-Ring_scratch_rot
+  - Edge-Top_bank_boundary
+  - Edge-Top_fork
+  - Edge-Top_invalid_main
+  - Edge-Top_scratch
+  - Edge-Top_scratch_rot
+  - Full_bank_boundary
+  - Full_fork
+  - Full_invalid_main
+  - Full_scratch
+  - Full_scratch_rot
+  - ParallelScratches
+  - RingDots
+  - Row
+  - Starburst
+  - Thick-Edge_fork
+  - Thick-Edge_invalid_main

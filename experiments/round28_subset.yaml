@@ -1,0 +1,50 @@
+# =============================================================================
+# Plan: round 28 subset — 도메인-realistic imbalance (avg 50, ratio 3.5x)
+# Status: 활성 (★ 모든 v3+ wafer-only / compound 학습 시 강제)
+# Intent:
+#   사용자 명시: "wafer는 학습당 class 평균 50개 class 별 편차가있게해라 그래야
+#   class weight도 성능 확인되겠네"
+#
+#   42 class avg 50 sample (총 ~2090) + tier imbalance (3.5x):
+#     - major (70): Edge-* × 15 class (외곽 defect — fab realistic 가장 흔함)
+#     - mid (45): Center / Donut / Canvas 20 class (default)
+#     - minor (20): Full × 5 + Thick-Edge × 2 (전체 wafer / thick edge — 매우 드뭄)
+#
+# Run:
+#   --subset-config experiments/round28_subset.yaml
+#   --active-classes-yaml experiments/round28_classes.yaml   (★ 둘 다 명시 — 동일 조건 강제)
+#
+# 절대 금지:
+#   - sample count 변경 금지 (cross-version 비교 깨짐)
+#   - v4/v5 hparam 변경 시에도 본 YAML 그대로 사용
+# =============================================================================
+
+classes:
+  # ── major (70 each, 15 class) — 외곽 defect, fab realistic 가장 흔함
+  Edge-Bottom_bank_boundary: 70
+  Edge-Bottom_fork: 70
+  Edge-Bottom_invalid_main: 70
+  Edge-Bottom_scratch: 70
+  Edge-Bottom_scratch_rot: 70
+  Edge-Ring_bank_boundary: 70
+  Edge-Ring_fork: 70
+  Edge-Ring_invalid_main: 70
+  Edge-Ring_scratch: 70
+  Edge-Ring_scratch_rot: 70
+  Edge-Top_bank_boundary: 70
+  Edge-Top_fork: 70
+  Edge-Top_invalid_main: 70
+  Edge-Top_scratch: 70
+  Edge-Top_scratch_rot: 70
+
+  # ── minor (20 each, 7 class) — 전체-wafer / thick-edge 매우 드뭄
+  Full_bank_boundary: 20
+  Full_fork: 20
+  Full_invalid_main: 20
+  Full_scratch: 20
+  Full_scratch_rot: 20
+  Thick-Edge_fork: 20
+  Thick-Edge_invalid_main: 20
+
+  # ── mid (default 45, 20 class) — 중앙 / 구조 결함 보통
+  default: 45

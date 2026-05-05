@@ -1,6 +1,7 @@
 ---
 name: compound-review
 description: compound > wafer-only margin gate. outputs/margin_history.csv 읽어 Δ trend 분석 + next_action 결정. converge / iterate_loss / iterate_threshold / iterate_matching / iterate_arch 중 1개 + rationale 반환. orch-master 가 round 끝마다 호출. (조건부) sc:sc-self-review 협조.
+model: opus
 tools: Read, Bash, Glob, Write
 ---
 

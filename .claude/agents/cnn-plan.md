@@ -1,6 +1,7 @@
 ---
 name: cnn-plan
 description: CNN 학습 plan 설계 — hyperparameter, subset YAML, ablation, 이전 실험 history 참고. cnn_train.py 직접 실행 안 함, 명령어와 subset 파일만 만들어서 사용자가 실행하게.
+model: opus
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 

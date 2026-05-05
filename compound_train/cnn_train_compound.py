@@ -103,10 +103,10 @@ CFG = {
     "img_size": 384,
     "batch": 16,
     "epochs": 30,
-    "lr_backbone": 1e-5,
-    "lr_head": 1e-3,
+    "lr_backbone": 2e-5,                                                        # AD 정책 (D:/project/anomaly-detection): 1e-5 → 2e-5
+    "lr_head": 2e-4,                                                            # AD 정책: 1e-3 → 2e-4 (head 5배 ↓ for stability)
     "weight_decay": 0.05,
-    "warmup_epochs": 2,
+    "warmup_epochs": 5,                                                         # AD 정책: 2 → 5 (긴 warmup + start_factor 0.05)
     "seed": 42,
     "num_workers": 8,
     "split_ratios": (0.8, 0.1, 0.1),
@@ -1326,7 +1326,7 @@ def main():
     steps_per_epoch = max(1, len(train_ld))
     total_steps = args.epochs * steps_per_epoch
     warmup_steps = args.warmup_epochs * steps_per_epoch
-    sched_warmup = torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.1, end_factor=1.0, total_iters=max(1, warmup_steps))
+    sched_warmup = torch.optim.lr_scheduler.LinearLR(opt, start_factor=0.05, end_factor=1.0, total_iters=max(1, warmup_steps))   # AD 정책: 0.1 → 0.05 (gradient spike 방지)
     sched_cos = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, total_steps - warmup_steps))
     scheduler = torch.optim.lr_scheduler.SequentialLR(opt, schedulers=[sched_warmup, sched_cos], milestones=[warmup_steps])
     scaler = torch.amp.GradScaler("cuda", enabled=(device.type=="cuda"))
