@@ -83,14 +83,40 @@ bit 순서 = `[bb, fork, scratch, scratch_rot]`
 | ![](figs/DiagonalSmear.png) | ![](figs/CenterDonut.png) | ![](figs/CrossScratch.png) | ![](figs/Starburst.png) |
 | DiagonalSmear | CenterDonut | CrossScratch | Starburst |
 
-## 성능 향상에 쓴 기법
+OOD chip 은 wafer 단위 합성한 불량 wafer 에서 결함 영역(bin ≥ 200) 의 chip 만 따왔다. 등록된 4 결함(bb/fork/sc/sr) 형태가 아니라 학습에 한 번도 들어가지 않은 외형이다. **현업 라인에서 학습 안 한 새 결함 패턴이 random 하게 들어오는 상황을 시뮬레이션**하려고 평가에만 추가했다 — 모델이 이걸 보고 학습된 4 결함 중 하나로 잘못 fire 하면 false alarm 으로 잡힌다 (`ood_chip_FAR`).
 
-- **Normal 학습 추가** — 정상 chip 200장을 zero-vector multi-hot label로 학습 데이터에 넣었다. 가장 큰 lever였고 chip_FAR가 80%대에서 0%까지 떨어졌다.
-- **chip 합성 강화** — 결함 라인 두께와 라인별 길이/위치 산포를 조정해서 분류기가 학습할 결함 신호를 더 명확하게 만들었다.
-- **Loss 설계** — 8가지 loss(CE, CE+LS, Focal, ASL, BCE, BCE→ASL, BCE+LS, Sigmoid Focal)를 비교했고 BCE+LS=0.20 + random CutMix p=0.25가 가장 안정적이었다. Focal/ASL은 calibration이 망가지거나 negative를 너무 강하게 눌러서 fork 같은 약한 신호를 죽였다.
-- **chip_FAR split** — Normal+Invalid 와 OOD를 분리 측정해서 운영용 metric(`ni_chip_FAR`)을 OOD artifact에서 떼어냈다. bundled 96% 의 정체가 OOD 100% fire였다는 게 split 후에 보였다.
-- **logit-avg ensemble** — Normal 학습한 모델과 안한 모델의 logit을 평균해 complementary 약점을 보완했다.
+## 학습 기법 설명
+
+### Loss
+
+- **BCE (Binary Cross Entropy)** — 4 class 각각 독립 binary classification. multi-label 표준 loss. `L = -Σ [y·log(p) + (1-y)·log(1-p)]`.
+- **CE (Cross Entropy)** — softmax 기반 single-class loss. multi-label 환경에 부적합 (한 chip 에 여러 결함이면 softmax 가 둘 중 하나만 살림).
+- **Label Smoothing (LS)** — target 0/1 → 0.10/0.90 같이 soft 화 (ε=0.20 시). over-confidence 완화 (Müller 2019). BCE+LS 가 BCE 단독보다 안정적.
+- **Focal Loss (Lin 2017)** — `-α(1-p)^γ log(p)`. 쉬운 example (p≈1) 의 loss 를 down-weight 해서 어려운 example 에 학습 집중. RetinaNet 의 sigmoid focal 버전 (T9) 도 있음.
+- **ASL (Asymmetric Loss, Ridnik 2021)** — multi-label 전용. positive (실제 결함) 는 BCE-like, negative (정상) 는 focal 강화 (γ_neg=4). multi-label SOTA loss.
+
+### CutMix — 학습 시 chip 두 장을 합쳐 새 학습 sample 생성
+
+**random rectangle CutMix** (Yun 2019) — chip A 위에 chip B 의 직사각 patch 한 개를 paste. label 도 면적 비례로 합침.
+
+| 원본 bank | 원본 scratch | CutMix 결과 (bank + scratch rect) |
+|:---:|:---:|:---:|
+| ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_random_rect.png) |
+
+**scattered CutMix** (Walawalkar 2020) — 큰 직사각 한 개 대신 여러 작은 patch 흩뿌림. 학습 시 결함이 chip 내 random 위치에 fragmented 로 보이도록.
+
+| 원본 bank | 원본 scratch | scattered CutMix (5 patches) |
+|:---:|:---:|:---:|
+| ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_scattered.png) |
+
+학습 시 chip 의 일부 비율 (예: p=0.25) 이 CutMix 처리됨. 학습 데이터에 단일 결함만 있어도 모델이 multi-label 합성된 input 을 보게 되어 multi-label 일반화 가능.
+
+### 기타
+
+- **Normal training** — 정상 chip 을 zero-vector multi-hot label (`[0,0,0,0]`) 로 학습 데이터에 추가. 모델이 "결함 없음" 을 명시적으로 학습.
+- **logit-avg ensemble** — 두 모델의 sigmoid 직전 logit 을 평균해서 complementary 약점 보완.
+- **chip_FAR split** — false alarm 을 정상/측정불능 chip 만 보는 `ni_chip_FAR` 와 학습 안한 OOD 만 보는 `ood_chip_FAR` 로 분리.
 
 ## paper grounding
 
-BCE / CF1 / F1_bit는 Tsoumakas 2007 / Wang 2016 / Chen 2019 multi-label 표준. Label Smoothing은 Müller 2019, Focal은 Lin 2017, ASL은 Ridnik 2021. CutMix는 Yun 2019 / Walawalkar 2020 / Sumbul 2024. 우리가 신규로 한 건 chip_FAR 3-way split(Normal/Invalid vs OOD), OOD-overlay benchmark(2 trained + 1 OOD), with × without-Normal logit ensemble, 그리고 chip 합성 generator 자체.
+BCE / CF1 / F1_bit (Tsoumakas 2007, Wang 2016, Chen 2019), LS (Müller 2019), Focal (Lin 2017), ASL (Ridnik 2021), CutMix (Yun 2019, Walawalkar 2020, Sumbul 2024).
