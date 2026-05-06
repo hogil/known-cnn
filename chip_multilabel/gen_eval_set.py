@@ -129,23 +129,39 @@ def _make_normal_chip(rng: np.random.Generator) -> np.ndarray:
 
 
 def _make_invalid_chip(rng: np.random.Generator) -> np.ndarray:
-    """White interior + 2px orange border + optional 'B<num>' bin text near top-left."""
+    """White interior + 2px orange border + 'B<num>' bin text large center."""
     arr = np.full((CHIP_SIZE, CHIP_SIZE, 3), 255, dtype=np.uint8)
     arr[:2, :, :] = ORANGE_RGB
     arr[-2:, :, :] = ORANGE_RGB
     arr[:, :2, :] = ORANGE_RGB
     arr[:, -2:, :] = ORANGE_RGB
-    if bool(rng.integers(0, 2)):
-        bin_num = int(rng.integers(200, 300))
+    bin_num = int(rng.integers(200, 300))
+    # large centered text
+    font = None
+    for path in ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
         try:
-            font = ImageFont.load_default()
+            from os.path import exists
+            if exists(path):
+                font = ImageFont.truetype(path, 64)
+                break
         except Exception:
-            font = None
-        im = Image.fromarray(arr)
-        draw = ImageDraw.Draw(im)
-        draw.text((10, 10), f"B{bin_num}", fill=(0, 0, 0), font=font)
-        arr = np.array(im)
-    return arr
+            pass
+    if font is None:
+        font = ImageFont.load_default()
+    im = Image.fromarray(arr)
+    draw = ImageDraw.Draw(im)
+    text = f"B{bin_num}"
+    try:
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        tx = CHIP_SIZE // 2 - tw // 2 - bbox[0]
+        ty = CHIP_SIZE // 2 - th // 2 - bbox[1]
+    except Exception:
+        tw, th = 120, 50
+        tx, ty = CHIP_SIZE // 2 - tw // 2, CHIP_SIZE // 2 - th // 2
+    draw.text((tx, ty), text, fill=(0, 0, 0), font=font)
+    return np.array(im)
 
 
 def _sanity_check(class_key: str, arr: np.ndarray, base1: np.ndarray | None,
