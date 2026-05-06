@@ -87,35 +87,96 @@ OOD chip 은 wafer 단위 합성한 불량 wafer 에서 결함 영역(bin ≥ 20
 
 ## 학습 기법 설명
 
-### Loss
-
-- **BCE (Binary Cross Entropy)** — 4 class 각각 독립 binary classification. multi-label 표준 loss. `L = -Σ [y·log(p) + (1-y)·log(1-p)]`.
-- **CE (Cross Entropy)** — softmax 기반 single-class loss. multi-label 환경에 부적합 (한 chip 에 여러 결함이면 softmax 가 둘 중 하나만 살림).
-- **Label Smoothing (LS)** — target 0/1 → 0.10/0.90 같이 soft 화 (ε=0.20 시). over-confidence 완화 (Müller 2019). BCE+LS 가 BCE 단독보다 안정적.
-- **Focal Loss (Lin 2017)** — `-α(1-p)^γ log(p)`. 쉬운 example (p≈1) 의 loss 를 down-weight 해서 어려운 example 에 학습 집중. RetinaNet 의 sigmoid focal 버전 (T9) 도 있음.
-- **ASL (Asymmetric Loss, Ridnik 2021)** — multi-label 전용. positive (실제 결함) 는 BCE-like, negative (정상) 는 focal 강화 (γ_neg=4). multi-label SOTA loss.
-
 ### CutMix — 학습 시 chip 두 장을 합쳐 새 학습 sample 생성
 
-**random rectangle CutMix** (Yun 2019) — chip A 위에 chip B 의 직사각 patch 한 개를 paste. label 도 면적 비례로 합침.
+학습 데이터에는 단일 결함 chip 만 있다. 그대로 학습하면 모델이 chip 한 장에 결함이 두 개 동시에 있는 평가 case 를 못 본다. CutMix 는 학습 중 일부 batch (예: 25%) 에 대해 chip A 위에 chip B 의 일부를 paste 해서 multi-label sample 을 즉석에서 만든다. 학습 안한 combo 평가에 generalize 가능하게 됨.
 
-| 원본 bank | 원본 scratch | CutMix 결과 (bank + scratch rect) |
+**random rectangle CutMix** (Yun 2019) — chip A 위에 chip B 의 직사각 patch 한 개 paste. label 은 면적 비례 union.
+
+| 원본 bank_boundary | 원본 scratch | CutMix 결과 |
 |:---:|:---:|:---:|
 | ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_random_rect.png) |
 
-**scattered CutMix** (Walawalkar 2020) — 큰 직사각 한 개 대신 여러 작은 patch 흩뿌림. 학습 시 결함이 chip 내 random 위치에 fragmented 로 보이도록.
+**scattered CutMix** (Walawalkar 2020) — 큰 사각 한 개 대신 여러 작은 patch (예: 5개 30×30) 흩뿌림. fragmented 합성.
 
-| 원본 bank | 원본 scratch | scattered CutMix (5 patches) |
+| 원본 bank_boundary | 원본 scratch | scattered CutMix (5 patches) |
 |:---:|:---:|:---:|
 | ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_scattered.png) |
 
-학습 시 chip 의 일부 비율 (예: p=0.25) 이 CutMix 처리됨. 학습 데이터에 단일 결함만 있어도 모델이 multi-label 합성된 input 을 보게 되어 multi-label 일반화 가능.
+### Loss — 어떤 식으로 틀렸는지를 모델에 알려주는 함수
+
+#### BCE (Binary Cross Entropy)
+
+multi-label 표준. 4 class 각각 독립 binary classification 으로 보고 loss 계산.
+
+```
+chip → CNN → [ logit_bb, logit_fork, logit_sc, logit_sr ]
+                 ↓ sigmoid (각 독립)
+              [ p_bb,    p_fork,    p_sc,    p_sr   ] ∈ [0, 1]
+                 ↓ 각 class 별 binary CE
+            L = -Σ_c [ y_c · log(p_c) + (1 - y_c) · log(1 - p_c) ]
+```
+
+★ 핵심: 4 sigmoid head 가 **독립** — fork prob 0.9 + scratch prob 0.8 동시 가능. softmax 와 다름.
+
+#### CE (Cross Entropy)
+
+softmax 기반 single-class loss. 4 class 중 1 개만 살린다.
+
+```
+[logit_bb, logit_fork, logit_sc, logit_sr]
+       ↓ softmax (합이 1 로 강제)
+[p_bb=0.05, p_fork=0.85, p_sc=0.07, p_sr=0.03]   ← 한 class 가 dominant
+```
+
+→ 한 chip 에 fork+scratch 동시 있으면 둘 중 하나만 살리고 나머지 손해 → multi-label 부적합.
+
+#### Label Smoothing (LS, Müller 2019)
+
+target 을 0/1 hard 가 아닌 soft 로:
+
+```
+원본 target (fork 만 있음):
+    [bb=0,    fork=1,    sc=0,    sr=0]
+
+LS ε=0.20 적용:
+    [bb=0.05, fork=0.85, sc=0.05, sr=0.05]
+                ↑ 100% 확신 안 하게 됨
+```
+
+over-confidence 완화 → calibration 향상.
+
+#### Focal Loss (Lin 2017)
+
+쉬운 example (이미 잘 맞춘) 의 loss 를 줄이고 어려운 example 에 집중.
+
+```
+weight = (1 - p)^γ  (γ=2)
+
+p=0.1 (어려움): BCE 2.30 × weight 0.81 = 1.86  ← 거의 그대로
+p=0.5 (보통):   BCE 0.69 × weight 0.25 = 0.17  ← 줄어듦
+p=0.9 (쉬움):   BCE 0.10 × weight 0.01 = 0.001 ← 거의 0
+```
+
+class imbalance 또는 hard example 학습 시 효과적. RetinaNet 의 multi-label 버전 (sigmoid focal) 도 있음.
+
+#### ASL (Asymmetric Loss, Ridnik 2021)
+
+multi-label 전용. positive (실제 결함) 와 negative (정상) 에 비대칭 weight:
+
+```
+y=1 (실제 결함):   focal γ_pos=1   ← BCE-like, 거의 그대로
+y=0 (실제 정상):   focal γ_neg=4   ← 매우 강하게 down-weight
+                                    + clip=0.05 (저신뢰 negative 무시)
+```
+
+의미: "정상 chip 에 결함 fire 한 case 가 너무 흔하면 model 무거운 penalty 줘서 fire 안 하게 만든다." multi-label SOTA loss.
 
 ### 기타
 
-- **Normal training** — 정상 chip 을 zero-vector multi-hot label (`[0,0,0,0]`) 로 학습 데이터에 추가. 모델이 "결함 없음" 을 명시적으로 학습.
-- **logit-avg ensemble** — 두 모델의 sigmoid 직전 logit 을 평균해서 complementary 약점 보완.
-- **chip_FAR split** — false alarm 을 정상/측정불능 chip 만 보는 `ni_chip_FAR` 와 학습 안한 OOD 만 보는 `ood_chip_FAR` 로 분리.
+- **Normal training** — 정상 chip 을 zero-vector label `[0,0,0,0]` 으로 학습.
+- **logit-avg ensemble** — 두 모델의 sigmoid 직전 logit 평균.
+- **chip_FAR split** — false alarm 을 정상/측정불능 (`ni_chip_FAR`) vs 학습 안한 OOD (`ood_chip_FAR`) 로 분리.
 
 ## paper grounding
 
