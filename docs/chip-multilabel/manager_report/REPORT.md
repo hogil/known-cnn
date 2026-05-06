@@ -97,11 +97,29 @@ OOD chip 은 wafer 단위 합성한 불량 wafer 에서 결함 영역(bin ≥ 20
 |:---:|:---:|:---:|
 | ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_random_rect.png) |
 
-**scattered CutMix** (Walawalkar 2020) — 큰 사각 한 개 대신 여러 작은 patch (예: 5개 30×30) 흩뿌림. fragmented 합성.
+**scattered CutMix** (Walawalkar 2020) — 큰 사각 한 개 대신 여러 patch (10개 50×50) 흩뿌림. fragmented 합성으로 결함이 chip 안 random 위치에 분산.
 
-| 원본 bank_boundary | 원본 scratch | scattered CutMix (5 patches) |
+| 원본 bank_boundary | 원본 scratch | scattered CutMix (10 patches × 50×50) |
 |:---:|:---:|:---:|
 | ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_scattered.png) |
+
+**grid CutMix** — chip 을 8×8 grid (각 25×25) 로 나누고 각 cell 별로 random 하게 chip A 또는 B 선택. 0/1 binary mask 로 섞음.
+
+| 원본 bank_boundary | 원본 scratch | grid CutMix (8×8 binary mask) |
+|:---:|:---:|:---:|
+| ![](figs/cutmix_demo/orig_bank.png) | ![](figs/cutmix_demo/orig_scratch.png) | ![](figs/cutmix_demo/cutmix_grid_8x8.png) |
+
+```
+mask 8x8 (1=scratch, 0=bank):     ← 64 cell 각각 random binary
+[0 1 1 0 0 1 0 1]
+[0 0 1 1 1 1 1 1]
+[1 0 1 0 1 0 0 1]
+[1 1 0 1 1 0 0 0]
+[0 1 1 0 1 1 0 1]
+[0 1 1 0 0 1 0 1]
+[1 1 1 0 0 0 0 0]
+[1 0 1 1 1 1 0 1]
+```
 
 ### Loss — 어떤 식으로 틀렸는지를 모델에 알려주는 함수
 
