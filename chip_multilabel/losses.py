@@ -43,18 +43,31 @@ class AsymmetricLoss(nn.Module):
 
 
 class BCEMultiHot(nn.Module):
-    """BCE on multi-hot target. Single-positive case = one-hot target."""
+    """BCE on multi-hot target. Single-positive case = one-hot target.
 
-    def __init__(self, label_smoothing: float = 0.0):
+    pos_weight: per-class positive-class weight tensor (C,) for class-imbalance fix
+                (e.g., upweight fork = 2.0 for fork+sr 2-combo recall fix, B+1 260507).
+                Passed to F.binary_cross_entropy_with_logits(pos_weight=...).
+    """
+
+    def __init__(self, label_smoothing: float = 0.0,
+                 pos_weight: torch.Tensor | None = None):
         super().__init__()
         self.smoothing = float(label_smoothing)
+        if pos_weight is not None:
+            self.register_buffer("pos_weight", pos_weight.float())
+        else:
+            self.pos_weight = None
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         target = target.float()
         if self.smoothing > 0:
             # 1 -> 1 - smoothing/2, 0 -> smoothing/2 (symmetric BCE smoothing)
             target = target * (1.0 - self.smoothing) + 0.5 * self.smoothing
-        return F.binary_cross_entropy_with_logits(logits, target)
+        pw = self.pos_weight if isinstance(self.pos_weight, torch.Tensor) else None
+        if pw is not None and pw.device != logits.device:
+            pw = pw.to(logits.device)
+        return F.binary_cross_entropy_with_logits(logits, target, pos_weight=pw)
 
 
 class CEWithSmoothing(nn.Module):
@@ -192,9 +205,11 @@ def build_loss(loss_name: str, **kw):
             clip=kw.get("clip", 0.05),
         ), "multi_hot"
     if loss_name == "bce":
-        return BCEMultiHot(label_smoothing=kw.get("ls", 0.0)), "multi_hot"
+        return BCEMultiHot(label_smoothing=kw.get("ls", 0.0),
+                           pos_weight=kw.get("pos_weight", None)), "multi_hot"
     if loss_name == "bce_ls":
-        return BCEMultiHot(label_smoothing=kw.get("ls", 0.20)), "multi_hot"
+        return BCEMultiHot(label_smoothing=kw.get("ls", 0.20),
+                           pos_weight=kw.get("pos_weight", None)), "multi_hot"
     if loss_name == "bce_then_asl":
         return BCEThenASL(warmup_epochs=kw.get("warmup_epochs", 5),
                          asl_kwargs={

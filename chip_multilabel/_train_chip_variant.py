@@ -281,6 +281,10 @@ def main():
                     help="ASL gamma_neg (T4 only). default 4.0 (Ridnik 2021).")
     ap.add_argument("--asl-clip", type=float, default=0.05,
                     help="ASL clip (T4 only). default 0.05 (Ridnik 2021).")
+    ap.add_argument("--pos-weight", type=str, default=None,
+                    help="BCE pos_weight per-class. Format 'IDX:W,IDX:W' or 'NAME:W,NAME:W'. "
+                         "e.g., '1:2.0' (fork=2x) or 'fork:2.0,scratch_rot:1.5'. Only used by "
+                         "T5/T7 (BCE-based variants). B+1 260507 — fork+sr 2-combo recall fix.")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
@@ -321,6 +325,29 @@ def main():
         build_kw["gamma_pos"] = float(args.asl_gpos)
         build_kw["gamma_neg"] = float(args.asl_gneg)
         build_kw["clip"] = float(args.asl_clip)
+    # B+1 260507 — BCE pos_weight (T5/T7 only, otherwise unused).
+    pos_weight_tensor: torch.Tensor | None = None
+    if args.pos_weight:
+        weights = [1.0] * len(TRAIN_CLASSES)
+        for entry in args.pos_weight.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            key_str, w_str = entry.split(":")
+            key_str = key_str.strip()
+            try:
+                idx = int(key_str)
+            except ValueError:
+                idx = TRAIN_CLASSES.index(key_str)
+            if not (0 <= idx < len(TRAIN_CLASSES)):
+                raise ValueError(f"pos-weight index out of range: {idx}")
+            weights[idx] = float(w_str)
+        pos_weight_tensor = torch.tensor(weights, dtype=torch.float32)
+        print(f"[train] BCE pos_weight = {dict(zip(TRAIN_CLASSES, weights))}")
+        if args.variant in ("T5", "T7"):
+            build_kw["pos_weight"] = pos_weight_tensor
+        else:
+            print(f"[train] WARN: --pos-weight ignored (variant={args.variant} is not BCE-based)")
     if build_kw:
         loss_fn, target_kind = build_loss(loss_name, **build_kw)
         loss_name = f"{loss_name}({build_kw})"
@@ -592,6 +619,7 @@ def main():
             "cutmix_total_ratio": float(args.cutmix_total_ratio),
             "cutmix_discount": float(args.cutmix_discount),
             "cutmix_alpha": float(args.cutmix_alpha),
+            "pos_weight": (None if args.pos_weight is None else str(args.pos_weight)),
         }, f, indent=2)
 
 
