@@ -352,3 +352,40 @@ spec yaml: `experiments/fair_eval_protocol.yaml`. 설명: `docs/wafer-ensemble/F
 - npy lookup = flat basename → npy_path map (rglob) — 어떤 서브폴더든 호환
 
 새 코드 / 기존 코드 수정 시 hardcode 흔적 발견되면 사용자에게 즉시 보고하고 동시에 동적 derive 로 패치.
+
+## chip-multilabel module (260506 unknown-contrastive 에서 이관)
+
+`chip_multilabel/` 의 single-label train → multi-label predict 평가 파이프라인. classification_chips/ 4 class (bank_boundary, fork, scratch, scratch_rot) 학습 + 합성 12-class eval set (4 single + 6 combo + Normal + Invalid) 평가.
+
+### 핵심 파일
+- `chip_multilabel/gen_eval_set.py` — eval set 합성 (min-blend combo + BASELINE Normal + orange-border Invalid). `--source-strength-pct N` 로 strong-defect 만 source 사용.
+- `chip_multilabel/_train_chip_variant.py` — 8 train variant (T1 CE+LS, T3 Focal, T4 ASL, T5 BCE, T6 BCE→ASL, T7 BCE+LS, T8 CE-soft+CutMix). 9+ CLI hparam flags (LS, ASL γ, EMA, warmup, drop_path, two-LR, CutMix, ...).
+- `chip_multilabel/run_stage1.py` — 기존 모델 + 11 inference variants (I0~I10, I5 영구 금지). I7/I10 winner.
+- `chip_multilabel/run_phase_a.py` — coordinate-descent hparam sweep (LS/LR/epochs).
+- `chip_multilabel/run_stage2.py` — 7 train × 6 inference matrix.
+- `chip_multilabel/notes.md` — 실시간 작업 노트 (iter 1~10 + restore point).
+
+### 자율 loop 실험 결과 (iter 1~10, 약 70+ trains)
+- **Iter 8 winner (single model)**: T9 (BCE+LS in [0.05,0.10] + CutMix p=0.5 + rect=0.5) — 3-seed mean macro_f1 **0.9305 ± 0.046**.
+- **★ Iter 10 final (260506) — H Ensemble winner**: baseline T9d + C_44 (Normal trained, cutmix=0.25) **logit avg** → **10-defect macro F1 = 0.9950**, 5-sample-seed mean **0.9930 ± 0.005**, FAR 0.00% (Normal 80% real-env). 4-single 0.9963, 6-combo 0.9908. 모든 Normal/Invalid F1 1.000 lock.
+- **단일 master 폴더 정책**: defect 200 store (`--source-strength-pct 50` 강한 defect) + Normal 200 + Invalid 50 = 2450 chip. runtime `--n-per-class 50` 으로 sample. subset 폴더 절대 안 만듦.
+- **Normal training 필수** (4-class only 학습은 Normal F1 huge variance ±0.466). y=-1 sentinel + multi-hot zero-vector target. 사용자 directive "Normal 학습에 들어갔어야" 입증.
+- **Logit ensemble = best 약점 보완** (paper finding) — diversity (with-Normal vs without) > quantity (multi-seed). 0.91 → 0.995.
+- **Cross-class suppression** — Normal training 이 fork combo prob 0.46→0.16 (3× collapse). ensemble 로 fix.
+- **bb+sr recall fix** (iter 7): 0.32 → 0.85+ via CutMix mechanism (compositional 학습).
+- **음성 결과** (paper-worthy): warmup, EMA(0.95), drop_path 0.05, cutmix-rect 0.25, two-LR, CE-soft+CutMix, ASL light, F (fork-pair bias retrain) — net negative ensemble.
+- **Iter 11 in progress** (paper-style 4-row ablation matrix): 6 loss × 6 inference × 3 eval (p50 simple / p30 simple / p50 diverse Normal) = 108 cells.
+
+### Skills / Agents
+- `chip-multilabel-pipeline` (skill) — datagen → stage1 → stage2 풀체인 entry
+- `chip-multilabel-runner` (agent) — GPU dispatcher, resource-monitor 협조
+- `chip-multilabel-analyst` (agent, opus) — 결과 분석 + 다음 실험 제안 (paper 인용 + 도메인 reasoning)
+- `chip-multilabel-logger` (agent) — docs/chip-multilabel/ 기록
+- `chip-multilabel-paper-narrator` (agent, opus) — paper section narrative
+
+### 절대 금기 (chip-multilabel)
+- TTA 영구 금지 (scratch vs scratch_rot 회전 구분 손상)
+- Rotation/Flip aug 영구 금지 (학습 시 RandomAffine translate+scale 만)
+- 1 atomic method/iter 변경
+
+자세한 결과는 `docs/chip-multilabel/` 참조.

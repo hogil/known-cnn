@@ -29,7 +29,8 @@ from _sample_gen import (
     PALETTE, KEY_TO_INDEX, IDX_BG,
     BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
     SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
-    CUM_BASE,
+    CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
+    pick_baseline_tier, pick_intensity_tier,
     _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
 )
 from _fq_metadata import add_synthetic_fq_to_json
@@ -107,7 +108,7 @@ def alpha_diagonal_smear(rng):
     cy = SIZE/2 + rng.uniform(-CHIP*0.3, CHIP*0.3)
     cx = SIZE/2 + rng.uniform(-CHIP*0.3, CHIP*0.3)
     sigma = CHIP * rng.uniform(0.10, 0.20)
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                        # round 29 v15: lower bound 낮춤 (weak peak 가능)
     half_len = SIZE * rng.uniform(0.20, 0.35)             # line 길이 짧게 — partial
     sigma_end = CHIP * rng.uniform(2.0, 4.0)              # 양 끝 fade 영역
     cos_a = float(np.cos(angle)); sin_a = float(np.sin(angle))
@@ -123,7 +124,7 @@ def alpha_cross_scratch(rng):
     cx = SIZE/2 + rng.uniform(-CHIP*0.3, CHIP*0.3)
     base_angle = rng.uniform(-0.04, 0.04)
     sigma = CHIP * rng.uniform(0.10, 0.20)
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                        # round 29 v15: lower bound
     half_len = SIZE * rng.uniform(0.20, 0.32)
     sigma_end = CHIP * rng.uniform(2.0, 3.5)
     a_full = np.zeros((SIZE, SIZE), dtype=np.float32)
@@ -148,7 +149,7 @@ def alpha_crescent_arc(rng):
     arc_len = rng.uniform(np.pi/3, np.pi/2.5)
     th_center = side + rng.uniform(-0.15, 0.15)
     sigma_th = arc_len / 2.5                            # smooth angular taper
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                      # round 29 v15: lower bound
     dy = yy - cy; dx = xx - cx
     r = np.sqrt(dy*dy + dx*dx)
     theta = np.arctan2(dy, dx)
@@ -192,7 +193,7 @@ def alpha_parallel_scratches(rng):
     n_lines = int(rng.integers(3, 6))
     spacing = CHIP * rng.uniform(3.5, 5.5)
     sigma = CHIP * rng.uniform(0.10, 0.20)
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                        # round 29 v15: lower bound
     half_len = SIZE * rng.uniform(0.20, 0.32)
     sigma_end = CHIP * rng.uniform(2.0, 3.5)
     perp_y = -np.sin(angle); perp_x = np.cos(angle)
@@ -217,7 +218,7 @@ def alpha_edge_smudge(rng):
     r_center = R * rng.uniform(0.75, 0.85)              # ring near edge
     sigma_r = R * rng.uniform(0.025, 0.045)             # narrower ring
     half_ring = True                                       # 모두 half-ring (visual identity 유지)
-    peak = rng.uniform(0.40, 0.60)
+    peak = rng.uniform(0.22, 0.60)                         # round 29 v15: lower bound
     dy = yy - cy; dx = xx - cx
     r = np.sqrt(dy*dy + dx*dx)
     a_r = _perp_sharp(r - r_center, sigma_r)
@@ -242,7 +243,7 @@ def alpha_broken_ring(rng):
     n_gaps = int(rng.integers(1, 4))
     gap_centers = rng.uniform(-np.pi, np.pi, size=n_gaps).astype(np.float32)
     gap_widths = rng.uniform(np.pi/6, np.pi/3, size=n_gaps).astype(np.float32)
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                          # round 29 v15: lower bound
     dy = yy - cy; dx = xx - cx
     r = np.sqrt(dy*dy + dx*dx)
     theta = np.arctan2(dy, dx)
@@ -266,7 +267,7 @@ def alpha_ring_dots(rng):
     n_dots = int(rng.integers(14, 24))                   # 갯수 늘림 14-23
     th_off = rng.uniform(0, 2*np.pi)
     sigma_blob = CHIP * rng.uniform(0.20, 0.40)          # chip 보다 작음 (0.2-0.4 chip)
-    peak = rng.uniform(0.40, 0.60)
+    peak = rng.uniform(0.22, 0.60)                       # round 29 v15: lower bound
     a_full = np.zeros((SIZE, SIZE), dtype=np.float32)
     for i in range(n_dots):
         th = th_off + 2*np.pi * i / n_dots
@@ -304,8 +305,8 @@ def alpha_starburst(rng):
         in_len = (r < ray_len) & forward
         a_ray = _perp_sharp(d_perp, sigma_perp) * in_len.astype(np.float32)
         np.maximum(a_lines, a_ray, out=a_lines)
-    peak_c = rng.uniform(0.60, 0.85)
-    peak_l = rng.uniform(0.30, 0.50)
+    peak_c = rng.uniform(0.40, 0.85)                      # round 29 v15: lower bound
+    peak_l = rng.uniform(0.18, 0.50)                      # round 29 v15: lower bound
     return np.maximum(peak_c * a_center, peak_l * a_lines)
 
 
@@ -352,7 +353,7 @@ def alpha_center_donut(rng):
     R = SIZE/2
     r_center = R * rng.uniform(0.08, 0.16)               # center 매우 작은 ring
     sigma_r = R * rng.uniform(0.006, 0.014)              # 매우 얇은 ring
-    peak = rng.uniform(0.30, 0.50)
+    peak = rng.uniform(0.18, 0.50)                       # round 29 v15: lower bound
     dy = yy - cy; dx = xx - cx
     r = np.sqrt(dy*dy + dx*dx)
     return peak * _perp_sharp(r - r_center, sigma_r)
@@ -396,7 +397,7 @@ def alpha_center_circle(rng):
         rng.uniform(0.55, 0.70) * np.exp(- (r_eff / sigma_sharp) ** 2) +     # sharp center
         rng.uniform(0.25, 0.40) / (1.0 + (r_eff / sigma_wide) ** 2)            # Lorentzian halo
     )
-    peak = rng.uniform(0.45, 0.65)
+    peak = rng.uniform(0.25, 0.65)                                             # round 29 v15: lower bound
     return (peak * profile).astype(np.float32)
 
 
@@ -421,8 +422,14 @@ def render_canvas(class_name, seed):
     inside = _wafer_inside_mask()                       # 32x32
     inside_pix = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)
 
-    # 1. wafer alpha = P(defect pixel | position)
-    alpha = ALPHA_FN[class_name](rng)
+    # 0. Round 29 v15: per-wafer tier (baseline noise + defect intensity + chip-inclusion τ)
+    baseline_tier  = pick_baseline_tier(rng)            # clean/normal/hazy
+    intensity_tier = pick_intensity_tier(rng)           # strong/mid/weak
+    canvas_tau     = float(rng.choice([0.20, 0.30, 0.40], p=[0.25, 0.50, 0.25]))
+    cum_base_use   = CUM_BASELINE_TIERS[baseline_tier].astype(np.float32)
+
+    # 1. wafer alpha = P(defect pixel | position) * intensity scale
+    alpha = ALPHA_FN[class_name](rng) * INTENSITY_ALPHA_SCALE[intensity_tier]
 
     # 1b. multi-scale noise + along-line wave (line 따라 alpha 강/약 자연 변동)
     def _bilinear_field(rng, h, w, lo, hi):
@@ -449,21 +456,20 @@ def render_canvas(class_name, seed):
 
     alpha *= inside_pix.astype(np.float32)              # outside-wafer = 0
 
-    # 2. baseline canvas (normal noise)
+    # 2. baseline canvas (round 29 v15: per-wafer baseline_tier)
     u = rng.random((SIZE, SIZE))
-    canvas = np.searchsorted(CUM_BASE, u).astype(np.uint8); del u
+    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
     canvas[~inside_pix] = IDX_BG
 
     # 3. baseline ↔ peak distribution mix (사용자 spec: alpha=0 → baseline, alpha=1 → peak)
-    #    cum_mixed = (1-alpha)*CUM_BASE + alpha*CUM_PEAK → P(0) 감소, P(1) 증가, peak grade 등장
-    #    row chunk for memory: cum_mixed (chunk_h, SIZE, 8) float32
+    #    cum_mixed = (1-alpha)*cum_base_use + alpha*CUM_PEAK
     cum_peak = _build_peak_cum(class_name)
     chunk_h = 800
     for y0 in range(0, SIZE, chunk_h):
         y1 = min(y0 + chunk_h, SIZE)
         a_c = alpha[y0:y1, :]                            # (chunk_h, SIZE)
         if a_c.max() < 0.01: continue                    # 거의 0 → baseline 그대로
-        cum_mixed = ((1 - a_c)[..., None] * CUM_BASE_F[None, None, :] +
+        cum_mixed = ((1 - a_c)[..., None] * cum_base_use[None, None, :] +
                      a_c[..., None] * cum_peak[None, None, :])
         uu = rng.random((y1-y0, SIZE)).astype(np.float32)
         grades = (uu[..., None] < cum_mixed).argmax(axis=-1).astype(np.uint8)
@@ -472,7 +478,7 @@ def render_canvas(class_name, seed):
         canvas[y0:y1][mask] = grades[mask]
 
     # 4. defect chip 결정 — alpha mean + max 둘 다 strict (line 직접 지나가는 chip 만 BIN)
-    #    사용자 spec (#39): defect 직접 포함 chip 만 BIN, 나머지 normal 동일.
+    #    Round 29 v15: per-wafer canvas_tau (0.20/0.30/0.40) — weak wafer 일수록 high τ → 적은 chip
     chip_meta = {}
     kind = '00P' if rng.random() < 0.5 else '00C'
     bin_pool = DEFECT_BIN_POOL[kind]
@@ -484,7 +490,7 @@ def render_canvas(class_name, seed):
             chip_alpha_mean = float(chip_alpha.mean())
             chip_alpha_max = float(chip_alpha.max())
             # primary filter: line 직접 통과 chip 만 (sparse Row line 도 통과)
-            if chip_alpha_max < 0.30: continue
+            if chip_alpha_max < canvas_tau: continue
             # P(defect) — mean primary + sparse line (Row) 의 max bonus
             score = max(chip_alpha_mean * 3.0, (chip_alpha_max - 0.5) * 1.5)
             p_def = min(score, 1.0)
@@ -558,6 +564,12 @@ def render_canvas(class_name, seed):
         "netd": netd, "gd": int(gd_count),
         "yield": f"{yld:.2f}", "sys": f"{syp:.2f}",
         "tm": LT, "lt": TD,
+        "wafer_meta": {                                                               # round 29 v15: per-wafer tier
+            "synth_round": "29_v15",
+            "baseline_tier": baseline_tier,
+            "intensity_tier": intensity_tier,
+            "canvas_tau": round(canvas_tau, 4),
+        },
         "coord": {
             "rot_code": 5,
             "x_min_abs": 0, "y_min_abs": 0, "x_max_abs": GRID-1, "y_max_abs": GRID-1,

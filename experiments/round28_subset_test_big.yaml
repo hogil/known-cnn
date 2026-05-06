@@ -1,0 +1,52 @@
+# =============================================================================
+# Plan: round 28 subset test_big — train 거의 같음, test 10x ↑
+# Status: 활성 (★ test 통계 유의성 ↑)
+# Intent:
+#   사용자: "test 갯수만 늘려보자". 5 sample/class test → 100% 통계 의미 X.
+#   subset 2x + split 0.4/0.1/0.5 → train 같음, test 10x ↑.
+#
+# Per-class:
+#   major (70→140): train 56 / val 14 / test 70   (was train 56, test 7)
+#   mid   (45→90):  train 36 / val 9  / test 45   (was train 36, test 5)
+#   minor (20→40):  train 16 / val 4  / test 20   (was train 16, test 2)
+#   ratio: --split-ratios 0.4 0.1 0.5
+#   total: ~4180 (was 2090, x2)
+#
+# Run:
+#   python wafer_train/cnn_train_wafer.py --epochs 30 --batch 4 --workers 0 \
+#       --subset-config experiments/round28_subset_test_big.yaml \
+#       --active-classes-yaml experiments/round28_classes.yaml \
+#       --split-ratios 0.4 0.1 0.5 \
+#       --class-weight effective \
+#       --model-tag v3_wafer_eff_v14_testbig
+# =============================================================================
+
+classes:
+  # major (140 each, 15 class) - Edge-*
+  Edge-Bottom_bank_boundary: 140
+  Edge-Bottom_fork: 140
+  Edge-Bottom_invalid_main: 140
+  Edge-Bottom_scratch: 140
+  Edge-Bottom_scratch_rot: 140
+  Edge-Ring_bank_boundary: 140
+  Edge-Ring_fork: 140
+  Edge-Ring_invalid_main: 140
+  Edge-Ring_scratch: 140
+  Edge-Ring_scratch_rot: 140
+  Edge-Top_bank_boundary: 140
+  Edge-Top_fork: 140
+  Edge-Top_invalid_main: 140
+  Edge-Top_scratch: 140
+  Edge-Top_scratch_rot: 140
+
+  # minor (40 each, 7 class) - Full / Thick-Edge
+  Full_bank_boundary: 40
+  Full_fork: 40
+  Full_invalid_main: 40
+  Full_scratch: 40
+  Full_scratch_rot: 40
+  Thick-Edge_fork: 40
+  Thick-Edge_invalid_main: 40
+
+  # mid (default 90, 20 class) - Center / Donut / Canvas
+  default: 90

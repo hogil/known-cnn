@@ -90,7 +90,7 @@ JSON_OUT_DIR = "D:/project/data/positions/unknown"
 CHIP_OBJ_OUT_DIR = "D:/project/data/wm-811k/classification_chips"               # chip-object crop dataset (per-chip true label)
 CHIP_OBJECT_LABELS = ('bank_boundary', 'fork', 'scratch',
                      'scratch_rot', 'invalid_main')
-CHIP_OBJ_PER_CLASS_CAP = 100                                                    # round 26: hard cap per class (사용자 명시 — chip 폭발 방지 + stub regen 차단)
+CHIP_OBJ_PER_CLASS_CAP = 200                                                    # 260506 v19: 100 → 200 (master per-class 200 source 확보)
 os.makedirs(PNG_OUT_DIR, exist_ok=True)
 os.makedirs(JSON_OUT_DIR, exist_ok=True)
 
@@ -103,14 +103,21 @@ def _wafer_basename_chip_key(base: str) -> str:
     return base
 
 
+MIN_CHIP_DEFECT_RATIO = 0.10                                                            # 260506: stricter (was 0.03 — too lenient, grade 2 sprinkle 통과)
+MIN_CHIP_STRONG_GRADE_RATIO = 0.02                                                      # 260506: NEW — grade ≥3 (real line/pattern) 픽셀이 chip 의 ≥2% 여야 진짜 defect chip
+
 def save_chip_crops(img, chip_meta: dict, base: str, out_root: str = CHIP_OBJ_OUT_DIR) -> dict:
-    """Save per-chip 200x200 crops to classification_chips/<obj>/<wafer_key>_x<x>_y<y>_b<bin>.png.
+    """Save per-chip 200x200 crops to classification_chips/<obj>/<wafer_key>_X<x>_Y<y>_B<bin>.png.
 
     chip_meta entry: {'kind': 'defect'|'invalid', 'obj': <obj_name|None>, 'bin': int, 'inside': bool}
-    - kind=='defect': crop labeled with chip_meta['obj'] (handles 75% primary + 25% mixed correctly)
-    - kind=='invalid': crop labeled 'invalid_main'
-    - obj NOT in CHIP_OBJECT_LABELS skipped (legacy round 25 names removed in round 26)
-    - per-class cap CHIP_OBJ_PER_CLASS_CAP (default 100): if class folder already has >= cap files, skip
+    - kind=='defect': crop labeled with chip_meta['obj']
+    - kind=='invalid': crop labeled 'invalid_main' (no quality filter — full white = valid signal)
+    - obj NOT in CHIP_OBJECT_LABELS skipped (5 obj only)
+    - per-class cap CHIP_OBJ_PER_CLASS_CAP (default 100)
+    - **defect quality filter (round 29 v15)**: skip chip if (grade ≥ 2 & < 31) pixel ratio
+      < MIN_CHIP_DEFECT_RATIO (0.03). v15 weak intensity tier 가 grade 0/1 dominant chip
+      을 만들면 시각적으로 양호 chip 처럼 보임 → 이런 chip 이 fork/scratch 폴더에 들어가면
+      chip CNN 학습 mislabeled 됨. 양호 같은 chip 은 학습에서 제외.
     Returns counts dict: {label: count}.
     """
     counts = {}
@@ -142,11 +149,26 @@ def save_chip_crops(img, chip_meta: dict, base: str, out_root: str = CHIP_OBJ_OU
         x0, y0 = gx * CHIP, gy * CHIP
         x1, y1 = x0 + CHIP, y0 + CHIP
         crop = img.crop((x0, y0, x1, y1))
-        crop_name = f"{wafer_key}_X{gx}_Y{gy}_B{b}.png"                                    # uppercase X/Y/B for consistency
+        # 260506 — strict quality filter (was round 29 v15 lenient).
+        # 양호 chip 이 fork/scratch 폴더에 들어가는 문제 fix.
+        # 이중 검사:
+        #   (1) total defect ratio (grade 2-30) ≥ 10% — chip 안의 defect 면적이 충분
+        #   (2) strong grade ratio (grade 3-30) ≥ 2% — sprinkle (grade 2) 만 있는 chip 차단
+        # invalid_main 은 white-dominant 가 정상 신호 → filter X
+        if obj != 'invalid_main':
+            arr = np.asarray(crop, dtype=np.uint8)                                        # palette indices 0-31
+            n_defect_px = int(((arr >= 2) & (arr < 31)).sum())
+            n_strong_px = int(((arr >= 3) & (arr < 31)).sum())                           # 260506: line/pattern grade 만
+            if n_defect_px < int(MIN_CHIP_DEFECT_RATIO * arr.size):
+                continue                                                                  # 양호 처럼 보임 → skip
+            if n_strong_px < int(MIN_CHIP_STRONG_GRADE_RATIO * arr.size):
+                continue                                                                  # sprinkle 만 있고 line pattern 없음 → skip
+        crop_name = f"{wafer_key}_X{gx}_Y{gy}_B{b}.png"                                    # uppercase X/Y/B
         crop.save(os.path.join(out_dir, crop_name))
         counts[obj] = counts.get(obj, 0) + 1
     return counts
 
+# v19o (260506): v19n BG 변경 REVERT — 사용자 명시 "chip 영역 전체 비율 늘리면 안됨, 불량영역만"
 # normal chip baseline: P(0)+P(1) ≈ 98% — defect chip과 압도적 차이
 BASELINE = np.array([0.83, 0.15, 0.012, 0.005, 0.002, 0.0008, 0.0001, 0.0001], dtype=np.float64)
 BASELINE /= BASELINE.sum()
@@ -157,8 +179,7 @@ DEFECT_BG_DIST = np.array([0.73, 0.25, 0.012, 0.005, 0.002, 0.0008, 0.0001, 0.00
 DEFECT_BG_DIST /= DEFECT_BG_DIST.sum()
 CUM_DEFECT_BG = np.cumsum(DEFECT_BG_DIST)
 
-# 불량영역 가장자리 (zone edge): grade 1 40%로 낮춤 (zone 끝쪽 1 비율 너무 높지 않게)
-# P(0)=50%, P(1)=40% → BG(25%)와 CENTER 사이 smoother transition
+# v19s (260506): EDGE 원복 — bank_boundary 가 이제 2-stage 사용하므로 EDGE 영향 없음
 EDGE_DIST = np.array([0.50, 0.40, 0.07, 0.02, 0.005, 0.003, 0.001, 0.001], dtype=np.float64)
 EDGE_DIST /= EDGE_DIST.sum()
 CUM_EDGE = np.cumsum(EDGE_DIST)
@@ -167,6 +188,49 @@ CUM_EDGE = np.cumsum(EDGE_DIST)
 EDGE_LINE_DIST = np.array([0.23, 0.48, 0.26, 0.020, 0.005, 0.003, 0.002, 0.001], dtype=np.float64)
 EDGE_LINE_DIST /= EDGE_LINE_DIST.sum()
 CUM_EDGE_LINE = np.cumsum(EDGE_LINE_DIST)
+
+# ===== Round 29 v15: per-wafer intensity / baseline tier system =====
+# v14 (round28_subset_test_big) wafer-only ep3 test_f1 99.59 saturated — too easy.
+# 합성 데이터가 너무 uniform: 양호 (BASELINE) 와 불량 (OBJECT_DISTS) 모두 fixed deterministic.
+# 실제 fab data 는 wafer 마다 강도 변동 + 양호 영역 noise 분포 변동.
+# 이 round 에서 per-wafer 3-tier mix 도입:
+#   baseline_tier: clean / normal / hazy → 양호 영역 grade 분포 변동
+#   intensity_tier: strong / mid / weak → 불량 강도 (alpha scale + grade shift)
+#   invalid_pct: 0.05 / 0.10 / 0.15 / 0.20 → invalid chip 비율 변동
+# JSON wafer_meta 에 picked tiers 기록 → analysis / debug.
+BASELINE_TIERS = {
+    # v19o: BG 원복 (v19n REVERT)
+    'clean':  np.array([0.95, 0.040, 0.008, 0.001, 0.0005, 0.0003, 0.0001, 0.0001], dtype=np.float64),
+    'normal': BASELINE.copy(),
+    'hazy':   np.array([0.65, 0.30,  0.040, 0.006, 0.002,  0.001,  0.0005, 0.0005], dtype=np.float64),
+}
+for _k in BASELINE_TIERS: BASELINE_TIERS[_k] /= BASELINE_TIERS[_k].sum()
+CUM_BASELINE_TIERS = {k: np.cumsum(v) for k, v in BASELINE_TIERS.items()}
+
+# intensity tier → alpha scale + grade shift
+# v19q (260506): 약 chip floor 더 ↑ (image #24 너무 약 → #25 처럼 패턴 명확)
+INTENSITY_ALPHA_SCALE = {'strong': 1.0, 'mid': 0.96, 'weak': 0.93}
+INTENSITY_GRADE_SHIFT = {'strong': 0,   'mid': 0,    'weak': 0}
+
+def pick_baseline_tier(rng):
+    return str(rng.choice(['clean', 'normal', 'hazy'], p=[0.30, 0.50, 0.20]))
+
+def pick_intensity_tier(rng):
+    return str(rng.choice(['strong', 'mid', 'weak'], p=[0.50, 0.30, 0.20]))
+
+def pick_invalid_pct(rng):
+    return float(rng.choice([0.05, 0.10, 0.15, 0.20], p=[0.15, 0.25, 0.40, 0.20]))
+
+def shifted_object_dist(obj, tier):
+    """OBJECT_DISTS[obj] grade weights 를 strong/mid/weak 에 따라 0/1/2 step shift down.
+    grade i 의 mass 는 grade max(0, i-shift) 로 이동. 합 1.0 보존."""
+    base = OBJECT_DISTS[obj]
+    shift = INTENSITY_GRADE_SHIFT[tier]
+    if shift == 0: return base
+    out = np.zeros_like(base)
+    for i, p in enumerate(base):
+        out[max(0, i - shift)] += p
+    return out / out.sum()
 
 # Object별 (main, sub) defect grade — main이 zone center에서 dominant, sub는 추가로 elevated
 PRIMARY_GRADE = {
@@ -177,13 +241,15 @@ PRIMARY_GRADE = {
 }
 
 # 불량영역 중앙 (zone center, alpha=1): main grade 거의 대부분 (~80%)
+# v19j (260506): bank_boundary 살짝만 ↑ (v19i 너무 강했음).
 OBJECT_DISTS = {
     # idx:           [  0,    1,    2,    3,    4,    5,     6,     7   ]
-    'bank_boundary':  np.array([0.02, 0.10, 0.80, 0.05, 0.01, 0.005, 0.003, 0.002], dtype=np.float64),  # main=2(80%)
-    # v15: pixel 2 0.60 (v14) → 0.65 (v13/v14 중간), pixel 0 0.10 → 0.08 (BG 약간 ↓)
-    'fork':           np.array([0.08, 0.18, 0.65, 0.07, 0.020, 0.008, 0.002, 0.0], dtype=np.float64),
-    'scratch':        np.array([0.08, 0.18, 0.65, 0.07, 0.020, 0.008, 0.002, 0.0], dtype=np.float64),
-    'scratch_rot':    np.array([0.08, 0.18, 0.65, 0.07, 0.020, 0.008, 0.002, 0.0], dtype=np.float64),
+    # bank_boundary: grade 2 0.84→0.85, grade 3 0.10→0.11
+    'bank_boundary':  np.array([0.003, 0.10,  0.85, 0.11, 0.004, 0.002, 0.001, 0.0], dtype=np.float64),
+    # fork/scratch/scratch_rot OBJECT_DISTS — 2-stage 가 peak 처리. else branch (안 사용) 만 정의용.
+    'fork':           np.array([0.025, 0.13, 0.72, 0.15, 0.010, 0.003, 0.0,    0.0], dtype=np.float64),
+    'scratch':        np.array([0.025, 0.13, 0.72, 0.15, 0.010, 0.003, 0.0,    0.0], dtype=np.float64),
+    'scratch_rot':    np.array([0.025, 0.13, 0.72, 0.15, 0.010, 0.003, 0.0,    0.0], dtype=np.float64),
     'geometric_random': np.array([0.05, 0.40, 0.30, 0.15, 0.05, 0.03,  0.015, 0.005], dtype=np.float64),
     # Normal 전용 novel objects — main grade 다양 (registered 31 class와 구분되도록)
     'small_dot':        np.array([0.05, 0.20, 0.55, 0.15, 0.03, 0.015, 0.003, 0.002], dtype=np.float64),  # main=2
@@ -248,17 +314,33 @@ def alpha_bank_boundary(rng):
     a = np.full((CHIP, CHIP), CHIP_BASE_ALPHA, dtype=np.float32)
     n_seg = 10
     seg_len = CHIP // n_seg                                                            # 20 px each
+    # v19t (260506): 약 chip floor ↑ (image #49 너무 약) + edge fade 완만 (image #50 끝부분 abrupt)
+    # per-chip weak 비율 30% → 15%, weak floor 0.45→0.70 (식별 가능 수준 유지)
+    chip_weak = rng.random() < 0.15
+    if chip_weak:
+        s_range = (0.78, 0.92)
+        seg_range = (0.70, 0.90)
+    else:
+        s_range = (0.85, 1.00)
+        seg_range = (0.70, 1.00)
     for cx in [50, 100, 150]:
-        s = rng.uniform(0.90, 1.0)
-        seg_strengths = rng.uniform(0.55, 1.00, size=n_seg).astype(np.float32)
+        # v19u (260506): tail 더 길게 (사용자 "양호영역으로 급격히 가는걸 더 완만"). sigma_w 18-28 → 30-45
+        sigma_s_i = float(rng.uniform(0.5, 1.0))                                       # peak sharp 유지
+        sigma_m_i = float(rng.uniform(5.0, 9.0))                                       # middle 더 wide
+        sigma_w_i = float(rng.uniform(30.0, 45.0))                                     # tail 매우 길게 — grade 1 halo 넓음
+        s = rng.uniform(*s_range)
+        seg_strengths = rng.uniform(*seg_range, size=n_seg).astype(np.float32)
         y_noise = np.repeat(seg_strengths, seg_len)[:CHIP, None]                       # (CHIP, 1) — Y 방향 산포
-        line = _perp_profile(XC - cx, sigma_s=0.7, sigma_m=3.0, sigma_w=12.0) * y_noise * s
+        line = _perp_profile(XC - cx, sigma_s=sigma_s_i, sigma_m=sigma_m_i, sigma_w=sigma_w_i) * y_noise * s
         a = np.maximum(a, line)
     for cy in [100]:
-        s = rng.uniform(0.90, 1.0)
-        seg_strengths = rng.uniform(0.55, 1.00, size=n_seg).astype(np.float32)
+        sigma_s_i = float(rng.uniform(0.5, 1.0))
+        sigma_m_i = float(rng.uniform(5.0, 9.0))
+        sigma_w_i = float(rng.uniform(30.0, 45.0))
+        s = rng.uniform(*s_range)
+        seg_strengths = rng.uniform(*seg_range, size=n_seg).astype(np.float32)
         x_noise = np.repeat(seg_strengths, seg_len)[None, :CHIP]                       # (1, CHIP) — X 방향 산포
-        line = _perp_profile(YC - cy, sigma_s=0.7, sigma_m=3.0, sigma_w=12.0) * x_noise * s
+        line = _perp_profile(YC - cy, sigma_s=sigma_s_i, sigma_m=sigma_m_i, sigma_w=sigma_w_i) * x_noise * s
         a = np.maximum(a, line)
     return a
 
@@ -335,27 +417,32 @@ def alpha_fork(rng):
     """v10: endpoint fade(A) + bell smear(B) + line wobble(C) + extended tail(D) + center wider(E,F).
     1 horizontal top line + 4-6 vertical legs. weak_only 20% (severity ↓ + leg drop)."""
     a = np.full((CHIP, CHIP), CHIP_BASE_ALPHA, dtype=np.float32)
-    weak_only = rng.random() < 0.20
-    smear_factor = float(rng.uniform(1.5, 2.5)) if weak_only else float(rng.uniform(10.0, 18.0))   # v18: fork smear 약 (28-50 → 10-18)
-    severity = float(rng.uniform(0.45, 0.55)) if weak_only else float(rng.uniform(0.95, 1.0))
-    cy_h = float(rng.uniform(50, 75))
-    sigma_h_base = float(rng.uniform(0.5, 0.8)) if not weak_only else float(rng.uniform(0.5, 0.7))
+    weak_only = rng.random() < 0.02
+    # v19z (260506): fork 더 sharp — smear 8-14 → 4-7 (halo 절반), peak sigma 1.8-2.3 → 1.0-1.5
+    smear_factor = float(rng.uniform(4.0, 7.0)) if weak_only else float(rng.uniform(4.0, 7.0))
+    severity = float(rng.uniform(0.98, 1.0)) if weak_only else float(rng.uniform(0.98, 1.0))
+    # v19w (260506): fork 크기 ↓ + 위치 random. cy_h chip 안 어디든 (50-75 → 30-130)
+    cy_h = float(rng.uniform(30, 130))
+    # v20 (260507): fork 두께 ↑ 2px → 4px (사용자 directive). sigma 1.0-1.5 → 1.8-2.5 (~2× thick)
+    sigma_h_base = float(rng.uniform(1.8, 2.5)) if not weak_only else float(rng.uniform(1.5, 2.0))
     # v16: sigma_h X 따라 변동 (horizontal line 굵기 좌/우 변동)
     sigma_h_jitter = _along_smooth_range_1d(rng, CHIP, 0.7, 1.4)[None, :]
     sigma_h_top = (sigma_h_base * sigma_h_jitter).astype(np.float32)
     # v16: smear_factor X 따라 변동 (퍼지는 폭 강약)
     smear_factor_jitter_h = _along_smooth_range_1d(rng, CHIP, 0.5, 1.5)[None, :]
     smear_factor_h = (smear_factor * smear_factor_jitter_h).astype(np.float32)
-    if weak_only:
-        x_lo = float(rng.uniform(40, 60)); x_hi = float(rng.uniform(135, 155))
-    else:
-        x_lo = float(rng.uniform(15, 40)); x_hi = float(rng.uniform(160, 185))
+    # v19w (260506): fork 가로 크기 ↓ — width 145→90 평균 (chip 의 절반 정도)
+    fork_width = float(rng.uniform(80, 130)) if not weak_only else float(rng.uniform(70, 100))
+    fork_x_center = float(rng.uniform(fork_width / 2 + 15, CHIP - fork_width / 2 - 15))
+    x_lo = fork_x_center - fork_width / 2
+    x_hi = fork_x_center + fork_width / 2
     # v10 A: in_x hard mask → soft taper (X axis 양 끝 fade)
     fade_x = float(rng.uniform(15, 25))
     taper_x = _along_taper_mask(CHIP, x_lo, x_hi, fade_len=fade_x)
     in_x = taper_x[None, :]                                                 # (1, CHIP) broadcast over Y
     # v10 C: cy_h 가 X 별 ±wobble (horizontal line 도 perfect 직선 X)
-    wobble_amp_h = float(rng.uniform(1.5, 2.5)) if not weak_only else float(rng.uniform(0.8, 1.5))
+    # v19v (260506): fork horizontal top wobble 줄임 — 라인 흐믈거림 완화 (사용자 "bank 처럼 직선으로")
+    wobble_amp_h = float(rng.uniform(0.3, 0.8)) if not weak_only else float(rng.uniform(0.2, 0.6))
     cy_h_wobble = cy_h + _along_wobble_1d(rng, CHIP, amp=wobble_amp_h, n_segments=8)
     cy_per_x = cy_h_wobble[None, :]                                         # (1, CHIP) — X 별 cy 다름
     # v10 B: smear floor 0.18-0.25, strength floor 0.55-0.65
@@ -374,9 +461,12 @@ def alpha_fork(rng):
     line_h = perp_h * in_x * s_h * along_x_strength
     a = np.maximum(a, line_h)
     # v11: alpha=1 stamp 폐기 — stochastic mix 만으로 자연 분포
-    n_legs = int(rng.integers(4, 7))
-    leg_xs = sorted(rng.uniform(35, 170, size=n_legs).tolist())
-    leg_strengths = rng.uniform(0.50, 1.0, size=n_legs).astype(np.float32)
+    # v19z++ (260506): legs 더 많이 + 균일 spacing (사용자 directive). 5-6 → 7-9 + linspace + ±3 jitter
+    n_legs = int(rng.integers(7, 10))
+    leg_xs_base = np.linspace(x_lo + 8, x_hi - 8, n_legs)
+    leg_xs_jit = rng.uniform(-3, 3, size=n_legs).astype(np.float32)
+    leg_xs = sorted((leg_xs_base + leg_xs_jit).tolist())
+    leg_strengths = rng.uniform(0.88, 1.0, size=n_legs).astype(np.float32)
     # v17: 라인별 smear_base random (각 leg 별로 퍼지는 강도 다름)
     leg_smear_bases = rng.uniform(0.5, 1.5, size=n_legs).astype(np.float32)
     if weak_only:
@@ -385,19 +475,23 @@ def alpha_fork(rng):
         for k in range(n_legs):
             if k not in keep_idx:
                 leg_strengths[k] = 0.0
-    leg_y_end = 200.0
-    fade_y = float(rng.uniform(20, 30))
+    # v19w (260506): legs 길이 ↓ — chip 끝까지가 아니라 cy_h + uniform(70, 130) 까지만
+    leg_height = float(rng.uniform(70, 130)) if not weak_only else float(rng.uniform(60, 100))
+    leg_y_end = min(cy_h + leg_height, float(CHIP - 5))
+    fade_y = float(rng.uniform(15, 25))
     taper_y = _along_taper_mask(CHIP, cy_h, leg_y_end, fade_len=fade_y)
     in_y = taper_y[:, None]
     for leg_idx, (cx, s_leg) in enumerate(zip(leg_xs, leg_strengths)):
         if s_leg < 0.10: continue
-        sigma_v_base = float(rng.uniform(0.5, 0.8)) if not weak_only else float(rng.uniform(0.5, 0.7))
+        # v20 (260507): fork leg 두께 ↑ 2px → 4px (사용자 directive). 0.9-1.4 → 1.7-2.4
+        sigma_v_base = float(rng.uniform(1.7, 2.4)) if not weak_only else float(rng.uniform(1.4, 2.0))
         smear_factor_leg = smear_factor * float(leg_smear_bases[leg_idx])   # v17: leg 별 smear 강도
         sigma_v_jitter = _along_smooth_range_1d(rng, CHIP, 0.7, 1.4)[:, None]
         sigma_v_left = (sigma_v_base * sigma_v_jitter).astype(np.float32)
         smear_factor_jitter_v = _along_smooth_range_1d(rng, CHIP, 0.5, 1.5)[:, None]
         smear_factor_v = (smear_factor_leg * smear_factor_jitter_v).astype(np.float32)
-        wobble_amp_v = float(rng.uniform(1.5, 2.5)) if not weak_only else float(rng.uniform(0.8, 1.5))
+        # v19v: fork legs wobble 줄임
+        wobble_amp_v = float(rng.uniform(0.3, 0.8)) if not weak_only else float(rng.uniform(0.2, 0.6))
         cx_wobble = cx + _along_wobble_1d(rng, CHIP, amp=wobble_amp_v, n_segments=8)
         cx_per_y = cx_wobble[:, None]
         s_v_base = float(rng.uniform(0.55, 0.65)) if weak_only else 1.0
@@ -419,46 +513,44 @@ def alpha_fork(rng):
 
 
 def alpha_scratch(rng):
-    """v10: endpoint fade(A) + bell smear(B) + along wobble(C) + extended tail(D) + center wider(E,F)."""
+    """v10: endpoint fade(A) + bell smear(B) + along wobble(C) + extended tail(D) + center wider(E,F).
+    v19z++ (260506): n_lines explicit (3-8, 작은 case 도) + per-line y center/length 산포
+    (사용자 directive: '최소 3개, 작은것도, 길이/중심 산포')."""
     a = np.full((CHIP, CHIP), CHIP_BASE_ALPHA, dtype=np.float32)
-    line_y_start = float(rng.uniform(0, 30))
-    line_y_end = float(rng.uniform(170, 200))
     weak_only = rng.random() < 0.18
-    cx_list = []
-    cur_x = float(rng.uniform(15, 35))
-    while cur_x < 185:
-        cx_list.append(cur_x)
-        if rng.random() < 0.35:
-            cur_x += float(rng.uniform(6, 14))
-        else:
-            cur_x += float(rng.uniform(20, 38))
-    n_lines = len(cx_list)
-    if n_lines == 0:
-        return a
+    n_lines = int(rng.integers(5, 11))                                      # v19z++: 3-8 → 5-10 (사용자)
+    cx_list = sorted(rng.uniform(15, 185, size=n_lines).tolist())
+    # per-line y center + half-height (length 산포 + center 산포)
+    y_centers = rng.uniform(50, 150, size=n_lines).astype(np.float32)       # 중심 50-150
+    y_halfs = rng.uniform(35, 95, size=n_lines).astype(np.float32)          # 반길이 35-95 → 길이 70-190
+    line_y_starts = np.maximum(0.0, y_centers - y_halfs).astype(np.float32)
+    line_y_ends = np.minimum(float(CHIP), y_centers + y_halfs).astype(np.float32)
     if weak_only:
-        line_strengths = rng.uniform(0.45, 0.55, size=n_lines).astype(np.float32)
-        smear_factor = float(rng.uniform(2.5, 4.5))
+        line_strengths = rng.uniform(0.96, 1.00, size=n_lines).astype(np.float32)
+        smear_factor = float(rng.uniform(35.0, 50.0))
     else:
-        line_strengths = rng.uniform(0.85, 1.00, size=n_lines).astype(np.float32)
-        smear_factor = float(rng.uniform(35.0, 60.0))                       # v18: scratch smear 강 (28-50 → 35-60)
+        line_strengths = rng.uniform(0.96, 1.00, size=n_lines).astype(np.float32)
+        smear_factor = float(rng.uniform(35.0, 60.0))
     smear_base_per_line = rng.uniform(0.5, 1.5, size=n_lines).astype(np.float32)
-    fade_len = float(rng.uniform(20, 32))
-    taper_1d = _along_taper_mask(CHIP, line_y_start, line_y_end, fade_len=fade_len)
-    in_y_range = taper_1d[:, None]                                          # broadcast over X
     for i, cx in enumerate(cx_list):
+        line_y_start_i = float(line_y_starts[i])
+        line_y_end_i = float(line_y_ends[i])
+        fade_len_i = float(rng.uniform(15, 28))                              # per-line fade
+        taper_1d = _along_taper_mask(CHIP, line_y_start_i, line_y_end_i, fade_len=fade_len_i)
+        in_y_range = taper_1d[:, None]
         sigma_left_base = float(rng.uniform(0.5, 0.8)) if not weak_only else float(rng.uniform(0.5, 0.7))
-        smear_factor_line = smear_factor * float(smear_base_per_line[i])    # v17: 라인별 smear 강도
+        smear_factor_line = smear_factor * float(smear_base_per_line[i])
         sigma_left_jitter = _along_smooth_range_1d(rng, CHIP, 0.7, 1.4)[:, None]
         sigma_left_per_y = (sigma_left_base * sigma_left_jitter).astype(np.float32)
         smear_factor_jitter = _along_smooth_range_1d(rng, CHIP, 0.5, 1.5)[:, None]
         smear_factor_per_y = (smear_factor_line * smear_factor_jitter).astype(np.float32)
-        wobble_amp = float(rng.uniform(1.5, 2.5)) if not weak_only else float(rng.uniform(0.8, 1.5))
+        wobble_amp = float(rng.uniform(0.3, 0.8)) if not weak_only else float(rng.uniform(0.2, 0.6))
         cx_wobble = cx + _along_wobble_1d(rng, CHIP, amp=wobble_amp, n_segments=8)
         cx_per_y = cx_wobble[:, None]
-        along_y_smear_1d = _along_center_peak(rng, CHIP, line_y_start, line_y_end,
+        along_y_smear_1d = _along_center_peak(rng, CHIP, line_y_start_i, line_y_end_i,
                                               floor=float(rng.uniform(0.18, 0.25)),
                                               sigma_factor=float(rng.uniform(2.5, 4.0)))
-        along_y_strength_1d = _along_center_peak(rng, CHIP, line_y_start, line_y_end,
+        along_y_strength_1d = _along_center_peak(rng, CHIP, line_y_start_i, line_y_end_i,
                                                  floor=float(rng.uniform(0.78, 0.85)),
                                                  sigma_factor=float(rng.uniform(1.4, 2.5)))
         along_y_smear = along_y_smear_1d[:, None]
@@ -478,65 +570,63 @@ def alpha_scratch_rot(rng):
     cos_t, sin_t = np.cos(theta), np.sin(theta)
     cy = 100
     weak_only = rng.random() < 0.18
-    cx_list = []
-    cur_x = float(rng.uniform(15, 30))
-    while cur_x < 185:
-        cx_list.append(cur_x)
-        if rng.random() < 0.35:
-            cur_x += float(rng.uniform(6, 14))
-        else:
-            cur_x += float(rng.uniform(15, 28))
-    n_lines = len(cx_list)
-    if n_lines == 0:
-        return a
+    # v19z++ (260506): scratch_rot 도 explicit n_lines + per-line along center/length 산포
+    n_lines = int(rng.integers(7, 13))                                      # 7-12 lines (사용자 directive)
+    cx_list = sorted(rng.uniform(15, 185, size=n_lines).tolist())
     if weak_only:
-        line_strengths = rng.uniform(0.45, 0.55, size=n_lines).astype(np.float32)
-        smear_factor = float(rng.uniform(1.5, 2.5))
+        line_strengths = rng.uniform(0.95, 1.00, size=n_lines).astype(np.float32)
+        smear_factor = float(rng.uniform(18.0, 24.0))
     else:
-        line_strengths = rng.uniform(0.85, 1.00, size=n_lines).astype(np.float32)
-        smear_factor = float(rng.uniform(10.0, 18.0))                       # v18: scratch_rot smear 약 (28-50 → 10-18)
+        line_strengths = rng.uniform(0.95, 1.00, size=n_lines).astype(np.float32)
+        smear_factor = float(rng.uniform(18.0, 26.0))
     smear_base_per_line = rng.uniform(0.5, 1.5, size=n_lines).astype(np.float32)
-    peak_along = float(rng.uniform(0.25, 0.75))
+    peak_along_per_line = rng.uniform(0.20, 0.80, size=n_lines).astype(np.float32)
+    # v19z++ : per-line along-axis center + half-length (line 길이/위치 산포)
+    along_centers_per_line = rng.uniform(0.30, 0.70, size=n_lines).astype(np.float32)
+    along_halfs_per_line = rng.uniform(0.22, 0.45, size=n_lines).astype(np.float32)
     d_along = sin_t * (XC - 100) + cos_t * (YC - 100)
     a_min = float(d_along.min()); a_max = float(d_along.max())
     along_norm = np.clip((d_along - a_min) / (a_max - a_min + 1e-6), 0, 1)
-    fade_w = float(rng.uniform(0.07, 0.12))
-    taper_along = (np.clip(along_norm / fade_w, 0, 1) *
-                   np.clip((1.0 - along_norm) / fade_w, 0, 1)).astype(np.float32)
-    sigma_n = float(rng.uniform(0.18, 0.28))
-    center_peak_smear = np.exp(-((along_norm - peak_along) ** 2) / (2 * sigma_n * sigma_n)).astype(np.float32)
-    # v15: n_along 5→8 (frequency ↑), var range 0.55-1.0 → 0.40-1.0 (변동 폭 ↑)
-    n_along = 8
-    along_var = rng.uniform(0.40, 1.0, size=n_along).astype(np.float32)
-    a_pos = along_norm * (n_along - 1)
-    a_floor = np.clip(np.floor(a_pos).astype(np.int32), 0, n_along - 2)
-    frac_a = (a_pos - a_floor).astype(np.float32)
-    smooth = (1 - frac_a) * along_var[a_floor] + frac_a * along_var[a_floor + 1]
-    # v15: 곱 (0.7+0.3*smooth) → (0.5+0.5*smooth) — smear envelope along axis 변동 폭 ↑
-    along_smear = np.maximum(center_peak_smear * (0.5 + 0.5 * smooth),
-                             float(rng.uniform(0.18, 0.25))).astype(np.float32)
-    sigma_n_str = float(rng.uniform(0.30, 0.45))
-    center_peak_str = np.exp(-((along_norm - peak_along) ** 2) / (2 * sigma_n_str * sigma_n_str)).astype(np.float32)
-    along_strength = (np.maximum(center_peak_str * (0.5 + 0.5 * smooth),
-                                 float(rng.uniform(0.78, 0.85))) * taper_along).astype(np.float32)
-    # v10 C: rotated frame 안에서 cx wobble per along position
     n_bins = 100
     along_idx = np.clip(((d_along - a_min) / (a_max - a_min + 1e-6) * (n_bins - 1)),
                         0, n_bins - 1).astype(np.int32)
     for i, cx in enumerate(cx_list):
+        peak_along_i = float(peak_along_per_line[i])
+        # v19z++ : per-line along-axis taper (line 별 시작/끝 위치 다름 → 길이/중심 산포)
+        along_start_i = float(along_centers_per_line[i] - along_halfs_per_line[i])
+        along_end_i = float(along_centers_per_line[i] + along_halfs_per_line[i])
+        fade_w_i = float(rng.uniform(0.04, 0.10))
+        taper_along_i = (np.clip((along_norm - along_start_i) / fade_w_i, 0, 1) *
+                         np.clip((along_end_i - along_norm) / fade_w_i, 0, 1)).astype(np.float32)
+        sigma_n_i = float(rng.uniform(0.18, 0.28))
+        center_peak_smear_i = np.exp(-((along_norm - peak_along_i) ** 2) / (2 * sigma_n_i * sigma_n_i)).astype(np.float32)
+        n_along = 8
+        along_var_i = rng.uniform(0.40, 1.0, size=n_along).astype(np.float32)
+        a_pos_i = along_norm * (n_along - 1)
+        a_floor_i = np.clip(np.floor(a_pos_i).astype(np.int32), 0, n_along - 2)
+        frac_a_i = (a_pos_i - a_floor_i).astype(np.float32)
+        smooth_i = (1 - frac_a_i) * along_var_i[a_floor_i] + frac_a_i * along_var_i[a_floor_i + 1]
+        along_smear_i = np.maximum(center_peak_smear_i * (0.5 + 0.5 * smooth_i),
+                                   float(rng.uniform(0.18, 0.25))).astype(np.float32)
+        sigma_n_str_i = float(rng.uniform(0.30, 0.45))
+        center_peak_str_i = np.exp(-((along_norm - peak_along_i) ** 2) / (2 * sigma_n_str_i * sigma_n_str_i)).astype(np.float32)
+        along_strength_i = (np.maximum(center_peak_str_i * (0.5 + 0.5 * smooth_i),
+                                       float(rng.uniform(0.78, 0.85))) * taper_along_i).astype(np.float32)
+
         sigma_left_base = float(rng.uniform(0.5, 0.8)) if not weak_only else float(rng.uniform(0.5, 0.7))
         smear_factor_line = smear_factor * float(smear_base_per_line[i])    # v17: 라인별 smear 강도
         sigma_left_jitter_1d = _along_smooth_range_1d(rng, n_bins, 0.7, 1.4)
         smear_factor_jitter_1d = _along_smooth_range_1d(rng, n_bins, 0.5, 1.5)
         sigma_left_per_pix = (sigma_left_base * sigma_left_jitter_1d[along_idx]).astype(np.float32)
         smear_factor_per_pix = (smear_factor_line * smear_factor_jitter_1d[along_idx]).astype(np.float32)
-        sigma_right_arr = (sigma_left_per_pix * (1.0 + (smear_factor_per_pix - 1.0) * along_smear)).astype(np.float32)
-        wobble_amp = float(rng.uniform(1.5, 2.5)) if not weak_only else float(rng.uniform(0.8, 1.5))
+        sigma_right_arr = (sigma_left_per_pix * (1.0 + (smear_factor_per_pix - 1.0) * along_smear_i)).astype(np.float32)
+        # v19v: scratch_rot wobble 줄임
+        wobble_amp = float(rng.uniform(0.3, 0.8)) if not weak_only else float(rng.uniform(0.2, 0.6))
         wobble_1d = _along_wobble_1d(rng, n_bins, amp=wobble_amp, n_segments=8)
         wobble_per_pix = wobble_1d[along_idx]
         d_perp = ((XC - cx) * cos_t - (YC - cy) * sin_t) - wobble_per_pix
         perp = _perp_asym_chip(d_perp, sigma_left_per_pix, sigma_right_arr)
-        line = perp * line_strengths[i] * along_strength
+        line = perp * line_strengths[i] * along_strength_i
         a = np.maximum(a, line)
     return a
 
@@ -799,30 +889,34 @@ def render(class_name, object_name, seed):
     rng = np.random.default_rng(seed)
     inside = _wafer_inside_mask()
 
+    # 0) Round 29 v15: pick per-wafer tiers (baseline noise + defect intensity + invalid pct)
+    baseline_tier  = pick_baseline_tier(rng)                                          # clean/normal/hazy
+    intensity_tier = pick_intensity_tier(rng)                                         # strong/mid/weak
+    invalid_pct    = pick_invalid_pct(rng)                                            # 0.05/0.10/0.15/0.20
+    cum_base_use   = CUM_BASELINE_TIERS[baseline_tier]                                # baseline canvas 분포
+
     # 1) Choose kind
     if object_name == 'invalid_main':
         kind = '00C'
     else:
         kind = '00P' if rng.random() < 0.5 else '00C'
 
-    # 2) Plan defect / invalid masks
+    # 2) Plan defect / invalid masks (round 29 v15: invalid_pct per-wafer)
     normal_obj_map = None                                                             # Normal 클래스에서 chip별 object 지정용
     if class_name == 'Normal':
         defect_mask, normal_obj_map = select_normal_chips(rng, inside)
-        # invalid 비례 — defect 갯수 의 ~15% (사용자 #38)
         invalid_inside_mask = select_random_invalid(rng, defect_mask, inside,
-                                                    n=max(2, int(defect_mask.sum() * 0.15)))
+                                                    n=max(2, int(defect_mask.sum() * invalid_pct)))
     elif object_name == 'invalid_main':
         invalid_dist = select_distribution_chips(class_name, rng, inside)
         invalid_random = select_random_invalid(rng, invalid_dist, inside,
-                                               n=max(2, int(invalid_dist.sum() * 0.10)))
+                                               n=max(2, int(invalid_dist.sum() * invalid_pct * 0.67)))  # 0.10/0.15 ≈ 0.67
         invalid_inside_mask = invalid_dist | invalid_random
         defect_mask = np.zeros((GRID, GRID), dtype=bool)
     else:
         defect_mask = select_distribution_chips(class_name, rng, inside)
-        # invalid 비례 — defect 갯수 의 ~15% (defect 적은 class 도 invalid 적음)
         invalid_inside_mask = select_random_invalid(rng, defect_mask, inside,
-                                                    n=max(2, int(defect_mask.sum() * 0.15)))
+                                                    n=max(2, int(defect_mask.sum() * invalid_pct)))
     invalid_mask = invalid_inside_mask & ~defect_mask
 
     # 3) Per-chip bin & object assignment (inside-wafer chips only)
@@ -844,26 +938,29 @@ def render(class_name, object_name, seed):
                                       'bin': assign_invalid_bin(kind, rng), 'inside': True}
 
     # 4) Canvas: baseline grades, then bg color overwrites OUTSIDE-wafer cells (no chip there)
+    #    Round 29 v15: cum_base_use = per-wafer baseline_tier (clean/normal/hazy)
     if _GPU:
         # GPU 가속: 40M float random + searchsorted 가장 무거운 op
         g_t = torch.Generator(device=_DEVICE).manual_seed(seed)
         u_t = torch.rand((SIZE, SIZE), generator=g_t, device=_DEVICE)
-        cum_base_t = torch.tensor(CUM_BASE, device=_DEVICE, dtype=torch.float32)
+        cum_base_t = torch.tensor(cum_base_use, device=_DEVICE, dtype=torch.float32)
         canvas_t = torch.searchsorted(cum_base_t, u_t).to(torch.uint8)
         canvas = canvas_t.cpu().numpy()
         del u_t, canvas_t
     else:
         u = rng.random((SIZE, SIZE))
-        canvas = np.searchsorted(CUM_BASE, u).astype(np.uint8); del u
+        canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
     inside_pix = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)             # 6400x6400 bool
     canvas[~inside_pix] = IDX_BG                                                       # outside-wafer = bg color (no chip)
 
     # 5) Defect chips: alpha modulation per chip with assigned object
+    #    Round 29 v15: intensity_tier per-wafer scales alpha + shifts grade dist
+    alpha_scale = INTENSITY_ALPHA_SCALE[intensity_tier]
     for (gy, gx), meta in chip_meta.items():
         if meta['kind'] != 'defect': continue
         obj = meta['obj']
-        alpha = ALPHA_FNS[obj](rng)
-        cum_obj = np.cumsum(OBJECT_DISTS[obj])
+        alpha = ALPHA_FNS[obj](rng) * alpha_scale                                     # weak/mid/strong scale
+        cum_obj = np.cumsum(shifted_object_dist(obj, intensity_tier))                 # grade shift down
         # 11단계 세분화 + 익스포넨셜 ramp toward CENTER
         # BG↔EDGE 0~0.40 (wider, smoother transition with normal area)
         # EDGE→CENTER 0.40~1.0 (power exp)
@@ -875,18 +972,23 @@ def render(class_name, object_name, seed):
         #   defect & not 2: 95% pixel 1 + 4% pixel 3 + 1% pixel 4 (자연 noise)
         #   not defect:    CUM_BASE baseline (정상 chip 같은 BG 자연 fade)
         # 기타 obj (bank_boundary 등) — 기존 v19 smoothstep 3-way zone mix.
-        if obj in ('fork', 'scratch', 'scratch_rot'):
+        if obj in ('fork', 'scratch', 'scratch_rot', 'bank_boundary'):
+            # v19s (260506): bank_boundary 도 2-stage 사용 — 3-way zone abrupt transition 해결.
+            # peak grade 2/3 dominant → 자연스럽게 퍼지면서 grade 1 ↑ → 노말영역과 같아짐 (사용자 요청)
             u_base = rng.random((CHIP, CHIP))
             grades_base = np.searchsorted(CUM_BASE, u_base).astype(np.uint8)
             u1 = rng.random((CHIP, CHIP))
             is_defect = u1 < alpha
-            t2 = np.clip((alpha - 0.65) / (0.92 - 0.65), 0.0, 1.0).astype(np.float32)
+            # v19z++ (260506): line peak 영역 grade 2/3 더 ↑ (사용자 directive "ㅡ ㅣ 영역만 좀 더").
+            # smoothstep 0.30-0.62 → 0.20-0.50 (peak 일찍 grade 2 dominant — alpha 0.5 이상 거의 다 grade 2)
+            t2 = np.clip((alpha - 0.20) / (0.50 - 0.20), 0.0, 1.0).astype(np.float32)
             p_2 = (t2 * t2 * (3.0 - 2.0 * t2)).astype(np.float32)
             u2 = rng.random((CHIP, CHIP))
             is_2 = u2 < p_2
             u3 = rng.random((CHIP, CHIP))
-            defect_other = np.where(u3 < 0.95, np.uint8(1),
-                            np.where(u3 < 0.99, np.uint8(3), np.uint8(4)))
+            # v19z++ : non-2 defect 의 grade 3 비율 ↑ (32% → 42%). grade 1: 65→55, grade 3: 32→42, grade 4: 3
+            defect_other = np.where(u3 < 0.55, np.uint8(1),
+                            np.where(u3 < 0.97, np.uint8(3), np.uint8(4)))
             defect_grade = np.where(is_2, np.uint8(2), defect_other)
             grades = np.where(is_defect, defect_grade, grades_base).astype(np.uint8)
         else:
@@ -976,7 +1078,10 @@ def render(class_name, object_name, seed):
     # 10b) Save per-chip object-true crops for chip-object classifier dataset.
     # chip_meta[(gy,gx)]['obj'] 는 75% primary + 25% mixed 의 실제 object 라벨이라
     # 같은 wafer 안에 다른 object 가 섞여 있어도 정확히 분류됨 (folder-suffix weak label 대체).
-    save_chip_crops(img, chip_meta, base)
+    # Round 29 v15: weak intensity wafer 의 chip 은 시각적으로 양호 chip 같음 →
+    # chip CNN 학습 데이터 noise 됨 → strong/mid tier wafer 만 chip crop 사용.
+    if intensity_tier in ('strong', 'mid'):
+        save_chip_crops(img, chip_meta, base)
 
     # 11) Generate matching positions JSON (fail-map docs schema + synthetic FTN/QTN)
     chips_list = []
@@ -1005,6 +1110,12 @@ def render(class_name, object_name, seed):
         "netd": int(inside.sum()), "gd": int(gd_count),
         "yield": f"{yld:.2f}", "sys": f"{syp:.2f}",
         "tm": LT, "lt": TD,
+        "wafer_meta": {                                                               # round 29 v15: per-wafer tier
+            "synth_round": "29_v15",
+            "baseline_tier": baseline_tier,
+            "intensity_tier": intensity_tier,
+            "invalid_pct": round(invalid_pct, 4),
+        },
         "coord": {
             "rot_code": 5,
             "x_min_abs": 0, "y_min_abs": 0, "x_max_abs": GRID-1, "y_max_abs": GRID-1,

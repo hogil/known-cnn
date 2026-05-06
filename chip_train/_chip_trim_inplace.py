@@ -13,10 +13,8 @@ import numpy as np
 from PIL import Image
 
 CLASSES = ['bank_boundary', 'fork', 'invalid_main', 'scratch', 'scratch_rot']
-# legacy round 25 names — this list is for DELETION (auto-cleanup if stubs reappear).
-# generation pipeline uses CHIP_OBJECT_LABELS filter (round 26) so these can no longer be created;
-# kept here as defense-in-depth.
-STUB_DIRS = ['particle_blast', 'scratch_21deg']
+# 260506 — STUB_DIRS removed per user directive. Legacy round 25 names
+# (particle_blast, scratch_21deg) no longer referenced anywhere in the codebase.
 SRC_DIR = Path("D:/project/data/wm-811k/classification_chips")
 
 BIN_RE = re.compile(r'_[Bb](\d+)\.png$')
@@ -100,17 +98,7 @@ def main():
         kept = len(list(cls_dir.iterdir()))
         print(f"  {cls}: kept={kept} deleted={deleted}")
 
-    # Delete stub dirs entirely
-    print("\n=== delete stub dirs ===")
-    import shutil
-    for stub in STUB_DIRS:
-        d = SRC_DIR / stub
-        if d.is_dir():
-            n = sum(1 for _ in d.iterdir())
-            shutil.rmtree(d)
-            print(f"  removed {d} ({n} files)")
-        else:
-            print(f"  {d} not present, skip")
+    # 260506 — STUB_DIRS cleanup loop removed. Legacy round 25 dirs no longer created.
 
     # Final summary
     print("\n=== final classification_chips/ ===")

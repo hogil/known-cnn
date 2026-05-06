@@ -72,31 +72,112 @@ def _perp_profile_t(d, sigma_s=1.5, sigma_m=3.0, sigma_w=6.0):
     return torch.minimum(strong + med + weak, ONE_T)
 
 def alpha_bank_boundary_t(rng):
+    """v19y (260506) — sync with CPU _sample_gen.py: tail 길게 (sigma_w 12→30-45),
+    per-chip weak 15%, per-line sigma random, peak sharp + halo wide."""
     a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
     n_seg = 10; seg_len = CHIP // n_seg
+    chip_weak = rng.random() < 0.15
+    s_lo, s_hi = (0.78, 0.92) if chip_weak else (0.85, 1.00)
+    seg_lo, seg_hi = (0.70, 0.90) if chip_weak else (0.70, 1.00)
     for cx in [50, 100, 150]:
-        s = float(rng.uniform(0.90, 1.0))
-        seg = torch.from_numpy(rng.uniform(0.55, 1.00, size=n_seg).astype(np.float32)).to(DEVICE)
+        sigma_s_i = float(rng.uniform(0.5, 1.0))
+        sigma_m_i = float(rng.uniform(5.0, 9.0))
+        sigma_w_i = float(rng.uniform(30.0, 45.0))                          # tail 길게 (halo wide)
+        s = float(rng.uniform(s_lo, s_hi))
+        seg = torch.from_numpy(rng.uniform(seg_lo, seg_hi, size=n_seg).astype(np.float32)).to(DEVICE)
         y_noise = seg.repeat_interleave(seg_len)[:CHIP].unsqueeze(1)
-        line = _perp_profile_t(XC_2D_T - cx, 0.7, 3.0, 12.0) * y_noise * s
+        line = _perp_profile_t(XC_2D_T - cx, sigma_s_i, sigma_m_i, sigma_w_i) * y_noise * s
         a = torch.maximum(a, line)
     for cy in [100]:
-        s = float(rng.uniform(0.90, 1.0))
-        seg = torch.from_numpy(rng.uniform(0.55, 1.00, size=n_seg).astype(np.float32)).to(DEVICE)
+        sigma_s_i = float(rng.uniform(0.5, 1.0))
+        sigma_m_i = float(rng.uniform(5.0, 9.0))
+        sigma_w_i = float(rng.uniform(30.0, 45.0))
+        s = float(rng.uniform(s_lo, s_hi))
+        seg = torch.from_numpy(rng.uniform(seg_lo, seg_hi, size=n_seg).astype(np.float32)).to(DEVICE)
         x_noise = seg.repeat_interleave(seg_len)[:CHIP].unsqueeze(0)
-        line = _perp_profile_t(YC_2D_T - cy, 0.7, 3.0, 12.0) * x_noise * s
+        line = _perp_profile_t(YC_2D_T - cy, sigma_s_i, sigma_m_i, sigma_w_i) * x_noise * s
         a = torch.maximum(a, line)
     return a
 
 def alpha_scratch_t(rng):
+    """v19z++ (260506) — sync with CPU. n_lines 5-10 + per-line y center/length 산포."""
     a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
-    n_lines = int(rng.integers(5, 16))
-    for _ in range(n_lines):
-        cx = float(rng.uniform(15, 185))
-        y_start = float(rng.uniform(0, 80)); y_end = float(rng.uniform(120, 200))
+    n_lines = int(rng.integers(5, 11))                                  # v19z++: 5-10
+    weak_only = rng.random() < 0.02
+    s_lo, s_hi = (0.96, 1.00) if weak_only else (0.96, 1.00)
+    cx_arr = sorted(rng.uniform(15, 185, size=n_lines).tolist())
+    y_centers = rng.uniform(50, 150, size=n_lines)                      # 중심 산포
+    y_halfs = rng.uniform(35, 95, size=n_lines)                         # 반길이 산포
+    for i in range(n_lines):
+        cx = float(cx_arr[i])
+        y_start = float(max(0.0, y_centers[i] - y_halfs[i]))
+        y_end = float(min(float(CHIP), y_centers[i] + y_halfs[i]))
         in_range = ((YC_2D_T >= y_start) & (YC_2D_T <= y_end)).to(DTYPE)
-        s = float(rng.uniform(0.80, 1.0))
-        line = _perp_profile_t(XC_2D_T - cx, 1.0, 2.0, 4.0) * in_range * s
+        s = float(rng.uniform(s_lo, s_hi))
+        line = _perp_profile_t(XC_2D_T - cx, 1.0, 2.5, 5.0) * in_range * s
+        a = torch.maximum(a, line)
+    return a
+
+
+def alpha_fork_t(rng):
+    """v19z++ (260506) — sync with CPU. peak sharper (sigma 1.0-1.5), min 7 legs uniform spacing."""
+    a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
+    weak_only = rng.random() < 0.02
+    s_lo, s_hi = (0.98, 1.0) if weak_only else (0.98, 1.0)
+    cy_h = float(rng.uniform(30, 130))
+    fork_width = float(rng.uniform(80, 130)) if not weak_only else float(rng.uniform(70, 100))
+    fork_x_center = float(rng.uniform(fork_width / 2 + 15, CHIP - fork_width / 2 - 15))
+    x_lo = fork_x_center - fork_width / 2
+    x_hi = fork_x_center + fork_width / 2
+    # v20 (260507): fork peak 두께 ↑ 2px → 4px (사용자 directive). 1.0-1.5 → 1.8-2.5
+    s_h = float(rng.uniform(s_lo, s_hi))
+    sigma_h = float(rng.uniform(1.8, 2.5))
+    in_x = ((XC_2D_T >= x_lo) & (XC_2D_T <= x_hi)).to(DTYPE).unsqueeze(0)
+    line_h = _perp_profile_t(YC_2D_T - cy_h, sigma_h, sigma_h * 1.5, sigma_h * 3.0) * in_x * s_h
+    a = torch.maximum(a, line_h)
+    # v19z++: 7-9 legs + linspace + ±3 jitter (uniform spacing)
+    n_legs = int(rng.integers(7, 10))
+    leg_height = float(rng.uniform(70, 130)) if not weak_only else float(rng.uniform(60, 100))
+    leg_y_end = min(cy_h + leg_height, float(CHIP - 5))
+    in_y = ((YC_2D_T >= cy_h) & (YC_2D_T <= leg_y_end)).to(DTYPE).unsqueeze(1)
+    leg_xs_base = np.linspace(x_lo + 8, x_hi - 8, n_legs)
+    leg_xs_jit = rng.uniform(-3, 3, size=n_legs)
+    for k in range(n_legs):
+        cx = float(leg_xs_base[k] + leg_xs_jit[k])
+        s = float(rng.uniform(s_lo, s_hi))
+        sigma_v = float(rng.uniform(1.7, 2.4))                          # v20: 두께 ↑ 0.9-1.4 → 1.7-2.4
+        line = _perp_profile_t(XC_2D_T - cx, sigma_v, sigma_v * 1.5, sigma_v * 3.0) * in_y * s
+        a = torch.maximum(a, line)
+    return a
+
+
+def alpha_scratch_rot_t(rng):
+    """v19z++ (260506) — sync with CPU. n_lines 7-12 + per-line along center/length 산포."""
+    a = torch.full((CHIP, CHIP), CHIP_BASE_ALPHA, device=DEVICE, dtype=DTYPE)
+    n_lines = int(rng.integers(7, 13))                                  # v19z++: 7-12
+    weak_only = rng.random() < 0.02
+    s_lo, s_hi = (0.95, 1.00) if weak_only else (0.95, 1.00)
+    theta = -21.0 * float(np.pi) / 180.0
+    cos_t, sin_t = float(np.cos(theta)), float(np.sin(theta))
+    # v19z++: per-line along-axis center/length (taper 적용)
+    along_centers = rng.uniform(0.30, 0.70, size=n_lines)
+    along_halfs = rng.uniform(0.22, 0.45, size=n_lines)
+    # along-axis normalized coord (rotated frame)
+    d_along_t = sin_t * (XC_2D_T - 100.0) + cos_t * (YC_2D_T - 100.0)
+    a_min = float(d_along_t.min().item()); a_max = float(d_along_t.max().item())
+    along_norm_t = torch.clamp((d_along_t - a_min) / (a_max - a_min + 1e-6), 0, 1)
+    for i in range(n_lines):
+        cx = float(rng.uniform(15, 185))
+        cy = float(rng.uniform(15, 185))
+        s = float(rng.uniform(s_lo, s_hi))
+        # per-line along taper (line 길이/위치 산포)
+        along_start = float(along_centers[i] - along_halfs[i])
+        along_end = float(along_centers[i] + along_halfs[i])
+        fade_w = float(rng.uniform(0.04, 0.10))
+        taper_along = torch.clamp((along_norm_t - along_start) / fade_w, 0, 1) * \
+                      torch.clamp((along_end - along_norm_t) / fade_w, 0, 1)
+        d_perp = cos_t * (XC_2D_T - cx) - sin_t * (YC_2D_T - cy)
+        line = _perp_profile_t(d_perp, 1.0, 2.5, 5.0) * taper_along * s
         a = torch.maximum(a, line)
     return a
 
@@ -170,11 +251,11 @@ def alpha_ring_small_t(rng):
     ring = torch.exp(-(d_r - r)**2 / (2*thick**2))
     return torch.maximum(a, ring)
 
-ALPHA_FNS_T = {                                                                          # round 26 only — particle_blast / scratch_21deg removed (CHIP_OBJECT_LABELS filter)
+ALPHA_FNS_T = {                                                                          # v19 (260506) — 3 obj 별 별도 함수 (placeholder 폐기)
     'bank_boundary':    alpha_bank_boundary_t,
-    'fork':             alpha_scratch_t,                                                # round 26 fork ≈ scratch (line pattern, main grade 3)
-    'scratch':          alpha_scratch_t,
-    'scratch_rot':      alpha_scratch_t,                                                # round 26 — angle differentiation TBD; using scratch as placeholder
+    'fork':             alpha_fork_t,                                                   # v19: cross pattern, weakest tier
+    'scratch':          alpha_scratch_t,                                                # v19: vertical lines, strongest tier
+    'scratch_rot':      alpha_scratch_rot_t,                                            # v19: ~71° rotated lines, mid tier
     'geometric_random': alpha_geometric_random_t,
     'small_dot':        alpha_small_dot_t,
     'fragment':         alpha_fragment_t,
@@ -633,7 +714,7 @@ def render_gpu(class_name, object_name, seed):
                     if normal_obj_map is not None:
                         obj_actual = normal_obj_map[(gy, gx)]
                     else:
-                        obj_actual = pick_mixed_object(object_name, rng, mix_ratio=0.25)
+                        obj_actual = pick_mixed_object(object_name, rng, mix_ratio=0.05)  # 260506: 0.25 → 0.05 (CPU sample_gen 정의 통일, 25% mixed → 5%)
                     chip_meta[(gy,gx)] = {'kind':'defect', 'obj': obj_actual,
                                           'bin': assign_defect_bin(kind, rng), 'inside': True}
     for gy in range(GRID):
