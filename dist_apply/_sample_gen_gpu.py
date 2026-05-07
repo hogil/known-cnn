@@ -42,6 +42,7 @@ from _sample_gen import (
     FONT_BIG,
     build_tasks as base_build_tasks,
     save_chip_crops,
+    _pink_noise_field_2d,
 )
 
 assert torch.cuda.is_available(), "GPU pipeline requires CUDA"
@@ -132,14 +133,14 @@ def alpha_fork_t(rng):
     # v20 (260507): fork peak 두께 ↑ 2px → 4px (사용자 directive). 1.0-1.5 → 1.8-2.5
     s_h = float(rng.uniform(s_lo, s_hi))
     sigma_h = float(rng.uniform(1.8, 2.5))
-    in_x = ((XC_2D_T >= x_lo) & (XC_2D_T <= x_hi)).to(DTYPE).unsqueeze(0)
+    in_x = ((XC_2D_T >= x_lo) & (XC_2D_T <= x_hi)).to(DTYPE)                          # 260507: drop .unsqueeze(0) — XC_2D_T already (CHIP,CHIP)
     line_h = _perp_profile_t(YC_2D_T - cy_h, sigma_h, sigma_h * 1.5, sigma_h * 3.0) * in_x * s_h
     a = torch.maximum(a, line_h)
     # v19z++: 7-9 legs + linspace + ±3 jitter (uniform spacing)
     n_legs = int(rng.integers(7, 10))
     leg_height = float(rng.uniform(70, 130)) if not weak_only else float(rng.uniform(60, 100))
     leg_y_end = min(cy_h + leg_height, float(CHIP - 5))
-    in_y = ((YC_2D_T >= cy_h) & (YC_2D_T <= leg_y_end)).to(DTYPE).unsqueeze(1)
+    in_y = ((YC_2D_T >= cy_h) & (YC_2D_T <= leg_y_end)).to(DTYPE)                     # 260507: drop .unsqueeze(1)
     leg_xs_base = np.linspace(x_lo + 8, x_hi - 8, n_legs)
     leg_xs_jit = rng.uniform(-3, 3, size=n_legs)
     for k in range(n_legs):
@@ -723,33 +724,84 @@ def render_gpu(class_name, object_name, seed):
                 chip_meta[(gy,gx)] = {'kind':'invalid', 'obj': None,
                                       'bin': assign_invalid_bin(kind, rng), 'inside': True}
 
-    # GPU canvas baseline
+    # GPU canvas baseline — 260507 v4: wafer-level pink noise (1/f^1.5) field 으로 통일
+    # CUM_BASE_T searchsorted REVERT — chip 경계 seam 제거 (사용자 directive 260507).
+    # floor 0.08 + cap 0.35 (max 강도 ↓), per-wafer overall_scale = beta(2,8) random.
     g = torch.Generator(device=DEVICE).manual_seed(seed)
-    u = torch.rand((SIZE, SIZE), generator=g, device=DEVICE)
-    canvas_t = torch.searchsorted(CUM_BASE_T, u).to(torch.uint8)
-    del u
+    pink_field_np = _pink_noise_field_2d(rng, SIZE, exponent=1.5)                     # GPU torch.fft 사용 (auto)
+    p_bg_field_t = torch.from_numpy(pink_field_np).to(DEVICE)
+    overall_scale = float(rng.beta(2, 8))
+    p_bg_field_t = torch.clamp(overall_scale * (0.5 + 1.0 * p_bg_field_t), 0.08, 0.35)
+    u_bg = torch.rand((SIZE, SIZE), generator=g, device=DEVICE)
+    is_bg_t = u_bg < p_bg_field_t
+    u_bg2 = torch.rand((SIZE, SIZE), generator=g, device=DEVICE)
+    _U8_0 = torch.tensor(0, device=DEVICE, dtype=torch.uint8)
+    _U8_1 = torch.tensor(1, device=DEVICE, dtype=torch.uint8)
+    _U8_2 = torch.tensor(2, device=DEVICE, dtype=torch.uint8)
+    bg_grade_t = torch.where(u_bg2 < 0.92, _U8_1, _U8_2)
+    canvas_t = torch.where(is_bg_t, bg_grade_t, _U8_0)
+    del u_bg, u_bg2, is_bg_t, bg_grade_t, pink_field_np
     inside_t = torch.from_numpy(inside.astype(np.uint8)).to(DEVICE)
     inside_pix_t = inside_t.repeat_interleave(CHIP, dim=0).repeat_interleave(CHIP, dim=1)
     canvas_t.masked_fill_(inside_pix_t == 0, IDX_BG)
 
-    # Per-chip GPU
+    # Per-chip GPU — 260507 v5 unified (canonical = `_synth_chips_only.py`)
+    #   fork:           2-stage smoothstep 0.50/0.88
+    #   scratch / scr_rot: 2-stage smoothstep 0.60/0.91
+    #   bank_boundary 등: 3-way zone mix with split 0.45/0.55
+    # chip 의 non-defect baseline = wafer pink slice (chip 경계 seam 제거).
+    _U8_3 = torch.tensor(3, device=DEVICE, dtype=torch.uint8)
+    _U8_4 = torch.tensor(4, device=DEVICE, dtype=torch.uint8)
     for (gy, gx), meta in chip_meta.items():
         if meta['kind'] != 'defect': continue
         obj = meta['obj']
         alpha = ALPHA_FNS_T[obj](rng)
-        cum_obj_t = CUM_OBJ_T[obj]
-        center_power = {'bank_boundary': 6, 'fork': 4, 'scratch': 5, 'scratch_rot': 8,        # round 26 keys
-                        'geometric_random': 5, 'small_dot': 4, 'fragment': 5, 'irregular': 4, 'ring_small': 5}.get(obj, 4)
-        w_bg = torch.clamp((0.40 - alpha) / 0.40, 0.0, 1.0)
-        t_raw = torch.clamp((alpha - 0.40) / 0.60, 0.0, 1.0)
-        w_center = t_raw ** center_power
-        w_edge = torch.clamp(1.0 - w_bg - w_center, 0.0, 1.0)
-        cum_mixed = (w_bg.unsqueeze(-1)     * CUM_DEFECT_BG_T[None, None, :] +
-                     w_edge.unsqueeze(-1)   * CUM_EDGE_T[None, None, :] +
-                     w_center.unsqueeze(-1) * cum_obj_t[None, None, :])
-        u_chip = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
-        grades = (u_chip.unsqueeze(-1) < cum_mixed).int().argmax(dim=-1).to(torch.uint8)
         y0, x0 = gy*CHIP, gx*CHIP
+
+        # chip pink slice baseline (모든 obj 공통)
+        chip_p_bg_t = p_bg_field_t[y0:y0+CHIP, x0:x0+CHIP]
+        u_bgc = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+        is_chip_bg = u_bgc < chip_p_bg_t
+        u_bgc2 = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+        chip_bg_grade = torch.where(u_bgc2 < 0.92, _U8_1, _U8_2)
+        pink_baseline = torch.where(is_chip_bg, chip_bg_grade, _U8_0)
+
+        if obj in ('fork', 'scratch', 'scratch_rot'):
+            # 2-stage
+            if obj == 'fork':
+                lo_t2, hi_t2 = 0.50, 0.88
+            else:
+                lo_t2, hi_t2 = 0.60, 0.91
+            u1 = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+            is_defect = u1 < alpha
+            t2 = torch.clamp((alpha - lo_t2) / (hi_t2 - lo_t2), 0.0, 1.0)
+            p_2 = t2 * t2 * (3.0 - 2.0 * t2)
+            u2 = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+            is_2 = u2 < p_2
+            u3 = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+            # defect_other: 95% grade 1, 4% grade 3, 1% grade 4
+            defect_other = torch.where(u3 < 0.95, _U8_1,
+                            torch.where(u3 < 0.99, _U8_3, _U8_4))
+            defect_grade = torch.where(is_2, _U8_2, defect_other)
+            grades = torch.where(is_defect, defect_grade, pink_baseline)
+        else:
+            # 3-way zone mix (bank_boundary 등) — split 0.45/0.55
+            cum_obj_t = CUM_OBJ_T[obj]
+            t_low = torch.clamp(alpha / 0.45, 0.0, 1.0)
+            t_high = torch.clamp((alpha - 0.45) / 0.55, 0.0, 1.0)
+            s_low = t_low * t_low * (3.0 - 2.0 * t_low)
+            s_high = t_high * t_high * (3.0 - 2.0 * t_high)
+            mask_low = (alpha < 0.45).to(DTYPE)
+            mask_high = 1.0 - mask_low
+            w_bg = mask_low * (1.0 - s_low)
+            w_edge = mask_low * s_low + mask_high * (1.0 - s_high)
+            w_center = mask_high * s_high
+            cum_mixed = (w_bg.unsqueeze(-1)     * CUM_DEFECT_BG_T[None, None, :] +
+                         w_edge.unsqueeze(-1)   * CUM_EDGE_T[None, None, :] +
+                         w_center.unsqueeze(-1) * cum_obj_t[None, None, :])
+            u_chip = torch.rand((CHIP, CHIP), generator=g, device=DEVICE)
+            grades = (u_chip.unsqueeze(-1) < cum_mixed).int().argmax(dim=-1).to(torch.uint8)
+            grades = torch.where(alpha < 0.05, pink_baseline, grades)
         canvas_t[y0:y0+CHIP, x0:x0+CHIP] = grades
 
     # Invalid fill (GPU)
@@ -806,10 +858,21 @@ def render_wafer_canvas(class_name, seed, rng, inside):
     inside_pix_np = np.repeat(np.repeat(inside.astype(np.float32), CHIP, axis=0), CHIP, axis=1)
     alpha_np = alpha_np * inside_pix_np                                               # 외곽 0
 
-    # 2. baseline canvas (GPU)
+    # 2. baseline canvas (GPU) — 260507 v4: wafer-level pink noise field
     g_t = torch.Generator(device=DEVICE).manual_seed(seed)
-    u = torch.rand((SIZE, SIZE), generator=g_t, device=DEVICE)
-    canvas_t = torch.searchsorted(CUM_BASE_T, u).to(torch.uint8); del u
+    pink_field_np = _pink_noise_field_2d(rng, SIZE, exponent=1.5)
+    p_bg_field_t = torch.from_numpy(pink_field_np).to(DEVICE)
+    overall_scale = float(rng.beta(2, 8))
+    p_bg_field_t = torch.clamp(overall_scale * (0.5 + 1.0 * p_bg_field_t), 0.08, 0.35)
+    u_bg = torch.rand((SIZE, SIZE), generator=g_t, device=DEVICE)
+    is_bg_t = u_bg < p_bg_field_t
+    u_bg2 = torch.rand((SIZE, SIZE), generator=g_t, device=DEVICE)
+    _U8_0 = torch.tensor(0, device=DEVICE, dtype=torch.uint8)
+    _U8_1 = torch.tensor(1, device=DEVICE, dtype=torch.uint8)
+    _U8_2 = torch.tensor(2, device=DEVICE, dtype=torch.uint8)
+    bg_grade_t = torch.where(u_bg2 < 0.92, _U8_1, _U8_2)
+    canvas_t = torch.where(is_bg_t, bg_grade_t, _U8_0)
+    del u_bg, u_bg2, is_bg_t, bg_grade_t, pink_field_np
     inside_t = torch.from_numpy(inside.astype(np.uint8)).to(DEVICE)
     inside_pix_t = inside_t.repeat_interleave(CHIP, dim=0).repeat_interleave(CHIP, dim=1)
     canvas_t.masked_fill_(inside_pix_t == 0, IDX_BG)

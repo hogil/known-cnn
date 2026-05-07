@@ -228,6 +228,25 @@ classes:
 - `D:/project/data/positions/fq_missing_test/` — JSON 참조 sample
 - `D:/project/mapviewer/` — composite map 공식 원본 (다음 stage)
 
+## 절대 규칙: 이미지 생성 후 출력 폴더 전체 경로 보고 필수
+
+이미지 (chip / wafer / preview / sample / figure 등 어떤 PNG/JPG/이미지 산출물이든)
+**생성 직후 반드시 사용자에게 출력 폴더의 절대 경로 전체를 보여준다**.
+
+❌ 금지:
+- 이미지 생성하고 결과만 보여주고 경로 안 알려주기
+- 사용자가 "어디에 만들었지?" 물을 때까지 기다리기
+- 상대 경로 `_pink_preview/foo.png` 만 보여주기
+
+✅ 의무:
+- 새 폴더 생성: `[OUT] D:/project/known-cnn/_chip_revert_preview/` 또는 `Output: D:/.../...`
+- 폴더 안 파일 list: 어떤 클래스/sample 이 만들어졌는지
+- 절대 경로 (forward slash 또는 backslash 무관, drive letter 포함)
+
+배경 명령으로 만든 경우에도 동일 — `[OUT]` 줄을 stdout 에 찍거나 응답에 포함.
+
+이 규칙 위반 = 사용자가 매번 "어디 만들었어?" 다시 묻게 됨 → 시간 낭비.
+
 ## 절대 금기
 
 - 데이터 폴더 (`D:/project/data/wm-811k/unknown`, `D:/project/data/positions/unknown`)

@@ -80,7 +80,14 @@ def render_chip(obj: str, rng: np.random.Generator,
             grades_base = np.searchsorted(sg.CUM_BASE, u_base).astype(np.uint8)
             u1 = rng.random((CHIP, CHIP))
             is_defect = u1 < alpha
-            t2 = np.clip((alpha - 0.65) / (0.92 - 0.65), 0.0, 1.0).astype(np.float32)
+            # 260507 v5: per-obj smoothstep — peak grade 2 미세 ↑ (사용자 "전체 미세하게 좀만 높게").
+            # fork:              0.55/0.90 → 0.50/0.88   (peak 라인 grade 2 약간 ↑)
+            # scratch / scr_rot: 0.65/0.93 → 0.60/0.91   (peak window 살짝 넓힘)
+            if obj == 'fork':
+                lo_t2, hi_t2 = 0.50, 0.88
+            else:  # scratch / scratch_rot
+                lo_t2, hi_t2 = 0.60, 0.91
+            t2 = np.clip((alpha - lo_t2) / (hi_t2 - lo_t2), 0.0, 1.0).astype(np.float32)
             p_2 = (t2 * t2 * (3.0 - 2.0 * t2)).astype(np.float32)
             u2 = rng.random((CHIP, CHIP))
             is_2 = u2 < p_2
@@ -91,11 +98,12 @@ def render_chip(obj: str, rng: np.random.Generator,
             grades = np.where(is_defect, defect_grade, grades_base).astype(np.uint8)
         else:
             # 3-way zone mix (bank_boundary etc)
-            t_low = np.clip(alpha / 0.5, 0.0, 1.0).astype(np.float32)
-            t_high = np.clip((alpha - 0.5) / 0.5, 0.0, 1.0).astype(np.float32)
+            # 260507 v5: split 0.5/0.5 → 0.45/0.55 (center weight 더 일찍 켜짐 → peak grade 2 미세 ↑)
+            t_low = np.clip(alpha / 0.45, 0.0, 1.0).astype(np.float32)
+            t_high = np.clip((alpha - 0.45) / 0.55, 0.0, 1.0).astype(np.float32)
             s_low = (t_low * t_low * (3.0 - 2.0 * t_low)).astype(np.float32)
             s_high = (t_high * t_high * (3.0 - 2.0 * t_high)).astype(np.float32)
-            mask_low = (alpha < 0.5).astype(np.float32)
+            mask_low = (alpha < 0.45).astype(np.float32)
             mask_high = 1.0 - mask_low
             w_bg = (mask_low * (1.0 - s_low)).astype(np.float32)
             w_edge = (mask_low * s_low + mask_high * (1.0 - s_high)).astype(np.float32)

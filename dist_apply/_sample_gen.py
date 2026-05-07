@@ -36,6 +36,42 @@ try:
 except ImportError:
     _GPU = False; _DEVICE = None
 
+
+# ===== v4 pink noise (260507): wafer-level 1/f^β FFT for sensor-like background =====
+# 사용자 directive 260507: defect 영역 변경 X, non-defect 영역만 pink noise (chip seam 제거 위해
+# wafer 전체 1개 field → 각 chip 200×200 slice).
+def _pink_noise_field_2d(rng, size, exponent=1.5):
+    """Generate (size, size) 1/f^exponent pink noise field, normalized to [0, 1] float32.
+    GPU torch.fft 가능하면 사용 (6400² 약 0.05s), 아니면 CPU numpy (3-5s).
+    """
+    if _GPU:
+        seed = int(rng.integers(0, 2**31 - 1))
+        g_t = torch.Generator(device=_DEVICE).manual_seed(seed)
+        white_t = torch.randn((size, size), generator=g_t, device=_DEVICE)
+        f1 = torch.fft.fftfreq(size, device=_DEVICE)
+        fx, fy = torch.meshgrid(f1, f1, indexing='xy')
+        freq_mag = torch.sqrt(fx * fx + fy * fy); freq_mag[0, 0] = 1.0
+        spectrum = 1.0 / (freq_mag ** exponent); spectrum[0, 0] = 0.0
+        filt_t = torch.real(torch.fft.ifft2(torch.fft.fft2(white_t) * spectrum))
+        f_min = float(filt_t.min()); f_max = float(filt_t.max())
+        if (f_max - f_min) > 1e-9:
+            out_t = (filt_t - f_min) / (f_max - f_min)
+            arr = out_t.to(torch.float32).cpu().numpy()
+        else:
+            arr = np.full((size, size), 0.5, dtype=np.float32)
+        del white_t, filt_t
+        return arr
+    white = rng.standard_normal((size, size))
+    freqs = np.fft.fftfreq(size)
+    fx, fy = np.meshgrid(freqs, freqs)
+    freq_mag = np.sqrt(fx * fx + fy * fy); freq_mag[0, 0] = 1.0
+    spectrum = 1.0 / (freq_mag ** exponent); spectrum[0, 0] = 0.0
+    filt = np.real(np.fft.ifft2(np.fft.fft2(white) * spectrum))
+    f_min, f_max = float(filt.min()), float(filt.max())
+    if (f_max - f_min) > 1e-9:
+        return ((filt - f_min) / (f_max - f_min)).astype(np.float32)
+    return np.full_like(filt, 0.5, dtype=np.float32)
+
 # ===== Palette (fail-map style) =====
 def hex_to_rgb(s): return [int(s[1:3],16), int(s[3:5],16), int(s[5:7],16)]
 PALETTE_HEX_MAP = {
@@ -85,8 +121,8 @@ DEFECT_BIN_WEIGHTS /= DEFECT_BIN_WEIGHTS.sum()                                  
 # ===== Spec =====
 SIZE = 6400; GRID = 32; CHIP = 200
 HEATMAP_DIR  = "D:/project/known-cnn/dist_learn/_dist_heatmaps"
-PNG_OUT_DIR  = "D:/project/data/wm-811k/unknown"
-JSON_OUT_DIR = "D:/project/data/positions/unknown"
+PNG_OUT_DIR  = os.environ.get("WAFER_PNG_OUT_DIR",  "D:/project/data/wm-811k/unknown")
+JSON_OUT_DIR = os.environ.get("WAFER_JSON_OUT_DIR", "D:/project/data/positions/unknown")
 CHIP_OBJ_OUT_DIR = "D:/project/data/wm-811k/classification_chips"               # chip-object crop dataset (per-chip true label)
 CHIP_OBJECT_LABELS = ('bank_boundary', 'fork', 'scratch',
                      'scratch_rot', 'invalid_main')
@@ -937,19 +973,19 @@ def render(class_name, object_name, seed):
                 chip_meta[(gy,gx)] = {'kind':'invalid', 'obj': None,
                                       'bin': assign_invalid_bin(kind, rng), 'inside': True}
 
-    # 4) Canvas: baseline grades, then bg color overwrites OUTSIDE-wafer cells (no chip there)
-    #    Round 29 v15: cum_base_use = per-wafer baseline_tier (clean/normal/hazy)
-    if _GPU:
-        # GPU 가속: 40M float random + searchsorted 가장 무거운 op
-        g_t = torch.Generator(device=_DEVICE).manual_seed(seed)
-        u_t = torch.rand((SIZE, SIZE), generator=g_t, device=_DEVICE)
-        cum_base_t = torch.tensor(cum_base_use, device=_DEVICE, dtype=torch.float32)
-        canvas_t = torch.searchsorted(cum_base_t, u_t).to(torch.uint8)
-        canvas = canvas_t.cpu().numpy()
-        del u_t, canvas_t
-    else:
-        u = rng.random((SIZE, SIZE))
-        canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
+    # 4) Canvas: wafer-level pink noise field (1/f^1.5) → grade 0/1/2 sampling.
+    #    260507 v4: tier searchsorted REVERT — chip 경계 seam 없는 자연 sensor drift.
+    #    floor 0.08 + cap 0.35 (max 강도 ↓), per-wafer overall_scale = beta(2,8) random.
+    #    baseline_tier 은 JSON wafer_meta 기록용으로만 유지 (rendering 무관).
+    wafer_pink = _pink_noise_field_2d(rng, SIZE, exponent=1.5)                       # (SIZE,SIZE) float32 ∈ [0,1]
+    overall_scale = float(rng.beta(2, 8))                                             # per-wafer noise level
+    p_bg_field = np.clip(overall_scale * (0.5 + 1.0 * wafer_pink), 0.08, 0.35).astype(np.float32)
+    u_bg = rng.random((SIZE, SIZE))
+    is_bg = u_bg < p_bg_field
+    u_bg2 = rng.random((SIZE, SIZE))
+    bg_grade = np.where(u_bg2 < 0.92, np.uint8(1), np.uint8(2))                      # noise: 92% grade1 + 8% grade2
+    canvas = np.where(is_bg, bg_grade, np.uint8(0)).astype(np.uint8)                 # non-noise = grade 0 (white)
+    del u_bg, u_bg2, bg_grade, wafer_pink
     inside_pix = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)             # 6400x6400 bool
     canvas[~inside_pix] = IDX_BG                                                       # outside-wafer = bg color (no chip)
 
@@ -972,31 +1008,42 @@ def render(class_name, object_name, seed):
         #   defect & not 2: 95% pixel 1 + 4% pixel 3 + 1% pixel 4 (자연 noise)
         #   not defect:    CUM_BASE baseline (정상 chip 같은 BG 자연 fade)
         # 기타 obj (bank_boundary 등) — 기존 v19 smoothstep 3-way zone mix.
-        if obj in ('fork', 'scratch', 'scratch_rot', 'bank_boundary'):
-            # v19s (260506): bank_boundary 도 2-stage 사용 — 3-way zone abrupt transition 해결.
-            # peak grade 2/3 dominant → 자연스럽게 퍼지면서 grade 1 ↑ → 노말영역과 같아짐 (사용자 요청)
-            u_base = rng.random((CHIP, CHIP))
-            grades_base = np.searchsorted(CUM_BASE, u_base).astype(np.uint8)
+        # 260507 v5 unified — `_synth_chips_only.py` 와 동일 logic:
+        #   fork:           2-stage smoothstep 0.50/0.88
+        #   scratch / scr_rot: 2-stage smoothstep 0.60/0.91
+        #   bank_boundary 등: 3-way zone mix with split 0.45/0.55
+        # chip 의 non-defect baseline = wafer pink slice (chip 경계 seam 제거).
+        y0p, x0p = gy * CHIP, gx * CHIP
+        chip_p_bg = p_bg_field[y0p:y0p + CHIP, x0p:x0p + CHIP]                       # 200x200 slice
+        u_chip_bg = rng.random((CHIP, CHIP))
+        is_chip_bg = u_chip_bg < chip_p_bg
+        u_chip_bg2 = rng.random((CHIP, CHIP))
+        chip_bg_grade = np.where(u_chip_bg2 < 0.92, np.uint8(1), np.uint8(2))
+        pink_baseline = np.where(is_chip_bg, chip_bg_grade, np.uint8(0)).astype(np.uint8)
+
+        if obj in ('fork', 'scratch', 'scratch_rot'):
+            if obj == 'fork':
+                lo_t2, hi_t2 = 0.50, 0.88
+            else:
+                lo_t2, hi_t2 = 0.60, 0.91
             u1 = rng.random((CHIP, CHIP))
             is_defect = u1 < alpha
-            # v19z++ (260506): line peak 영역 grade 2/3 더 ↑ (사용자 directive "ㅡ ㅣ 영역만 좀 더").
-            # smoothstep 0.30-0.62 → 0.20-0.50 (peak 일찍 grade 2 dominant — alpha 0.5 이상 거의 다 grade 2)
-            t2 = np.clip((alpha - 0.20) / (0.50 - 0.20), 0.0, 1.0).astype(np.float32)
+            t2 = np.clip((alpha - lo_t2) / (hi_t2 - lo_t2), 0.0, 1.0).astype(np.float32)
             p_2 = (t2 * t2 * (3.0 - 2.0 * t2)).astype(np.float32)
             u2 = rng.random((CHIP, CHIP))
             is_2 = u2 < p_2
             u3 = rng.random((CHIP, CHIP))
-            # v19z++ : non-2 defect 의 grade 3 비율 ↑ (32% → 42%). grade 1: 65→55, grade 3: 32→42, grade 4: 3
-            defect_other = np.where(u3 < 0.55, np.uint8(1),
-                            np.where(u3 < 0.97, np.uint8(3), np.uint8(4)))
+            defect_other = np.where(u3 < 0.95, np.uint8(1),
+                            np.where(u3 < 0.99, np.uint8(3), np.uint8(4)))
             defect_grade = np.where(is_2, np.uint8(2), defect_other)
-            grades = np.where(is_defect, defect_grade, grades_base).astype(np.uint8)
+            grades = np.where(is_defect, defect_grade, pink_baseline).astype(np.uint8)
         else:
-            t_low = np.clip(alpha / 0.5, 0.0, 1.0).astype(np.float32)
-            t_high = np.clip((alpha - 0.5) / 0.5, 0.0, 1.0).astype(np.float32)
+            # 3-way zone mix (bank_boundary etc) — v5 split 0.45/0.55
+            t_low = np.clip(alpha / 0.45, 0.0, 1.0).astype(np.float32)
+            t_high = np.clip((alpha - 0.45) / 0.55, 0.0, 1.0).astype(np.float32)
             s_low = (t_low * t_low * (3.0 - 2.0 * t_low)).astype(np.float32)
             s_high = (t_high * t_high * (3.0 - 2.0 * t_high)).astype(np.float32)
-            mask_low = (alpha < 0.5).astype(np.float32)
+            mask_low = (alpha < 0.45).astype(np.float32)
             mask_high = 1.0 - mask_low
             w_bg     = (mask_low * (1.0 - s_low)).astype(np.float32)
             w_edge   = (mask_low * s_low + mask_high * (1.0 - s_high)).astype(np.float32)
@@ -1006,6 +1053,8 @@ def render(class_name, object_name, seed):
                          w_center[..., None] * cum_obj[None,None,:])
             uu = rng.random((CHIP, CHIP))
             grades = (uu[..., None] < cum_mixed).argmax(axis=-1).astype(np.uint8)
+            # 3-way mix 의 low-alpha (background) 픽셀도 pink baseline 으로 override → chip 경계 seam 제거
+            grades = np.where(alpha < 0.05, pink_baseline, grades).astype(np.uint8)
         y0, x0 = gy*CHIP, gx*CHIP
         canvas[y0:y0+CHIP, x0:x0+CHIP] = grades
 
