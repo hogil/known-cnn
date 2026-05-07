@@ -259,15 +259,19 @@ def alpha_broken_ring(rng):
 
 
 def alpha_ring_dots(rng):
-    """ring 위 N angular dot — chip 보다 작은 dot, 갯수 더 많이."""
+    """ring 위 N angular dot — 260507 v5.2: dot 위치 고정 (사용자 directive
+    "ring dots 는 dot들 위치가 바뀌면안된다 동일 반지름에 동일 위치").
+    r_center / n_dots / th_off 모두 fixed. peak (밝기) 만 wafer 별 random 유지 + pink noise baseline 자연 variation.
+    """
     yy, xx = _yy_xx_full()
     cy, cx = SIZE/2, SIZE/2
     R = SIZE/2
-    r_center = R * rng.uniform(0.40, 0.65)
-    n_dots = int(rng.integers(14, 24))                   # 갯수 늘림 14-23
-    th_off = rng.uniform(0, 2*np.pi)
-    sigma_blob = CHIP * rng.uniform(0.20, 0.40)          # chip 보다 작음 (0.2-0.4 chip)
-    peak = rng.uniform(0.22, 0.60)                       # round 29 v15: lower bound
+    # ★ FIXED — 모든 wafer 동일 위치, 동일 반지름
+    r_center = R * 0.55
+    n_dots = 18
+    th_off = 0.0
+    sigma_blob = CHIP * 0.30                             # FIXED dot 크기 (chip 의 30%)
+    peak = rng.uniform(0.40, 0.60)                       # 밝기만 random — floor 0.30 너무 약했음 (seed2 invisible)
     a_full = np.zeros((SIZE, SIZE), dtype=np.float32)
     for i in range(n_dots):
         th = th_off + 2*np.pi * i / n_dots
