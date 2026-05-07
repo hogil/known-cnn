@@ -73,84 +73,73 @@ def _min_blend(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.minimum(a, b)
 
 
-def _make_normal_chip(rng: np.random.Generator) -> np.ndarray:
-    """Diversified BASELINE-like Normal chip (260506 patch — 5 noise/variation sources):
+def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
+    """Palette-aligned Normal chip — per-chip Beta(2, 10) noise probability.
 
-    1. Wider grey ratio range 5-30% (was 10-20%)
-    2. Per-pixel grey color noise ±15 (was fixed 155,155,155)
-    3. White subtle pixel noise ±10 (was perfect 255)
-    4. Sprinkle count 0-1.5% with color mix {green, light-green, grey} (was 0-0.5% green only)
-    5. Subtle brightness gradient 30% chance, ±15 along x or y (new)
-
-    Sanity guarantee: _whiteness ≥ 0.70 (Normal definition preserved).
+    260507 redesign (palette PNG, RGB sprinkle 폐기):
+    - per-chip p_noise ~ Beta(2, 10), mean ~0.17, range ~0.02-0.50
+    - per-pixel grade 0 (white) with prob (1-p_noise), else grade 1 (grey) 95% / grade 2 (green dot) 5%
+    - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지)
+    - return PIL Image mode='P' with palette (chip 결함 generator 와 동일 logic)
     """
-    # 3. White base with subtle pixel noise (250-255 range — keep mostly white)
-    arr = np.full((CHIP_SIZE, CHIP_SIZE, 3), 255, dtype=np.int16)
-    arr += rng.integers(-5, 1, size=arr.shape, dtype=np.int16)
-    arr = np.clip(arr, 0, 255)
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "dist_apply"))
+    import _sample_gen as sg
 
-    flat = arr.reshape(-1, 3)
-    n = flat.shape[0]
+    p_noise = float(rng.beta(2, 10))   # per-chip random noise probability
+    u = rng.random((CHIP_SIZE, CHIP_SIZE))
+    is_noise = u < p_noise
+    u2 = rng.random((CHIP_SIZE, CHIP_SIZE))
+    # noise 안에서 grade 1 (정상 sprinkle) 95%, grade 2 (가끔 dot) 5%
+    noise_grade = np.where(u2 < 0.95, 1, 2).astype(np.uint8)
+    grades = np.where(is_noise, noise_grade, 0).astype(np.uint8)
 
-    # 1. Wider grey ratio (5-22% — keep whiteness ≥ 0.70 sanity)
-    n_grey = int(n * float(rng.uniform(0.05, 0.22)))
-    if n_grey > 0:
-        grey_idx = rng.choice(n, size=n_grey, replace=False)
-        # 2. Per-pixel grey color noise ±15
-        grey_noise = rng.integers(-15, 16, size=(n_grey, 3), dtype=np.int16)
-        flat[grey_idx] = np.clip(np.array(GREY_PALETTE_GRADE_1_RGB, dtype=np.int16) + grey_noise, 0, 255)
-
-    # 4. Sprinkle count 0-1.5% with color mix
-    n_minor = int(n * float(rng.uniform(0.0, 0.015)))
-    if n_minor > 0:
-        minor_idx = rng.choice(n, size=n_minor, replace=False)
-        sprinkle_palette = np.array([
-            [0, 150, 25],     # original green
-            [50, 180, 100],   # light green
-            [130, 130, 130],  # darker grey
-        ], dtype=np.int16)
-        # Each sprinkle picks a random color from palette
-        choices = rng.integers(0, len(sprinkle_palette), size=n_minor)
-        flat[minor_idx] = sprinkle_palette[choices]
-
-    arr = arr.astype(np.uint8)
-
-    # 5. Subtle brightness gradient (20% chance, ±8 amplitude — keep whiteness)
-    if rng.random() < 0.2:
-        amplitude = float(rng.uniform(-8, 8))
-        if rng.random() < 0.5:
-            grad = np.linspace(0, amplitude, CHIP_SIZE).astype(np.int16)  # left→right
-            arr = np.clip(arr.astype(np.int16) + grad[None, :, None], 0, 255).astype(np.uint8)
-        else:
-            grad = np.linspace(0, amplitude, CHIP_SIZE).astype(np.int16)  # top→bottom
-            arr = np.clip(arr.astype(np.int16) + grad[:, None, None], 0, 255).astype(np.uint8)
-
-    return arr
+    img = Image.frombytes('P', (CHIP_SIZE, CHIP_SIZE), grades.tobytes())
+    img.putpalette(sg.PALETTE)
+    return img
 
 
-def _make_invalid_chip(rng: np.random.Generator) -> np.ndarray:
-    """White interior + 2px orange border + 'B<num>' bin text large center."""
-    arr = np.full((CHIP_SIZE, CHIP_SIZE, 3), 255, dtype=np.uint8)
-    arr[:2, :, :] = ORANGE_RGB
-    arr[-2:, :, :] = ORANGE_RGB
-    arr[:, :2, :] = ORANGE_RGB
-    arr[:, -2:, :] = ORANGE_RGB
+def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
+    """Palette-aligned Invalid chip — grade 0 white interior + 2px orange (palette idx 11) + black text (idx 9).
+
+    260507 redesign (palette PNG):
+    - 2px orange border = palette index 11 (border_inv, RGB 255,153,0)
+    - Text fill = palette index 9 (text, near-black)
+    - White interior = grade 0 (palette index 0)
+    - return PIL Image mode='P'
+    """
+    import sys
+    from pathlib import Path as _P
+    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "dist_apply"))
+    import _sample_gen as sg
+
+    grades = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.uint8)  # all white (grade 0)
+    BORDER_IDX = sg.KEY_TO_INDEX.get('border_inv', 11)
+    TEXT_IDX = sg.KEY_TO_INDEX.get('text', 9)
+    grades[:2, :] = BORDER_IDX
+    grades[-2:, :] = BORDER_IDX
+    grades[:, :2] = BORDER_IDX
+    grades[:, -2:] = BORDER_IDX
+
+    img = Image.frombytes('P', (CHIP_SIZE, CHIP_SIZE), grades.tobytes())
+    img.putpalette(sg.PALETTE)
+
+    # Centered large text (palette index for fill — PIL converts to mode='P' index)
     bin_num = int(rng.integers(200, 300))
-    # large centered text
     font = None
-    for path in ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
-                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+    for fp in ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
+               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
         try:
             from os.path import exists
-            if exists(path):
-                font = ImageFont.truetype(path, 64)
+            if exists(fp):
+                font = ImageFont.truetype(fp, 64)
                 break
         except Exception:
             pass
     if font is None:
         font = ImageFont.load_default()
-    im = Image.fromarray(arr)
-    draw = ImageDraw.Draw(im)
+    draw = ImageDraw.Draw(img)
     text = f"B{bin_num}"
     try:
         bbox = draw.textbbox((0, 0), text, font=font)
@@ -160,8 +149,8 @@ def _make_invalid_chip(rng: np.random.Generator) -> np.ndarray:
     except Exception:
         tw, th = 120, 50
         tx, ty = CHIP_SIZE // 2 - tw // 2, CHIP_SIZE // 2 - th // 2
-    draw.text((tx, ty), text, fill=(0, 0, 0), font=font)
-    return np.array(im)
+    draw.text((tx, ty), text, fill=int(TEXT_IDX), font=font)
+    return img
 
 
 def _sanity_check(class_key: str, arr: np.ndarray, base1: np.ndarray | None,
@@ -195,9 +184,17 @@ def _sanity_check(class_key: str, arr: np.ndarray, base1: np.ndarray | None,
     return False, "unknown_class_key"
 
 
-def _save_chip_rgb(arr: np.ndarray, path: Path) -> None:
+def _save_chip_rgb(arr, path: Path) -> None:
+    """Accept either numpy.ndarray (RGB) or PIL.Image.Image (any mode).
+
+    260507: palette PNG (mode='P') 통과 위해 PIL Image 도 직접 저장.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(arr).save(path)
+    if isinstance(arr, np.ndarray):
+        Image.fromarray(arr).save(path)
+    else:
+        # PIL.Image.Image — palette PNG 그대로 저장
+        arr.save(path)
 
 
 def _build_preview(class_key: str, chips_dir: Path, out_path: Path, n: int = 16) -> None:
@@ -267,10 +264,19 @@ def generate(out_root: Path, classification_chips_root: Path,
         d.mkdir(parents=True, exist_ok=True)
         return d
 
-    def _record(class_key: str, arr: np.ndarray, base1_path: str, base2_path: str,
+    def _record(class_key: str, arr_or_img, base1_path: str, base2_path: str,
                 gen_method: str) -> bool:
+        # Accept either numpy RGB array OR PIL Image (palette PNG).
+        # Save the source object as-is (preserves palette mode), but compute
+        # sanity & defect_pixel_ratio on the RGB conversion.
+        if isinstance(arr_or_img, Image.Image):
+            save_obj = arr_or_img
+            arr_rgb = np.array(arr_or_img.convert("RGB"))
+        else:
+            save_obj = arr_or_img
+            arr_rgb = arr_or_img
         ok, reason = _sanity_check(
-            class_key, arr,
+            class_key, arr_rgb,
             _load_chip_rgb(Path(base1_path)) if base1_path else None,
             _load_chip_rgb(Path(base2_path)) if base2_path else None,
         )
@@ -278,18 +284,18 @@ def generate(out_root: Path, classification_chips_root: Path,
             rej_dir = out_root / "_rejected" / reason
             rej_dir.mkdir(parents=True, exist_ok=True)
             idx = rejected.get(class_key, 0)
-            _save_chip_rgb(arr, rej_dir / f"{class_key}_{idx:04d}.png")
+            _save_chip_rgb(save_obj, rej_dir / f"{class_key}_{idx:04d}.png")
             rejected[class_key] = idx + 1
             return False
         idx = accepted.get(class_key, 0)
         cdir = _alloc(class_key)
         chip_name = f"{class_key}_{idx:04d}.png"
         chip_path = cdir / chip_name
-        _save_chip_rgb(arr, chip_path)
+        _save_chip_rgb(save_obj, chip_path)
         manifest_rows.append({
             "chip_path": str(chip_path),
             "class_key": class_key,
-            "defect_pixel_ratio": _defect_pixel_ratio(arr),
+            "defect_pixel_ratio": _defect_pixel_ratio(arr_rgb),
             "base1_path": base1_path,
             "base2_path": base2_path,
             "gen_method": gen_method,
