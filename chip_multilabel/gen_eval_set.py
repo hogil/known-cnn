@@ -73,26 +73,68 @@ def _min_blend(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.minimum(a, b)
 
 
+def _pink_noise_field(rng: np.random.Generator, size: int, exponent: float = 1.5) -> np.ndarray:
+    """Generate 2D pink (1/f^β) noise field via FFT.
+
+    Natural sensor-like spatial variation (no grid artifacts).
+    - β=1.0: pink noise (mild correlation)
+    - β=1.5: balanced (default — looks like real sensor drift)
+    - β=2.0: red/Brownian noise (very smooth, large blobs)
+    """
+    white = rng.standard_normal((size, size))
+    freqs = np.fft.fftfreq(size)
+    fx, fy = np.meshgrid(freqs, freqs)
+    freq_mag = np.sqrt(fx ** 2 + fy ** 2)
+    freq_mag[0, 0] = 1.0  # avoid div by 0
+    spectrum_filter = 1.0 / (freq_mag ** exponent)
+    spectrum_filter[0, 0] = 0.0  # remove DC
+    filtered = np.real(np.fft.ifft2(np.fft.fft2(white) * spectrum_filter))
+    # normalize to [0, 1]
+    f_min, f_max = float(filtered.min()), float(filtered.max())
+    if f_max - f_min < 1e-9:
+        return np.full_like(filtered, 0.5)
+    return (filtered - f_min) / (f_max - f_min)
+
+
 def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
-    """Palette-aligned Normal chip — per-chip Beta(2, 10) noise probability.
+    """Palette-aligned Normal chip — natural sensor-like spatial noise.
 
     260507 redesign (palette PNG, RGB sprinkle 폐기):
-    - per-chip p_noise ~ Beta(2, 10), mean ~0.17, range ~0.02-0.50
-    - per-pixel grade 0 (white) with prob (1-p_noise), else grade 1 (grey) 95% / grade 2 (green dot) 5%
-    - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지)
-    - return PIL Image mode='P' with palette (chip 결함 generator 와 동일 logic)
+    - 자연스러운 sensor-like 변동: 1/f^β pink noise field (FFT 기반).
+      lithography 변동 / sensor drift / hot spots 같은 physical 현상 모방.
+      grid 아티팩트 없음.
+    - per-chip overall noise level (Beta(2, 8) scale) + spatial pink-noise field
+      (β=1.5) modulation.
+    - per-pixel grade 0 (white) with prob (1 - p_local), else grade 1/2.
+    - grade 2 (green) ratio 도 별개 pink-noise field 로 spatial 변동.
+    - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지).
     """
     import sys
     from pathlib import Path as _P
     sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "dist_apply"))
     import _sample_gen as sg
 
-    p_noise = float(rng.beta(2, 10))   # per-chip random noise probability
+    # Per-chip overall scale — some chips cleaner, some hazier
+    overall_scale = float(rng.beta(2, 8))   # mean ~0.20, range ~0.02-0.6
+
+    # Natural spatial p_noise field (1/f^1.5 pink noise — sensor-like)
+    p_field_raw = _pink_noise_field(rng, CHIP_SIZE, exponent=1.5)
+    # scale: pixel-wise probability = overall_scale * (0.4 + 1.2 * p_field_raw)
+    # → range ~0.4*scale (cleaner regions) ~ 1.6*scale (noisier)
+    p_field = np.clip(overall_scale * (0.4 + 1.2 * p_field_raw), 0.0, 0.85)
+
+    # Natural grade-2 (green) probability field — different pink noise instance
+    g2_field_raw = _pink_noise_field(rng, CHIP_SIZE, exponent=2.0)  # smoother
+    g2_max = float(rng.uniform(0.02, 0.15))   # per-chip max grade-2 ratio
+    g2_field = np.clip(g2_max * (0.2 + g2_field_raw), 0.0, 0.30)
+
+    # Per-pixel sampling
     u = rng.random((CHIP_SIZE, CHIP_SIZE))
-    is_noise = u < p_noise
+    is_noise = u < p_field
+
     u2 = rng.random((CHIP_SIZE, CHIP_SIZE))
-    # noise 안에서 grade 1 (정상 sprinkle) 95%, grade 2 (가끔 dot) 5%
-    noise_grade = np.where(u2 < 0.95, 1, 2).astype(np.uint8)
+    is_grade2 = u2 < g2_field
+    noise_grade = np.where(is_grade2, 2, 1).astype(np.uint8)
     grades = np.where(is_noise, noise_grade, 0).astype(np.uint8)
 
     img = Image.frombytes('P', (CHIP_SIZE, CHIP_SIZE), grades.tobytes())
