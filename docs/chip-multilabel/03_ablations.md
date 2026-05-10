@@ -307,3 +307,290 @@ in this 8-epoch + small-data + TAPT-init regime.
 12. **drop_path 0.05 (T10a/b, iter 9, n=2 seeds)** — −0.054 / −0.049; long-training-regime regularizer doesn't transfer to 8-epoch budgets.
 13. **cutmix-rect 0.25 (T11a, iter 9)** — −0.106; rect mask shape carries no signal at chip-grid resolution; regression driven by 0.5→0.25 ratio drop (= iter-7 result re-confirmed).
 14. **two-LR backbone/head (T12a, iter 9)** — −0.084 macro-F1, −0.27 top1_11; starves backbone of BCE+CutMix-driven updates.
+
+## Iter 12 — v19zpp 21-class master ablation (no Normal training)
+
+8-variant matrix on v19zpp tier chip data + master 21-class eval (4 single +
+6 2-combo + 4 3-combo + Normal + Invalid + 5 OOD), all with `--no-normal`.
+
+| variant   | CF1    | F1_fk  | bit_FAR | chip_FAR | verdict                       |
+|-----------|-------:|-------:|--------:|---------:|-------------------------------|
+| T7 ★      | 0.8490 | 0.5248 |  24.90% |  96.00%  | best single (LS=0.20+CutMix)  |
+| T5        | 0.8349 | 0.5236 |  26.62% |  96.00%  |                               |
+| T9        | 0.8258 | 0.5209 |  25.35% |  96.00%  |                               |
+| T0        | 0.7645 | 0.5453 |  28.65% |  96.00%  | pure CE — fork prob 평탄      |
+| T4        | 0.7642 | 0.5185 |  28.68% |  96.00%  | ASL γ=4 over-aggressive       |
+| T3        | 0.7604 | 0.5240 |  48.60% |  96.00%  | Focal — fork over-fire        |
+| T1        | 0.7403 | 0.5601 |  31.47% |  96.00%  | CE+LS=0.10 — multi-label 부적합|
+| T6        | 0.6531 | 0.5403 |  36.28% |  96.00%  | BCE→ASL — worst               |
+
+★ **모든 8 variant chip_FAR = 96.00%** (Normal training OFF 의 본질적 한계).
+ni_chip_FAR 80% (Normal 200 mis-fire) + ood_chip_FAR 100% (OOD 800 mis-fire)
+가 합쳐서 96% bundle. **paper finding**: bundled `chip_FAR` 단일 metric 폐기 →
+split metric 필수 (`normal_invalid_chip_FAR` + `ood_chip_FAR` 분리).
+
+_Source: outputs/T*_v19zpp_seed42_*/eval_I3/bit_metrics_split.json (8 runs),
+notes.md `## iter 12 v19z++ on stable master` section._
+
+## Iter 13 — Normal training as the single FAR lever (★ paper main)
+
+**Cycle A** Normal training ON 의 단일 효과 측정 (T7N single):
+
+| metric | T7-no-Normal (v19zpp) | T7N (with Normal) | Δ                |
+|---|---:|---:|---:|
+| CF1                 | 0.8490 | 0.9042 | **+0.0552**        |
+| F1_fork             | 0.5248 | 0.7796 | **+0.2548**        |
+| ni_chip_FAR         | 80.00% | 0.00%  | **-80pp** ★        |
+| ood_chip_FAR        | 100.00%| 16.38% | **-83.62pp** ★     |
+| F1_sc               | 0.9066 | 0.8676 | -0.0390 (trade-off)|
+
+★ Normal training 단일 lever 가 chip_FAR 96% → 13.1% 단독 해결. iter 10
+finding 재확인 + paper main result.
+
+**Cycle A logit-avg ensembles** (9 cells):
+
+| ensemble | weights | CF1 | F1_fork | ni_FAR | verdict |
+|---|---|---:|---:|---:|---|
+| **T7N+T5** ★ | 70:30 | **0.9083** | 0.7656 | 0.50% | overall winner |
+| T7N+T7  | 60:40 | 0.9043 | 0.6988 | 0.00% | sc/sr ceiling |
+| T7N single | n/a | 0.9042 | 0.7796 | 0.00% | base |
+| T7N+T5  | 60:40 | 0.9018 | 0.7389 | 2.00% | |
+| T7N+T9  | 60:40 | 0.9001 | 0.7281 | 13.00% | |
+
+★ T7N anchor (≥60% weight) 가 ni_FAR lock-in. T5 minority weight 가 sc 에서
+lift. iter 10 H ensemble winner mechanism (complementary diversity)
+재현. logit-avg ensemble = **single 모델 + threshold tuning 의 한계 깸**.
+
+**Cycle B** CutMix variant grid (T7N base):
+
+| variant | CF1 | F1_fk | ni_FAR | ood_FAR | verdict |
+|---|---:|---:|---:|---:|---|
+| **random_rect** ★ | **0.9188** | 0.8436 | 20.00% | 0.94% | Cycle B winner |
+| no_cutmix | 0.9162 | 0.8324 | 20.00% | 14.69% | CutMix 자체 marginal |
+| grid50 | 0.8967 | 0.7635 | 20.00% | 0.31% | |
+| grid25 | 0.8849 | 0.7450 | 20.00% | 3.12% | |
+| grid12 | 0.8596 | 0.7778 | 20.00% | 12.03% | small patch 약함 |
+| scattered | 0.8423 | 0.6912 | 20.00% | 23.44% | worst — multi-patch HURT |
+
+★ Cycle B 의 모든 cell ni_FAR 20% lock — Cycle A T7N single 0% 보다 후퇴
+(CutMix variant 가 Normal 신호 약화). random_rect = Cycle B winner CF1
+0.9188 > Cycle A 0.9042 + 0.0146.
+
+_Source: outputs/T7_T7_with_normal_v19zpp_seed42_v2_260507_002217 (Cycle A),
+outputs/T7_T7N_*_seed42_260507_07*-08* (Cycle B 6 cells)._
+
+## Iter 14 — v20 chip data fork sigma raised (atomic chip-data version)
+
+fork sigma 1.0~1.5 → 1.8~2.5 (두께 ↑) 단일 변경:
+
+| metric | Cycle B baseline | T7N v20 | Δ |
+|---|---:|---:|---:|
+| CF1 | 0.9188 | 0.9226 | +0.0038 |
+| F1_fork | 0.8436 | 0.8591 | +0.0155 ✓ |
+| F1_sc | 0.8658 | 0.8658 | 0 |
+| F1_sr | 0.9937 | 0.9937 | 0 |
+| **ni_chip_FAR** | 20.00% | **0.00%** | **-20pp** ★ |
+| ood_chip_FAR | 0.94% | 0.94% | 0 |
+
+★ fork single recall **1.0000** (이전 weak recall 깨짐). `fork+scratch_rot`
+recall **0.625 → 0.7188** (+9.4pp partial fix). ni_chip_FAR 20% 도 같이
+0% 로 복구 (chip data 신선화 효과).
+
+**잔존 약점**: `fork+scratch_rot+ood_CrossScratch` 0.5687 — sr+CrossScratch
+overlap 의 본질적 어려움 (둘 다 회전 패턴, augment / loss 변경 필요).
+
+_Source: outputs/T7_T7N_v20_seed42_260507_063032/eval_I3/bit_metrics_split.json._
+
+## Iter 15 — paper-style 4-class only ablation (Normal OFF, post-v5 chip data)
+
+iter 11 의 paper figure 재공급 — 7 cell LS sweep + 2 alternative loss + P0
+baseline. **모든 cell `--no-normal`** (Normal training OFF, 4-class only).
+
+### LS sweep on T7 (BCE+LS, no CutMix, no Normal)
+
+| LS | CF1 | F1_fk | ni_FAR | ood_FAR | verdict |
+|---:|---:|---:|---:|---:|---|
+| 0.025 | 0.8890 | 0.8308 | 45.00% | 5.94% | |
+| **0.05** ★ | **0.9088** | 0.8351 | 36.00% | 5.94% | **paper baseline winner** |
+| 0.075 | 0.8976 | 0.8679 | 26.50% | 3.59% | F1_fk peak |
+| 0.10 | 0.8784 | 0.8806 | 31.50% | 15.47% | F1_fk peak (LS=0.10) |
+| 0.15 | 0.8643 | 0.8159 | 22.00% | 9.69% | |
+| 0.20 | 0.8648 | 0.8145 | 20.50% | 25.16% | |
+| 0.25 | 0.8625 | 0.8465 | 29.50% | 23.75% | |
+
+★ **LS=0.05 sweet spot** — iter 8 (T9 LS sweep on cutmix-base) 의 LS=0.07
+peak 과 일관 신호. 다만 모든 cell ni_FAR ≥ 20% (Normal training 없으면
+real-env Normal 잡기 불가).
+
+### Alternative loss
+
+| variant | CF1 | F1_fk | ni_FAR | ood_FAR | verdict |
+|---|---:|---:|---:|---:|---|
+| T9 sigfocal | 0.8273 | 0.7169 | 46.50% | 5.16% | sigmoid_focal moderate |
+| T3 Focal | 0.7768 | 0.5717 | **100%** | **100%** | Focal worst — re-confirms iter 11 |
+
+★ **Focal 이 ni/ood FAR 모두 100%** — iter 11 finding 일관 (Focal+cutmix
+P3=0.513 보다 더 나쁨). post-v5 chip data 에서도 Focal 은 fork over-fire 를
+극단적으로 누르며 Normal/OOD prob 도 평탄화 → 모든 chip 어떤 signal 한 개라도
+나오면 declare.
+
+### P0 baseline (T5 BCE pure, no LS, no CutMix)
+
+| metric | T5 P0 | 비고 |
+|---|---:|---|
+| CF1 | 0.8583 | BCE pure |
+| F1_fk | 0.7756 | |
+| ni_chip_FAR | 24.50% | Normal not learned |
+| ood_chip_FAR | 1.25% | unexpected low |
+| ood_overlay 2bit_recall | 0.3906 | weak combo |
+
+★ **iter 15 conclusion**: 4-class only environment 에서 LS=0.05 가 paper
+baseline winner (CF1 0.9088). 그러나 ni_FAR 36% 로 operational 부적합 →
+**iter 13 Cycle A T7N (Normal training ON, ni_FAR 0.50%) 가 paper main
+result**. iter 15 는 paper baseline counter-example 으로 사용.
+
+_Source: outputs/T5_P0_pure_baseline_seed42_260507_094228 + 7 T7_P1A_LS*
++ T3_P1A_T3_focal + T9_P1A_T9_sigfocal (10 runs), all
+eval_I3/bit_metrics_split.json._
+
+## Updated "things that didn't work" list (iter 12-15)
+
+15. **No-Normal training on master 21-class (iter 12)** — bundled chip_FAR
+    96% catastrophic. Normal training 누락 = 8 variant 전부 동일 96% 실패.
+    paper finding: split metric 필수 + Normal training 필수.
+16. **CutMix scattered/grid12 patches (iter 13 Cycle B)** — multi-patch
+    분산 mask 가 single random_rect 보다 약함. ood_chip_FAR 23.44%/12.03%
+    spike. iter 12 Phase 4 의 scattered finding 일관.
+17. **CutMix variant axis (iter 13 Cycle B)** — Cycle A T7N single (0% ni_FAR)
+    의 우위를 깸 (모든 variant 20% ni_FAR). CutMix variant 자체가 Normal
+    학습 신호 약화시킴 — Normal training 환경에선 CutMix 줄여야.
+18. **Focal loss on post-v5 chip data (iter 15, T3)** — ni/ood FAR 100%
+    동시 mis-fire. iter 11 finding 재확인.
+19. **LS ≥ 0.10 under T7N+CutMix (iter 15 P1A)** — LS=0.05 sweet spot 위
+    monotonic 하락. ood_FAR 또한 LS 강할수록 spike (LS=0.10 → 15.47%,
+    LS=0.20 → 25.16%).
+
+## Iter 21 findings (clean baseline, dual-eval no-leak protocol)
+
+Eval = disjoint v14class (800) + v15direct (1000, +4 OOD wafer-canvas).
+Source: `iters/iter_21_clean_baseline.md`,
+`tables/iter21_paper_headline.csv`.
+
+### Positive (worked)
+
+20. **★ Complement CutMix g=2 LS=1.0 FCM-PM (E, 19C repeat)** — first single
+    model to clear both eval gates simultaneously: v14 bit_F1=0.9913 ni_FAR=0.00%,
+    v15direct bit_F1=0.9691 ni_FAR=3.75%. Per-class F1 ≥ 0.94 on all 4
+    defect bits. Confirms iter 19B (single-seed) was not a fluke.
+21. **Soft labels in CutMix paste regions are the N/I gate switch.** C
+    (T7N + std CutMix LS=1.0) → ni_FAR=100% on both evals. D (same recipe,
+    label-scale 0.5) → ni_FAR=1.25% v14 / 2.50% v15. Same train data,
+    same Normal sentinel, only paste-region LS differs.
+22. **Complement CutMix > std/grid CutMix on far-OOD.** v15direct
+    wafer-canvas chips: std CutMix C bit_F1=0.8457, grid D 0.9252,
+    complement E 0.9691. Complement structure (paired-bit constraint)
+    inoculates the model against unseen patterns better than dense paste
+    grids.
+
+### Negative (didn't work / collapsed)
+
+23. **T5 baseline (no-Normal, no-CutMix) is misleadingly strong on v14.**
+    bit_F1=0.9745 — but ni_FAR=100% (every Normal/Invalid fires defect).
+    v15 collapses to 0.7872. Single-label-collapse signature; reaffirms
+    Normal-training necessity from iter 10 / 13.
+24. **T7N pure (no CutMix) — Normal training alone insufficient.** B:
+    v14 bit_F1=0.8609 ni_FAR=100%, fork F1 only 0.6420 on v15. Sentinel
+    target zeroing without compositional augmentation under-calibrates
+    the rejection boundary.
+25. **g=4 LS=0.25 (G, 19G repeat) — over-paste under-soft.** Best v15
+    bit_F1 (0.9716) but ni_FAR=100% on v15direct — heavy paste with
+    too-soft labels destroys N/I gate. Confirms small-g + high-LS
+    (E: g=2, LS=1.0) is the operating point, not the apparent bit_F1
+    optimum.
+
+## Iter 28 — Mixup α sweep (paper §5 evidence: pixel α-blend palette destruction)
+
+Source: `iters/iter_28_29_paper_ablation.md`. 6 trains all share iter21E
+base recipe (T7N, BCE+LS=0.20, 8ep, AdamW 1e-4, RandomAffine, seed=1)
+with **CutMix replaced by Mixup α-blend** at the listed α.
+
+| tag | spec                                   | v14 bF1 | v14 ni% | v15 bF1 | v15 ni% | dual-pass? |
+|:---:|:---------------------------------------|--------:|--------:|--------:|--------:|:----------:|
+| 28A | Mixup α=0.2 (Zhang 2018 default)       |  0.9875 |   5.00% |  0.9834 | 100.00% | ✗ |
+| 28B | Mixup α=1.0                            |  0.9092 | 100.00% |  0.8924 | 100.00% | ✗ |
+| 28C | Mixup α=0.1                            |  0.9098 | 100.00% |  0.8627 | 100.00% | ✗ |
+| 28D | Mixup α=0.4                            |  0.9753 | 100.00% |  0.9141 | 100.00% | ✗ |
+| 28E | Mixup α=2.0                            |  0.9783 | 100.00% |  0.9671 | 100.00% | ✗ |
+| 28F | Mixup α=0.4 + cutmix-p=0.5 combo       |  0.9091 | 100.00% |  0.8984 | 100.00% | ✗ |
+
+26. **★ ALL 6 Mixup variants fail v15 ni_FAR (100%) — categorical CutMix
+    vs Mixup design difference.** Every α tested fails the v15
+    Normal/Invalid gate. Only α=0.2 holds v14 ni at 5% — a fragile
+    coincidence that explodes to 100% under v15 OOD pressure.
+    **Mechanism (paper §5 narrative)**: chip images are palette-graded
+    PNGs (pixel value 0 = Normal, 1–7 = defect intensity grade). Mixup
+    `λ·x_A + (1−λ)·x_B` synthesizes invalid intermediate grades (e.g.
+    grade 0 + grade 5 at λ=0.5 → quantized grade 3, an unrelated defect
+    intensity). Training on out-of-palette pixels with mixed labels
+    destroys Normal-vs-defect calibration at the rejection boundary.
+    CutMix preserves every pixel's palette grade — this is the
+    structural reason CutMix > Mixup on palette-graded multi-label,
+    **not a tuning question**.
+27. **Mixup+CutMix combo (28F) does NOT rescue Mixup.** α=0.4 +
+    cutmix-p=0.5 still hits v15 ni_FAR=100% on both eval sets. The
+    pixel-level α-blend contamination cannot be diluted by adding
+    CutMix — they don't cancel.
+
+_Source: outputs/iter28A..F/{eval_v14class,eval_v15direct}/preds_chip.parquet._
+
+## Iter 29 — label × spatial isolation (paper §5 evidence: 4 designs all necessary)
+
+Source: `iters/iter_28_29_paper_ablation.md`,
+`tables/paper_section5_ablation.csv`. Decomposes iter21E ★ winner into
+4 atomic design axes: **region paste vs pixel α-blend** + **full grid
+cover vs single rect** + **pair mask vs random partner** + **hard label
+vs soft λ-mix**. Three new trains complete the 6-cell label×spatial
+matrix (other 3 cells covered by iter21C/21D/21E).
+
+| tag | spec                                              | v14 bF1 | v14 ni% | v15 bF1 | v15 ni% | dual-pass? |
+|:---:|:--------------------------------------------------|--------:|--------:|--------:|--------:|:----------:|
+| 29A | std box-cut (single rect) + hard label            |  0.7381 | 100.00% |  0.7616 | 100.00% | ✗ |
+| 29B | complement g=2 + pair mask + soft LS=0.5          |  0.9921 | 100.00% |  0.9953 | 100.00% | ✗ (highest bF1, FAR fail) |
+| 29C | grid_complete g=2 + no pair mask + hard LS=1.0    |  0.9369 |   2.50% |  0.9248 | 100.00% | ✗ |
+
+### Paper §5 — 6-cell label × spatial matrix (final form)
+
+| spatial \ label | soft (λ-mix) | hard (both [A=1, B=1]) |
+|:---|:---|:---|
+| std box-cut (Yun 2019) | iter21C: v15 0.85/100% ✗ | iter29A: v15 0.76/100% ✗ |
+| grid_complete (no pair mask) | iter21D 18F1: v15 0.93/2.5% ✓ | iter29C: v15 0.92/100% ✗ |
+| complement + pair mask | iter29B: v15 0.99/100% ✗ | **iter21E ★: v15 0.97/3.75% ✓** |
+
+28. **★ Only iter21E ★ (complement + pair mask + hard label + full-cover)
+    clears both gates — every single-axis removal breaks the model.**
+    Region paste (vs pixel α-blend, iter28) + full cover (vs single rect,
+    iter29A) + pair mask (vs none, iter29C) + hard label (vs soft, iter29B
+    and iter21D) all four are necessary. **No single design choice is
+    dispensable.**
+29. **iter29B is the F1-trap warning — highest single-model v15 bit_F1
+    in entire chip-multilabel history (0.9953) but ni_FAR=100%.** Combining
+    full-cover complement + pair mask + soft λ-mix label perfectly fits
+    in-distribution paste signal but leaks Normal probability mass into
+    both defect bins. **F1-only winner ≠ deployable** — the cleanest
+    documented case that ni_FAR-blind metric optimization is a trap. Any
+    paper or report quoting only bit_F1 (without dual-eval ni_FAR) on
+    this design would mis-rank it as the new SOTA.
+30. **iter29A (std box-cut + hard label) collapses bit_F1 to 0.74–0.76
+    on both eval sets, ni_FAR=100%.** Single rectangular paste leaves
+    majority of chip un-touched; hard label says [A=1, B=1] but only
+    A's region was actually pasted — the calibration mismatch destroys
+    bit_F1 AND ni_FAR simultaneously. Hard label without full cover is
+    the worst combination.
+31. **iter29C (grid_complete + hard LS=1.0 NO pair mask) v14 ni passes
+    at 2.5% but v15 ni explodes to 100%.** Removing pair mask while
+    keeping hard label creates ambiguous mixed-class regions that confuse
+    the OOD-rejection boundary. Pair mask is the OOD-stability anchor —
+    not just a bit_F1 lever.
+
+_Source: outputs/iter29A_box_hard, iter29B_compl_g2_softLS05,
+iter29C_grid_hard_LS10/{eval_v14class,eval_v15direct}/._

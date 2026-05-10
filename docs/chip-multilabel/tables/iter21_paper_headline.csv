@@ -1,0 +1,7 @@
+model,eval,bit_F1,ni_FAR,F1_bank_boundary,F1_fork,F1_scratch,F1_scratch_rot,note
+12-T5_baseline,v14class,0.9745,1.0000,,,,,no-Normal no-CutMix collapsed N/I gate
+12-T5_baseline,v15direct,0.7872,0.0000,0.8612,0.9298,0.5841,0.7739,baseline drops 0.187 under OOD pressure
+19C_FCM_PM,v14class,0.9913,0.0000,,,,,T7N + complement CutMix g=2 LS=1.0 FCM-PM
+19C_FCM_PM,v15direct,0.9691,0.0375,0.9905,0.9644,0.9439,0.9776,winner — only single model passing both eval gates
+delta_19C_minus_12T5,v14class,0.0168,-1.0000,,,,,bit_F1 +0.017 ni_FAR -100%
+delta_19C_minus_12T5,v15direct,0.1819,0.0375,0.1293,0.0346,0.3598,0.2037,bit_F1 +0.182 fork +0.035 scratch +0.360 scratch_rot +0.204

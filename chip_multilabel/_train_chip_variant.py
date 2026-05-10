@@ -54,8 +54,12 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 
 
 class ChipFolderDataset(Dataset):
-    def __init__(self, samples: List[Tuple[Path, int]], img_size: int, train: bool):
+    def __init__(self, samples: List[Tuple[Path, int]], img_size: int, train: bool,
+                 teacher_prob_map: dict | None = None):
         self.samples = samples
+        # 260509 — KD support. Maps str(path) -> np.ndarray(4,) teacher sigmoid probs.
+        # If None or path missing, yields zero-vector (loop skips KD term via flag check).
+        self.teacher_prob_map = teacher_prob_map or {}
         if train:
             # NOTE: Rotation + Flip 영구 제거 (사용자 directive 260505) —
             # scratch ↔ scratch_rot 두 class 가 회전/반사 으로 구분되므로 rotation
@@ -83,53 +87,120 @@ class ChipFolderDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, i: int):
-        p, y = self.samples[i]
-        img = Image.open(p).convert("RGB")
-        return self.tf(img), y
+        # 260508: samples is List[Tuple[Path, int, np.ndarray(4,)]] — y_int + multihot
+        # 260509: dataset returns 4-tuple (x, y, mh, teacher_prob).  teacher_prob is
+        # zero-vector when no map / chip_path missing — loop checks args.kd_teacher_probs flag.
+        rec = self.samples[i]
+        if len(rec) == 3:
+            p, y, mh = rec
+            img = Image.open(p).convert("RGB")
+            mh_t = torch.from_numpy(mh.astype(np.float32))
+        else:
+            p, y = rec  # backward compat (shouldn't happen post-260508)
+            img = Image.open(p).convert("RGB")
+            mh_t = torch.zeros(len(TRAIN_CLASSES), dtype=torch.float32)
+        tp_arr = self.teacher_prob_map.get(str(p))
+        if tp_arr is None:
+            tp_t = torch.zeros(len(TRAIN_CLASSES), dtype=torch.float32)
+        else:
+            tp_t = torch.from_numpy(tp_arr.astype(np.float32))
+        return self.tf(img), y, mh_t, tp_t
 
 
 NORMAL_SENTINEL = -1  # 260506 — Normal class y label (multi-hot target = all zeros)
+MULTI_COMBO_SENTINEL = -2  # 260508 — multi-combo (2/3-class) chip; multi-hot target from folder name
 
 
-def collect_samples(root: Path, include_normal: bool = True) -> List[Tuple[Path, int]]:
-    """Collect train samples. y >= 0 = TRAIN_CLASSES index. y = NORMAL_SENTINEL = Normal (no defect).
+def _multihot_from_combo_name(name: str) -> np.ndarray:
+    """'fork+scratch' → [0,1,1,0]. Order = TRAIN_CLASSES."""
+    mh = np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
+    for tok in name.split("+"):
+        if tok in TRAIN_CLASSES:
+            mh[TRAIN_CLASSES.index(tok)] = 1
+        else:
+            raise ValueError(f"unknown class token '{tok}' in combo name '{name}'")
+    return mh
 
-    Normal/ folder is OPTIONAL — if present and include_normal=True, all chips load with y=-1
-    so multi-hot target becomes [0,0,0,0] (BCE pulls all sigmoids down → "Normal" representation).
+
+def collect_samples(root: Path, include_normal: bool = True,
+                    multi_combo_root: Path | None = None,
+                    multi_combo_n_per_class: int | None = None,
+                    rng_seed: int = 42) -> List[Tuple[Path, int, np.ndarray]]:
+    """Collect train samples.
+
+    260508: returns List of (path, y_int, multihot 4-d).
+    - single class: y = TRAIN_CLASSES.index(cname), multihot = one-hot
+    - Normal: y = NORMAL_SENTINEL (-1), multihot = [0,0,0,0]
+    - multi-combo (NEW): y = MULTI_COMBO_SENTINEL (-2), multihot = parsed from folder name
     """
-    out: List[Tuple[Path, int]] = []
+    out: List[Tuple[Path, int, np.ndarray]] = []
     for ci, cname in enumerate(TRAIN_CLASSES):
         d = root / cname
         if not d.exists():
             raise FileNotFoundError(f"missing class dir: {d}")
+        mh = np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
+        mh[ci] = 1
         for png in sorted(d.glob("*.png")):
-            out.append((png, ci))
+            out.append((png, ci, mh.copy()))
     if include_normal:
         nd = root / "Normal"
         if nd.exists():
             n_normal = 0
+            mh_zero = np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
             for png in sorted(nd.glob("*.png")):
-                out.append((png, NORMAL_SENTINEL))
+                out.append((png, NORMAL_SENTINEL, mh_zero.copy()))
                 n_normal += 1
             if n_normal > 0:
                 print(f"[data] including {n_normal} Normal chips (y=-1 sentinel, multi-hot target [0,0,0,0])")
+    # 260508 — multi-combo master folder (10 combo × N chip)
+    if multi_combo_root is not None:
+        if not multi_combo_root.exists():
+            raise FileNotFoundError(f"multi-combo root not found: {multi_combo_root}")
+        rng = np.random.default_rng(rng_seed)
+        n_total = 0
+        for cdir in sorted(multi_combo_root.iterdir()):
+            if not cdir.is_dir() or cdir.name.startswith("_"):
+                continue
+            if "+" not in cdir.name:
+                continue   # not a combo folder
+            try:
+                mh = _multihot_from_combo_name(cdir.name)
+            except ValueError as e:
+                print(f"[data] WARN skipping {cdir.name}: {e}")
+                continue
+            files = sorted(cdir.glob("*.png"))
+            if multi_combo_n_per_class is not None and len(files) > multi_combo_n_per_class:
+                idx = rng.choice(len(files), size=multi_combo_n_per_class, replace=False)
+                files = [files[i] for i in sorted(idx)]
+            for png in files:
+                out.append((png, MULTI_COMBO_SENTINEL, mh.copy()))
+                n_total += 1
+        print(f"[data] including {n_total} multi-combo chips from {multi_combo_root} "
+              f"(y=-2 sentinel, multi-hot from folder name)")
     return out
 
 
-def stratified_split(samples: List[Tuple[Path, int]], val_ratio: float = 0.2, seed: int = 42):
+def stratified_split(samples: List[Tuple[Path, int, np.ndarray]],
+                     val_ratio: float = 0.2, seed: int = 42):
+    """Stratify by combined (y_int, multi-hot tuple) — multi-combo classes split per-combo."""
     by = {}
-    for p, y in samples:
-        by.setdefault(y, []).append(p)
+    for rec in samples:
+        p = rec[0]
+        y = rec[1]
+        mh = rec[2] if len(rec) > 2 else np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
+        # stratify key = y for single + Normal, mh tuple for multi-combo
+        key = y if y >= -1 else tuple(mh.tolist())
+        by.setdefault(key, []).append((p, y, mh))
     rng = np.random.default_rng(seed)
     train, val = [], []
-    for y, paths in by.items():
-        idx = list(range(len(paths)))
+    for key, recs in by.items():
+        idx = list(range(len(recs)))
         rng.shuffle(idx)
-        n_val = max(1, int(round(len(paths) * val_ratio)))
+        n_val = max(1, int(round(len(recs) * val_ratio)))
         for i in idx[:n_val]:
-            val.append((paths[i], y))
+            val.append(recs[i])
         for i in idx[n_val:]:
-            train.append((paths[i], y))
+            train.append(recs[i])
     return train, val
 
 
@@ -185,19 +256,38 @@ def evaluate(model, loader, device, num_classes: int):
     total_normal = 0
     use_amp = device.type == "cuda"
     NORMAL_MAX_PROB = 0.5  # Normal correct if max sigmoid < 0.5
-    for x, y in loader:
+    for batch in loader:
+        # 260508 — 3-tuple (x, y, mh).  260509 — 4-tuple adds teacher_prob (val skips KD).
+        if len(batch) == 4:
+            x, y, mh, _tp = batch  # val: drop teacher_prob (KD is training-only)
+            mh = mh.to(device, non_blocking=True)
+        elif len(batch) == 3:
+            x, y, mh = batch
+            mh = mh.to(device, non_blocking=True)
+        else:
+            x, y = batch
+            mh = None
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             logits = model(x)
-        # defect: argmax accuracy
+        # defect: argmax accuracy (single class only — y >= 0)
         defect_mask = (y >= 0)
         if defect_mask.any():
             pred = logits[defect_mask].argmax(dim=1)
             correct += int((pred == y[defect_mask]).sum())
             total += int(defect_mask.sum())
+        # multi-combo (y == -2): multi-hot subset accuracy (all bits correct via 0.5 threshold)
+        if mh is not None:
+            multi_mask = (y == MULTI_COMBO_SENTINEL)
+            if multi_mask.any():
+                probs = torch.sigmoid(logits[multi_mask])
+                pred_bin = (probs >= 0.5).float()
+                exact = (pred_bin == mh[multi_mask]).all(dim=1)
+                correct += int(exact.sum())
+                total += int(multi_mask.sum())
         # Normal: max sigmoid < threshold = correct
-        normal_mask = (y < 0)
+        normal_mask = (y == NORMAL_SENTINEL)
         if normal_mask.any():
             probs = torch.sigmoid(logits[normal_mask])
             max_p = probs.max(dim=1).values
@@ -248,6 +338,13 @@ def main():
     ap.add_argument("--no-normal", action="store_true",
                     help="Skip classification_chips/Normal/ folder. 4-class defect only "
                          "(traditional baseline / ablation). Default: include Normal as y=-1 sentinel.")
+    # 260508 — multi-combo training data (iter 17B)
+    ap.add_argument("--multi-combo-root", type=str, default="",
+                    help="Path to multi-combo master folder (e.g. "
+                         "D:/project/data/wm-811k/chip_multilabel_synth). 10 combo subdirs (2+3-class). "
+                         "Empty = off. Adds multi-hot supervision for compositional generalization (iter 17B).")
+    ap.add_argument("--multi-combo-n-per-class", type=int, default=50,
+                    help="N chip per multi-combo class (10 combo). default 50.")
     ap.add_argument("--cutmix-pair-bias", type=str, default="",
                     help="Bias CutMix pair sampling. Format 'C1,C2:K' — fork↔scratch pair "
                          "K× more likely than uniform. e.g., 'fork,scratch:2' → ~67%% of CutMix "
@@ -258,11 +355,43 @@ def main():
                     help="rectangle area fraction for CutMix paste (default 0.5 = half-image).")
     # iter 12 (260506) — scattered CutMix + soft proportional label
     ap.add_argument("--cutmix-mode", type=str, default="single",
-                    choices=["single", "scattered"],
+                    choices=["single", "scattered", "grid", "grid_sparse",
+                             "grid_complete", "complement", "mixup"],
                     help="CutMix mode. 'single' (default) = original random rectangle "
                          "(OR multi-hot label or soft λ for CE-soft). "
                          "'scattered' = N small patches + soft proportional label "
-                         "label_B = ratio × discount × alpha (iter 12, paper-quality).")
+                         "label_B = ratio × discount × alpha (iter 12, paper-quality). "
+                         "'grid' = 8×8 binary mask (50% prob per cell) — fine-grained "
+                         "spatial mixing, area-proportional soft label (260507). "
+                         "'grid_sparse' (260508) = K random cells from 8×8 grid "
+                         "(grid + scatter mix). soft proportional label. "
+                         "'grid_complete' (260508) = deterministic 50/50 split — "
+                         "32 cells of 64 = chip A, other 32 = chip B. "
+                         "FULL chip cover, no white space, label exactly [0.5, 0.5]. "
+                         "Fixes the 'paste rect maybe whitespace, not defect' problem.")
+    ap.add_argument("--cutmix-grid-k", type=int, default=8,
+                    help="Number of cells to flip for grid_sparse mode (default 8 of 64). "
+                         "Scattered patches but grid-aligned. Used only when "
+                         "--cutmix-mode=grid_sparse.")
+    ap.add_argument("--cutmix-complete-label-scale", type=float, default=0.5,
+                    help="Label scale for grid_complete / complement mode (260508). "
+                         "0.5 = soft proportional (area-based), "
+                         "0.75 = intermediate, "
+                         "1.0 = hard (both defects fully present, justified by complete cover). "
+                         "Used only when --cutmix-mode=grid_complete OR complement + multi_hot target.")
+    ap.add_argument("--cutmix-n-groups", type=int, default=2,
+                    help="N groups for complement mode (260508). 2/3/4. "
+                         "1 pair (chip A + B) → N mix chips + N mask chips (paired) = 2N samples. "
+                         "All cells of A and B distributed across N mix chips (no info loss). "
+                         "Used only when --cutmix-mode=complement.")
+    ap.add_argument("--cutmix-label-area-prop", action="store_true",
+                    help="Use area-proportional label for complement mode: "
+                         "A=a_frac*scale, B=b_frac*scale (vs default symmetric A=B=scale). "
+                         "a_frac=1/n_groups, b_frac=(n_groups-1)/n_groups. paper §6.13 ablation.")
+    ap.add_argument("--cutmix-ab-labels", type=str, default="",
+                    help="Explicit (A_label, B_label) for complement mode. Format 'A,B' "
+                         "e.g., '1.0,0.5' (A hard, B half). Overrides --cutmix-complete-label-scale "
+                         "and --cutmix-label-area-prop. paper §6.16 asymmetric axis.")
     ap.add_argument("--cutmix-n-patches", type=int, default=5,
                     help="Number of small patches for scattered mode (default 5). "
                          "Used only when --cutmix-mode=scattered.")
@@ -275,6 +404,25 @@ def main():
     ap.add_argument("--cutmix-alpha", type=float, default=1.0,
                     help="Additional soft label scale for scattered mode. Sweepable axis #2. "
                          "label_B = total_ratio × discount × alpha. e.g., r=0.3, α=1.0 → 0.21.")
+    # 260507 — grid mode cell-flip probability (sweepable)
+    ap.add_argument("--cutmix-grid-prob", type=float, default=0.5,
+                    help="Per-cell flip probability for grid CutMix mode (default 0.5). "
+                         "0.5 ≈ 50% area mixed (32/64 cells), 0.25 ≈ 25% (16/64), "
+                         "0.125 ≈ 12.5% (8/64). Used only when --cutmix-mode=grid.")
+    # 260508 — paired CutMix: 동일 rect 영역을 mask 한 paired sample 도 forward.
+    # disentangle "mask location prior" from "actual content signal" (counterfactual augmentation).
+    ap.add_argument("--cutmix-pair", type=str, default="none", choices=["none", "masked"],
+                    help="If 'masked', for each CutMix sample also produce a paired sample with "
+                         "same rect masked (chip B 무관, fill=corner mean). Both forwarded; "
+                         "loss = loss_mix + w * loss_masked. Forces model to read content "
+                         "rather than rely on mask-location prior. Single mode only.")
+    ap.add_argument("--cutmix-pair-loss-w", type=float, default=1.0,
+                    help="Loss weight for the masked pair forward. default 1.0 (equal weight).")
+    ap.add_argument("--cutmix-pair-fill", type=str, default="corner",
+                    choices=["corner", "white", "noise"],
+                    help="Fill for the masked rect. 'corner' = chip's own top-left 8×8 mean "
+                         "(natural background match). 'white' = palette grade-0 hardcoded "
+                         "(post-norm ~2.25). 'noise' = gaussian random.")
     ap.add_argument("--asl-gpos", type=float, default=1.0,
                     help="ASL gamma_pos (T4 only). default 1.0 (Ridnik 2021).")
     ap.add_argument("--asl-gneg", type=float, default=4.0,
@@ -285,11 +433,35 @@ def main():
                     help="BCE pos_weight per-class. Format 'IDX:W,IDX:W' or 'NAME:W,NAME:W'. "
                          "e.g., '1:2.0' (fork=2x) or 'fork:2.0,scratch_rot:1.5'. Only used by "
                          "T5/T7 (BCE-based variants). B+1 260507 — fork+sr 2-combo recall fix.")
+    # 260509 — Knowledge Distillation (iter32) flags
+    ap.add_argument("--kd-teacher-probs", type=str, default="",
+                    help="Path to teacher probs parquet (chip_path → 4-bit prob). "
+                         "If set, enables KD loss (Yang 2023 multi-label per-class binary KL).")
+    ap.add_argument("--kd-alpha", type=float, default=0.5,
+                    help="KD loss mix weight: L = alpha*L_hard + (1-alpha)*L_KD. (Hinton 2015)")
+    ap.add_argument("--kd-temperature", type=float, default=4.0,
+                    help="KD temperature T (default 4.0). L_KD scaled by T^2.")
+    ap.add_argument("--kd-skip-on-cutmix", action="store_true",
+                    help="Skip KD term when CutMix is applied to a sample. v1 simpler default.")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
+
+    # 260509 — load teacher probs for KD (iter32). Empty dict if --kd-teacher-probs not set.
+    teacher_prob_map: dict = {}
+    if args.kd_teacher_probs:
+        import pandas as _pd
+        df_kd = _pd.read_parquet(args.kd_teacher_probs)
+        prob_cols = [f"teacher_prob_{c}" for c in TRAIN_CLASSES]
+        for _, row in df_kd.iterrows():
+            teacher_prob_map[str(row["chip_path"])] = np.array(
+                [float(row[col]) for col in prob_cols], dtype=np.float32
+            )
+        print(f"[kd] loaded {len(teacher_prob_map)} teacher probs from "
+              f"{args.kd_teacher_probs}  alpha={args.kd_alpha} T={args.kd_temperature} "
+              f"skip_on_cutmix={args.kd_skip_on_cutmix}")
 
     ts = datetime.now().strftime("%y%m%d_%H%M%S")
     name = args.variant if not args.tag else f"{args.variant}_{args.tag}"
@@ -297,7 +469,11 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[train {args.variant}] device={device}  out={out_dir}")
-    samples = collect_samples(Path(args.data_root), include_normal=not args.no_normal)
+    multi_combo_root = Path(args.multi_combo_root) if args.multi_combo_root else None
+    samples = collect_samples(Path(args.data_root), include_normal=not args.no_normal,
+                              multi_combo_root=multi_combo_root,
+                              multi_combo_n_per_class=args.multi_combo_n_per_class,
+                              rng_seed=args.seed)
     train_samples, val_samples = stratified_split(samples, val_ratio=0.2, seed=args.seed)
     print(f"[train] data: train={len(train_samples)} val={len(val_samples)} classes={TRAIN_CLASSES}")
 
@@ -310,8 +486,10 @@ def main():
     if ema is not None:
         print(f"[train] EMA enabled, target decay = {args.ema_decay}")
 
-    train_ds = ChipFolderDataset(train_samples, img_size, train=True)
-    val_ds = ChipFolderDataset(val_samples, img_size, train=False)
+    train_ds = ChipFolderDataset(train_samples, img_size, train=True,
+                                 teacher_prob_map=teacher_prob_map)
+    val_ds = ChipFolderDataset(val_samples, img_size, train=False,
+                               teacher_prob_map=teacher_prob_map)
     train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
                               num_workers=args.num_workers, drop_last=False)
     val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False,
@@ -363,6 +541,17 @@ def main():
                   f"n_patches={args.cutmix_n_patches} total_ratio={args.cutmix_total_ratio} "
                   f"discount={args.cutmix_discount} alpha={args.cutmix_alpha} "
                   f"-> soft label_B={soft_b:.4f}")
+        elif args.cutmix_mode == "grid":
+            print(f"[train] CutMix enabled mode=grid p={args.cutmix_p} "
+                  f"GRID=8x8 grid_prob={args.cutmix_grid_prob} "
+                  f"-> expected ratio≈{args.cutmix_grid_prob}")
+        elif args.cutmix_mode == "complement":
+            print(f"[train] CutMix enabled mode=complement p={args.cutmix_p} "
+                  f"n_groups={args.cutmix_n_groups} pair={args.cutmix_pair} "
+                  f"label_scale={args.cutmix_complete_label_scale}")
+        elif args.cutmix_mode in ("grid_complete", "grid_sparse"):
+            print(f"[train] CutMix enabled mode={args.cutmix_mode} p={args.cutmix_p} "
+                  f"label_scale={args.cutmix_complete_label_scale}")
         else:
             print(f"[train] CutMix enabled mode=single p={args.cutmix_p} "
                   f"rect={args.cutmix_rect}")
@@ -410,19 +599,35 @@ def main():
         running = 0.0
         nb = 0
         optim.zero_grad()
-        for step, (x, y) in enumerate(train_loader):
+        for step, batch in enumerate(train_loader):
+            # 260508 — dataset returns 3-tuple (x, y, mh).  260509 — 4-tuple adds teacher_prob.
+            if len(batch) == 4:
+                x, y, mh, teacher_prob = batch
+                teacher_prob = teacher_prob.to(device, non_blocking=True)
+            else:
+                x, y, mh = batch
+                teacher_prob = None
             x = x.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
+            mh = mh.to(device, non_blocking=True)
+            # 260508 paired CutMix: x_masked + tgt_masked tracked for dual forward
+            x_masked = None
+            tgt_masked = None
+            # 260509 KD: track whether cutmix actually applied (for --kd-skip-on-cutmix).
+            # Set True inside CutMix branches when valid_mask.any() triggers.
+            cutmix_applied = False
             if target_kind in ("multi_hot", "soft_multihot"):
-                tgt = torch.zeros(y.size(0), len(TRAIN_CLASSES), device=device)
-                # Normal sentinel y=-1 → tgt stays all zeros (multi-hot Normal). Defect y>=0 → one-hot.
-                defect_mask = (y >= 0)
-                if defect_mask.any():
-                    di = defect_mask.nonzero(as_tuple=True)[0]
-                    tgt[di, y[di]] = 1.0
+                # 260508 — initialize tgt from multi-hot directly (handles single + Normal + multi-combo).
+                # Single class (y >= 0): mh is one-hot → tgt[i, y[i]] = 1
+                # Normal (y == -1): mh is [0,0,0,0]
+                # Multi-combo (y == -2): mh has 2-3 bits set
+                tgt = mh.float().clone()
                 # CutMix: with prob cutmix_p, paste rectangle from another sample
                 # with different class. Target rules differ by kind:
-                #   multi_hot: BCE — OR of two one-hots (sum=2 for mixed; Normal contributes zero row)
+                #   multi_hot:    BCE — soft proportional (260508 fix): A=lam, B=1-lam (lam=A area ratio).
+                #                       previously: hard OR (1.0 both bits) — overcounts (50% paste → 100% A AND 100% B).
+                #                       fix: paste 50% of B → A bit=0.5, B bit=0.5. paste 25% of B → A=0.75, B=0.25.
+                #                       model learns "bit confidence ∝ defect area" not "fire on any glimpse".
                 #   soft_multihot: CE soft — λ*A + (1-λ)*B (sums to 1, λ from area)
                 if args.cutmix_p > 0 and float(np.random.rand()) < args.cutmix_p:
                     bs = y.size(0)
@@ -461,10 +666,38 @@ def main():
                     both_defect = (y >= 0) & (y[perm] >= 0)
                     valid_mask = diff_class_mask & both_defect
                     if valid_mask.any():
+                        cutmix_applied = True   # 260509 — KD skip flag
+
                         H, W = x.size(-2), x.size(-1)
-                        if args.cutmix_mode == "scattered":
-                            # iter 12 (260506) — scattered patches + soft proportional label.
-                            # label_B = ratio × discount × alpha (continuous, BCE-friendly).
+                        # 260508 paired CutMix: capture pre-mix copies + collect rects (all 3 modes)
+                        do_pair = (args.cutmix_pair == "masked")
+                        if do_pair:
+                            x_pre = x.clone()
+                            tgt_pre = tgt.clone()
+                            masked_rects = [[] for _ in range(bs)]   # bi → [(y0,y1,x0,x1), ...]
+
+                        if args.cutmix_mode == "mixup":
+                            # 260509 — Mixup (Zhang 2018): pixel α-blend + linear label combination.
+                            # NOTE: chip palette discrete grade {0..7} → blend creates mid-values
+                            # (e.g., 0.7*grade1 + 0.3*grade5 = grade2.2 non-palette). paper-grade
+                            # ablation only — expected to underperform vs FCM-PM region paste.
+                            alpha_mp = float(args.cutmix_alpha) if args.cutmix_alpha > 0 else 0.2
+                            lam = float(np.random.beta(alpha_mp, alpha_mp))
+                            x_new = lam * x + (1.0 - lam) * x[perm]
+                            x = x_new
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    continue
+                                a_class = int(y[bi].item())
+                                b_class = int(y[perm[bi]].item())
+                                if target_kind == "soft_multihot":
+                                    tgt[bi, a_class] = lam
+                                    tgt[bi, b_class] = max(tgt[bi, b_class].item(), 1.0 - lam)
+                                else:
+                                    tgt[bi, a_class] = max(tgt[bi, a_class].item(), lam)
+                                    tgt[bi, b_class] = max(tgt[bi, b_class].item(), 1.0 - lam)
+                            do_pair = False  # mixup has no pair mask concept
+                        elif args.cutmix_mode == "scattered":
                             n_patches = max(1, int(args.cutmix_n_patches))
                             total_ratio = max(1e-4, float(args.cutmix_total_ratio))
                             patch_area_each = (total_ratio * H * W) / n_patches
@@ -488,19 +721,214 @@ def main():
                                       cx_k:cx_k + patch_side] = \
                                         x[perm[bi], :, cy_k:cy_k + patch_side,
                                           cx_k:cx_k + patch_side]
+                                    if do_pair:
+                                        masked_rects[bi].append(
+                                            (cy_k, cy_k + patch_side, cx_k, cx_k + patch_side))
                                 a_class = int(y[bi].item())
                                 b_class = int(y[perm[bi]].item())
                                 if target_kind == "soft_multihot":
-                                    # CE soft: cap at 0.5 to keep A dominant
                                     lam_b = min(soft_label_b, 0.5)
                                     tgt[bi, a_class] = 1.0 - lam_b
                                     tgt[bi, b_class] = lam_b
                                 else:
-                                    # BCE multi-hot: soft proportional (NOT OR)
-                                    # tgt[bi, a_class] stays 1.0; B gets continuous soft label
-                                    tgt[bi, b_class] = soft_label_b
+                                    # 260508 fix — soft proportional for BCE multi_hot too
+                                    tgt[bi, a_class] = 1.0 - actual_ratio
+                                    tgt[bi, b_class] = actual_ratio
+                        elif args.cutmix_mode == "grid":
+                            GRID = 8
+                            cell_h = H // GRID
+                            cell_w = W // GRID
+                            grid_prob = float(args.cutmix_grid_prob)
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    continue
+                                actual_total = 0
+                                for gi in range(GRID):
+                                    for gj in range(GRID):
+                                        if float(np.random.rand()) < grid_prob:
+                                            y0 = gi * cell_h
+                                            y1 = (gi + 1) * cell_h if gi < GRID - 1 else H
+                                            x0 = gj * cell_w
+                                            x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
+                                            x[bi, :, y0:y1, x0:x1] = \
+                                                x[perm[bi], :, y0:y1, x0:x1]
+                                            actual_total += (y1 - y0) * (x1 - x0)
+                                            if do_pair:
+                                                masked_rects[bi].append((y0, y1, x0, x1))
+                                actual_ratio = float(actual_total) / float(H * W)
+                                a_class = int(y[bi].item())
+                                b_class = int(y[perm[bi]].item())
+                                if target_kind == "soft_multihot":
+                                    lam_b = min(actual_ratio, 0.5)
+                                    tgt[bi, a_class] = 1.0 - lam_b
+                                    tgt[bi, b_class] = lam_b
+                                else:
+                                    # 260508 fix — soft proportional for BCE multi_hot too
+                                    tgt[bi, a_class] = 1.0 - actual_ratio
+                                    tgt[bi, b_class] = actual_ratio
+                        elif args.cutmix_mode == "complement":
+                            # 260508 — Complement CutMix (★ user-designed)
+                            # 1 pair (A,B) → N mix chips + N mask chips = 2N samples per pair.
+                            # Each mix_i = chip A의 group_i cells + chip B의 (other groups) cells.
+                            # All cells of A and B distributed across N mix chips → no information loss.
+                            # mask_i = mix_i with B-cells filled with corner_mean of A → label [A only].
+                            # n_groups = 2/3/4. label_scale = 0.5/0.75/1.0 etc.
+                            # NOTE: bypasses standard pair logic (do_pair from outer scope) —
+                            # complement has its own paired branch built-in via mask chips.
+                            GRID = 8
+                            n_cells = GRID * GRID
+                            n_groups = max(2, min(int(args.cutmix_n_groups), 8))
+                            cells_per_group = n_cells // n_groups
+                            label_scale = float(args.cutmix_complete_label_scale)
+                            cell_h = H // GRID
+                            cell_w = W // GRID
+                            include_mask = (args.cutmix_pair == "masked")
+                            corner_per_chip = x[:, :, :8, :8].mean(dim=(2, 3), keepdim=True)
+                            new_x: List[torch.Tensor] = []
+                            new_tgt: List[torch.Tensor] = []
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    new_x.append(x[bi:bi+1])
+                                    new_tgt.append(tgt[bi:bi+1])
+                                    continue
+                                a_cls = int(y[bi].item())
+                                b_cls = int(y[perm[bi]].item())
+                                chip_a = x[bi]
+                                chip_b = x[perm[bi]]
+                                cor_a = corner_per_chip[bi]
+                                # partition 64 cells into n_groups (random, leftover → last group)
+                                perm_cells = np.random.permutation(n_cells)
+                                groups = [perm_cells[i*cells_per_group:(i+1)*cells_per_group].tolist()
+                                          for i in range(n_groups)]
+                                leftover = perm_cells[cells_per_group * n_groups:].tolist()
+                                if leftover:
+                                    groups[-1].extend(leftover)
+                                for i in range(n_groups):
+                                    # mix_i: B base, A's group_i cells overwritten
+                                    mix = chip_b.clone()
+                                    for ci in groups[i]:
+                                        gi, gj = int(ci) // GRID, int(ci) % GRID
+                                        y0 = gi * cell_h
+                                        y1 = (gi + 1) * cell_h if gi < GRID - 1 else H
+                                        x0 = gj * cell_w
+                                        x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
+                                        mix[:, y0:y1, x0:x1] = chip_a[:, y0:y1, x0:x1]
+                                    new_x.append(mix.unsqueeze(0))
+                                    mix_t = torch.zeros(len(TRAIN_CLASSES), device=device)
+                                    if args.cutmix_ab_labels:
+                                        # paper §6.16: explicit asymmetric (A_label, B_label)
+                                        a_lbl, b_lbl = [float(v) for v in args.cutmix_ab_labels.split(',')]
+                                        mix_t[a_cls] = a_lbl
+                                        mix_t[b_cls] = b_lbl
+                                    elif args.cutmix_label_area_prop:
+                                        # paper §6.13: area-proportional label
+                                        # a_frac = 1/n_groups (A occupies group_i only)
+                                        # b_frac = (n_groups-1)/n_groups (B occupies other groups)
+                                        a_frac = 1.0 / float(n_groups)
+                                        b_frac = (float(n_groups) - 1.0) / float(n_groups)
+                                        mix_t[a_cls] = a_frac * label_scale
+                                        mix_t[b_cls] = b_frac * label_scale
+                                    else:
+                                        mix_t[a_cls] = label_scale
+                                        mix_t[b_cls] = label_scale
+                                    new_tgt.append(mix_t.unsqueeze(0))
+                                    if include_mask:
+                                        # mask_i: mix_i with B-cells (other groups) filled corner_a → A only
+                                        mask = mix.clone()
+                                        for j in range(n_groups):
+                                            if j == i:
+                                                continue
+                                            for ci in groups[j]:
+                                                gi, gj = int(ci) // GRID, int(ci) % GRID
+                                                y0 = gi * cell_h
+                                                y1 = (gi + 1) * cell_h if gi < GRID - 1 else H
+                                                x0 = gj * cell_w
+                                                x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
+                                                mask[:, y0:y1, x0:x1] = cor_a
+                                        new_x.append(mask.unsqueeze(0))
+                                        mask_t = torch.zeros(len(TRAIN_CLASSES), device=device)
+                                        if args.cutmix_ab_labels:
+                                            a_lbl, _ = [float(v) for v in args.cutmix_ab_labels.split(',')]
+                                            mask_t[a_cls] = a_lbl
+                                        else:
+                                            mask_t[a_cls] = label_scale
+                                        new_tgt.append(mask_t.unsqueeze(0))
+                            # rebuild x and tgt from collected samples
+                            x = torch.cat(new_x, dim=0)
+                            tgt = torch.cat(new_tgt, dim=0)
+                            do_pair = False  # complement has its own paired branch (mask chips)
+                        elif args.cutmix_mode == "grid_complete":
+                            # 260508 — deterministic 50/50 split, full chip cover
+                            # 64 cells = 32 chip A + 32 chip B (no whitespace, both defects fully present)
+                            GRID = 8
+                            n_cells = GRID * GRID
+                            half = n_cells // 2
+                            cell_h = H // GRID
+                            cell_w = W // GRID
+                            label_scale = float(args.cutmix_complete_label_scale)
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    continue
+                                b_cells = np.random.choice(n_cells, size=half, replace=False)
+                                for ci in b_cells:
+                                    gi = int(ci) // GRID
+                                    gj = int(ci) % GRID
+                                    y0 = gi * cell_h
+                                    y1 = (gi + 1) * cell_h if gi < GRID - 1 else H
+                                    x0 = gj * cell_w
+                                    x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
+                                    x[bi, :, y0:y1, x0:x1] = \
+                                        x[perm[bi], :, y0:y1, x0:x1]
+                                    if do_pair:
+                                        masked_rects[bi].append((y0, y1, x0, x1))
+                                a_class = int(y[bi].item())
+                                b_class = int(y[perm[bi]].item())
+                                if target_kind == "soft_multihot":
+                                    # CE-soft (sums to 1) — fixed 0.5/0.5
+                                    tgt[bi, a_class] = 0.5
+                                    tgt[bi, b_class] = 0.5
+                                else:
+                                    # multi_hot (BCE) — configurable scale
+                                    # justified by complete cover: both defects' full structure visible
+                                    tgt[bi, a_class] = label_scale
+                                    tgt[bi, b_class] = label_scale
+                        elif args.cutmix_mode == "grid_sparse":
+                            # 260508 grid + scatter mix: K random cells from 8×8 grid
+                            GRID = 8
+                            cell_h = H // GRID
+                            cell_w = W // GRID
+                            k_cells = max(1, min(int(args.cutmix_grid_k), GRID * GRID))
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    continue
+                                # pick K random unique (gi, gj) pairs from 8×8 grid
+                                cell_idx = np.random.choice(GRID * GRID, size=k_cells, replace=False)
+                                actual_total = 0
+                                for ci in cell_idx:
+                                    gi = int(ci) // GRID
+                                    gj = int(ci) % GRID
+                                    y0 = gi * cell_h
+                                    y1 = (gi + 1) * cell_h if gi < GRID - 1 else H
+                                    x0 = gj * cell_w
+                                    x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
+                                    x[bi, :, y0:y1, x0:x1] = \
+                                        x[perm[bi], :, y0:y1, x0:x1]
+                                    actual_total += (y1 - y0) * (x1 - x0)
+                                    if do_pair:
+                                        masked_rects[bi].append((y0, y1, x0, x1))
+                                actual_ratio = float(actual_total) / float(H * W)
+                                a_class = int(y[bi].item())
+                                b_class = int(y[perm[bi]].item())
+                                if target_kind == "soft_multihot":
+                                    lam_b = min(actual_ratio, 0.5)
+                                    tgt[bi, a_class] = 1.0 - lam_b
+                                    tgt[bi, b_class] = lam_b
+                                else:
+                                    # 260508 fix — soft proportional for BCE multi_hot too
+                                    tgt[bi, a_class] = 1.0 - actual_ratio
+                                    tgt[bi, b_class] = actual_ratio
                         else:
-                            # single mode — original CutMix (OR for BCE, λ for CE-soft)
+                            # single mode — soft proportional CutMix (260508 fix)
                             side = int(round(float(args.cutmix_rect) ** 0.5 * H))
                             side = max(1, min(side, H - 1))
                             cy = int(np.random.randint(0, H - side + 1))
@@ -511,19 +939,82 @@ def main():
                                     continue
                                 x[bi, :, cy:cy + side, cx:cx + side] = \
                                     x[perm[bi], :, cy:cy + side, cx:cx + side]
+                                if do_pair:
+                                    masked_rects[bi].append((cy, cy + side, cx, cx + side))
+                                a = int(y[bi].item())
+                                b = int(y[perm[bi]].item())
                                 if target_kind == "soft_multihot":
-                                    a = int(y[bi].item())
-                                    b = int(y[perm[bi]].item())
                                     tgt[bi, a] = lam
                                     tgt[bi, b] = 1.0 - lam
                                 else:
-                                    tgt[bi, int(y[perm[bi]].item())] = 1.0
+                                    # 260508 fix — soft proportional for BCE multi_hot too
+                                    # paste B 영역 ratio = 1 - lam (lam = A 의 면적 비율)
+                                    tgt[bi, a] = lam
+                                    tgt[bi, b] = 1.0 - lam
+
+                        # 260508 paired: build x_masked from x_pre with same rects masked (all 3 modes)
+                        if do_pair and any(len(r) > 0 for r in masked_rects):
+                            pair_fill = args.cutmix_pair_fill
+                            x_masked_buf = x_pre   # already cloned
+                            if pair_fill == "corner":
+                                corner_per_chip = x_pre[:, :, :8, :8].mean(dim=(2, 3), keepdim=True)
+                            elif pair_fill == "white":
+                                white_norm = torch.tensor(
+                                    [(1.0 - 0.485) / 0.229, (1.0 - 0.456) / 0.224, (1.0 - 0.406) / 0.225],
+                                    device=device).view(3, 1, 1)
+                            for bi in range(bs):
+                                for (y0r, y1r, x0r, x1r) in masked_rects[bi]:
+                                    hh, ww = y1r - y0r, x1r - x0r
+                                    if pair_fill == "noise":
+                                        x_masked_buf[bi, :, y0r:y1r, x0r:x1r] = \
+                                            torch.randn(3, hh, ww, device=device) * 0.3
+                                    elif pair_fill == "white":
+                                        x_masked_buf[bi, :, y0r:y1r, x0r:x1r] = \
+                                            white_norm.expand(3, hh, ww)
+                                    else:   # corner
+                                        x_masked_buf[bi, :, y0r:y1r, x0r:x1r] = corner_per_chip[bi]
+                            x_masked = x_masked_buf
+                            tgt_masked = tgt_pre
                 tgt_used = tgt
             else:
                 tgt_used = y
             with torch.amp.autocast(device_type=device.type, enabled=device.type == "cuda"):
                 logits = model(x)
-                loss = loss_fn(logits, tgt_used) / args.accum
+                loss_main = loss_fn(logits, tgt_used)
+                # 260508 paired CutMix: dual forward — masked counterpart
+                if x_masked is not None and tgt_masked is not None:
+                    logits_masked = model(x_masked)
+                    loss_masked_pair = loss_fn(logits_masked, tgt_masked)
+                    loss_pre_kd = loss_main + float(args.cutmix_pair_loss_w) * loss_masked_pair
+                else:
+                    loss_pre_kd = loss_main
+                # 260509 — KD distillation (Hinton 2015 + Yang 2023 multi-label per-class binary KL).
+                # Skip when: KD disabled, no teacher_prob available, batch shape mismatch
+                # (e.g., complement mode rebuilt x), or cutmix-skip flag triggered.
+                use_kd = (
+                    bool(args.kd_teacher_probs)
+                    and teacher_prob is not None
+                    and teacher_prob.size(0) == logits.size(0)
+                    and not (args.kd_skip_on_cutmix and cutmix_applied)
+                )
+                if use_kd:
+                    T_kd = float(args.kd_temperature)
+                    eps = 1e-6
+                    p_T = teacher_prob.clamp(eps, 1.0 - eps).float()
+                    # teacher logit z_T = log(p / (1-p)); soft-target prob with T scaling
+                    z_T = torch.log(p_T) - torch.log1p(-p_T)
+                    # 260509 patch — use binary_cross_entropy_with_logits (autocast safe).
+                    # Apply temperature scaling at logit level: student logit / T → BCE_with_logits target = p_T_soft
+                    student_logits_scaled = logits.float() / T_kd
+                    p_T_soft = torch.sigmoid(z_T / T_kd)
+                    # per-class binary CE via logits (autocast-safe equivalent of Yang 2023 KD)
+                    l_kd = torch.nn.functional.binary_cross_entropy_with_logits(
+                        student_logits_scaled, p_T_soft, reduction="mean"
+                    ) * (T_kd * T_kd)
+                    loss_combined = args.kd_alpha * loss_pre_kd + (1.0 - args.kd_alpha) * l_kd
+                else:
+                    loss_combined = loss_pre_kd
+                loss = loss_combined / args.accum
             if scaler is not None:
                 scaler.scale(loss).backward()
             else:

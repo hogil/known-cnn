@@ -19,7 +19,8 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 from .constants import (ALL_CLASS_KEYS, COMBO_KEYS, KEY_TO_LABELS, OOD_OVERLAY_KEYS,
-                        SINGLE_KEYS, TRAIN_CLASSES, WAFER_PATTERN_KEYS)
+                        SINGLE_KEYS, TRAIN_CLASSES, TRIPLE_COMBO_KEYS,
+                        WAFER_PATTERN_KEYS)
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -54,6 +55,13 @@ def _multihot_for_key(class_key: str) -> Tuple[np.ndarray, bool, bool]:
         m[TRAIN_CLASSES.index(class_key)] = 1
         return m, False, False
     if class_key in COMBO_KEYS:
+        labels = class_key.split("+")
+        m = np.zeros(len(TRAIN_CLASSES), dtype=np.int64)
+        for c in labels:
+            m[TRAIN_CLASSES.index(c)] = 1
+        return m, False, False
+    if class_key in TRIPLE_COMBO_KEYS:
+        # 260508 — 3-combo (4 keys, C(4,3)=4). all 3 trained labels active.
         labels = class_key.split("+")
         m = np.zeros(len(TRAIN_CLASSES), dtype=np.int64)
         for c in labels:

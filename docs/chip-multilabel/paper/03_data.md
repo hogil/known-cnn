@@ -237,3 +237,194 @@ CutMix is preferred because:
 
 A direct comparison (T7-CutMix vs T7-pre-synthesised-combos) is
 queued for Phase G.
+
+## 3.8 Iter 10 — Master folder consolidation and runtime sampling
+
+The §3.3 split (327-chip train / 82-val / 2200-chip eval, three
+disjoint folders) is iter 10's predecessor. Iter 10 (260506)
+consolidates all data into a **single source-of-truth master
+folder** and runtime-samples per-call. The change is purely
+infrastructural (no data semantics shift) but it is paper-grade
+because it eliminates a class of subset-folder errors that
+previously polluted the iter pipeline.
+
+### 3.8.1 Master folder layout
+
+```
+D:/project/data/wm-811k/chip_multilabel/
+├── bank_boundary/      # 200 chip (single defect, strong source p50)
+├── fork/               # 200
+├── scratch/            # 200
+├── scratch_rot/        # 200
+├── bank_boundary+fork/ # 200 (combo, min-blend)
+├── bank_boundary+scratch/      # 200
+├── bank_boundary+scratch_rot/  # 200
+├── fork+scratch/               # 200
+├── fork+scratch_rot/           # 200
+├── scratch+scratch_rot/        # 200 (added iter 10)
+├── Normal/             # 200 (Beta(2,10) noise, seed=999 train-disjoint)
+└── Invalid/            #  50 (orange-border QC chip)
+                          ──── total: 2,450 chip
+```
+
+`gen_eval_set.py --source-strength-pct 50` filters source chips at
+the strong end of the per-class `defect_pixel_ratio` distribution
+before min-blending — this is the v18+ master.
+
+### 3.8.2 Runtime sampling
+
+At eval time, `--n-per-class 50` selects 50 sorted-by-filename chips
+per class for evaluation (deterministic, reproducible). At train
+time, the train/val split runs on the same master folder
+(`--no-normal` toggles whether `Normal/` is included).
+
+**Why a single master + runtime sample is the right discipline.**
+Earlier iters created `chip_multilabel_eval_full/`,
+`chip_multilabel_eval_strong50/`, `chip_multilabel_smoke/`, etc. —
+three disjoint folders for three eval contexts. A single-axis
+config change (e.g. user wants `--n-per-class 100` instead of 50)
+required regenerating one of three folders, and the regeneration
+was always slightly off-spec. The master folder removes this:
+
+- Storage: 200 per defect class (largest expected eval-time
+  sample), 200 Normal, 50 Invalid. Disk cost ≈ 75 MB.
+- Runtime sampling: `--n-per-class N` with `N ≤ 200` produces a
+  deterministic subset; `N > 200` errors out.
+- Single source of truth: `chip_multilabel/` is the canonical
+  location, with `defect_pixel_ratio` manifest column for
+  strength-aware sampling.
+
+The user directive (260506) "다시는 이런 subset 폴더 만들지마라" —
+roughly "stop making subset folders" — is enforced by removing
+both the `chip_multilabel_eval_*` archive folders and the
+`obj_id_maps_round*` snapshots that had previously accumulated.
+
+### 3.8.3 Normal chip synthesis (iter 10 addition to training)
+
+The 200 Normal chips in `chip_multilabel/Normal/` (eval set) are
+constructed with `_make_normal_chip` using `seed=42`. The 200 train
+Normal chips placed in `classification_chips/Normal/` (training
+set) use `seed=999` — a **train/eval seed disjointness rule** that
+prevents leak. Both sets share the synthesis recipe:
+
+```python
+p_noise = Beta(2, 10).rvs(size=())            # mean 0.17, range 0.02–0.50
+u = uniform(0, 1, size=(200, 200))             # per-pixel
+is_noise = u < p_noise
+u2 = uniform(0, 1, size=(200, 200))
+grade = where(is_noise, where(u2 < 0.95, 1, 2), 0)  # 95% grade 1, 5% grade 2
+```
+
+A diversified variant (`gen_eval_set._make_normal_chip` patched
+260506 09:30) adds five further axes (wider grey-ratio band,
+per-pixel grey colour noise, white subtle noise, sprinkle 3-color
+mix, brightness gradient) with a sanity gate at whiteness ≥ 0.70.
+The diversified variant is used in §5.12 Phase 3 only; the simple
+recipe is the default for §5.11 / §5.13.
+
+### 3.8.4 Class taxonomy update at iter 10
+
+| version  | classes                                                           | total |
+|----------|-------------------------------------------------------------------|------:|
+| iter 1–9 | 4 single + 5 combo + Normal + Invalid                             |    11 |
+| iter 10+ | 4 single + **6 combo** (sc+sr re-added) + Normal + Invalid        |    12 |
+| iter 12+ | iter-10 set + 5 OOD wafer-pattern (diagnostic only, not measured) |    17 |
+
+`scratch+scratch_rot` was excluded in iters 1–9 as ill-defined
+(rotated stamp pixel-overlaps non-rotated stamp). Iter 10 re-adds
+it with the user's stake "measure it anyway"; baseline T9d's
+sc+sr F1 is **0.755** at the time of re-introduction. The 5 OOD
+wafer-pattern classes (added iter 12) are present in the master
+folder for ensemble-side OOD-FAR diagnostics but their per-class
+metrics are **never reported** (user directive 260506).
+
+## 3.9 Iter 12 — FAR metric split
+
+The iter-1 through iter-9 papers reported a bundled `chip_FAR`
+metric over all 1000 non-defect chips (200 Normal + 50 Invalid +
+800 OOD wafer-pattern). Iter 12 (260506–07) splits this into three
+disjoint groups, recognising that the operational FAR includes
+only the production-relevant classes:
+
+| group           | classes                                | n chip | role                  |
+|-----------------|----------------------------------------|-------:|-----------------------|
+| `normal_invalid` ★ | Normal, Invalid                     |    200 | **paper main metric** |
+| `normal_only`   | Normal alone                           |    160 | ablation diagnostic   |
+| `ood`           | 5 wafer-pattern OOD                    |    800 | diagnostic only       |
+| **bundled** (deprecated) | all three groups summed       |   1000 | backward compat       |
+
+The `chip_FAR = normal_invalid_FAR` definition is adopted as the
+paper-grade headline going forward. The old bundled metric is
+retained in `chip_multilabel/_bit_metrics.py` with explicit
+deprecation marker.
+
+**Why this matters.** The bundled metric reads 96% on every
+4-class-only trained variant, suggesting catastrophic FAR. The
+decomposition reveals: 80% of the bundle is `normal_only` lock
+(model never trained on Normal) and 100% is `ood` (5 classes
+never trained at all). Production never sees the OOD classes; the
+operational FAR is the `normal_invalid` component, and on it the
+T7N (Normal-trained) variant locks **0.00%** while the no-Normal
+variants lock **80.00%**. The bundled metric obscured a 80×
+single-axis intervention (Normal training) that the
+decomposition makes visible.
+
+## 3.10a Train and evaluation are independently sampled from the same synthesis pipeline
+
+_Added 2026-05-10 (methodological transparency disclosure)._
+
+We disclose explicitly that the **training set**
+(`D:/project/data/wm-811k/classification_chips/`, single-class chip-level
+synthesis built by `dist_apply/_sample_gen.py`) and the **evaluation
+set** (`D:/project/data/wm-811k/chip_multilabel_v15direct/`, multi-label
+synthesis built by `chip_multilabel/_synth_multi_chips.py`) are produced
+by **separate scripts** that nevertheless share the same underlying
+synthesis primitives:
+
+- same chip dimensions (200 × 200);
+- same palette encoding (grade 0 = white, grade 1 = grey, grades 2–7 = saturated defect colours);
+- same alpha-modulation matched-filter mechanism (Lorentzian sharp + heavy tail);
+- same defect-type spec (`bank_boundary`, `fork`, `scratch`, `scratch_rot`).
+
+**No chip in the eval set appears in the train set.** The two scripts
+use **different RNG seeds** (train seed = 42, eval Normal seed = 999)
+and **different generation modes** (train = single-class stamp; eval =
+`min`-blend or RGB synth across class pairs / triples). The eval set
+also contains four OOD wafer-canvas patterns (CenterDonut, CrossScratch,
+DiagonalSmear, Starburst) that are **structurally absent from the
+training distribution** and contribute to the operational `ni_FAR`
+metric (§3.9, §4.5.1).
+
+**Multi-class combos in eval are a new distribution mode unseen during
+training.** The model is single-label-trained on 4 defect classes; it
+encounters multi-positive ground-truth chips (combo-2 and combo-3)
+only at evaluation time. The decision-tree multi-label inference rule
+(§4) is itself never seen during training — it operates on the model's
+sigmoid logits with calibrated per-class thresholds.
+
+**Scope statement.** This design tests the methodology
+(FCM-PM training + bag-ensemble inference) on a **controlled
+synthetic benchmark**. The eval set probes (i) the model's combo
+decoding capability under multi-positive ground truth, (ii)
+distribution-shift handling on four OOD wafer-canvas patterns, and
+(iii) seed-stability under the bag aggregator. **It does not establish
+real-factory deployment performance.** Sensor noise, alignment drift,
+calibration variation across fab tools, and process-recipe-induced
+distribution shifts are not captured by either pipeline. The
+headline numbers (v15direct n = 500 bit-F1 = 0.9953 / `ni_FAR = 0 %`)
+are **ceiling estimates on this synthesis distribution**, and
+real-factory validation is recommended as a follow-up study (§7.6.2).
+
+## 3.10 v5.2 baseline reset (260507)
+
+The chip-level synthesis logic (§3.2) is canonical at v5/v5.1/v5.2;
+the wafer-level synthesis (the data path that produces wafer maps,
+not chip multi-label eval chips) was updated in v5.2 with three
+fixes: bank_boundary chip-seam removal, wafer pink baseline
+uniform spread, RingDots fixed positions, and Edge-Top/Bottom
+defect budget elevation. The chip multi-label eval set
+(`chip_multilabel/` master) is **invariant under v5 → v5.1 →
+v5.2** — chip-level grade distributions and Normal / Invalid
+recipes are unchanged. The §5.11 / §5.13 chip multi-label results
+therefore carry forward to the v5.2 baseline. See §5.14 for the
+spec details and visual sanity manifest.

@@ -1,5 +1,46 @@
 # Chip Multi-Label — 작업 노트 (실시간 갱신)
 
+## iter37 — explicit (A_label, B_label) asymmetric sweep (260510, queued)
+
+★ paper §6.16 NEW axis — symmetric (default) / area-prop (iter35) 외 3rd label rule.
+
+### Trainer patch (~15 lines)
+- new CLI flag `--cutmix-ab-labels "A,B"` (e.g. `1.0,0.5`) — overrides `--cutmix-complete-label-scale` and `--cutmix-label-area-prop`.
+- mix chip: `mix_t[a_cls]=a_lbl`, `mix_t[b_cls]=b_lbl` 독립 지정.
+- mask chip: A only → `mask_t[a_cls]=a_lbl` (b_lbl 무관).
+
+### Sweep (12 cells, T7+LS0.20, batch=2 accum=8, seed=1, complement masked corner, p=0.25)
+
+| cell | g | A_label | B_label | 의도 |
+|---|---:|---:|---:|---|
+| A | 2 | 1.0 | 0.5 | A hard, B half |
+| B | 2 | 1.0 | 0.75 | A hard, B 3/4 |
+| C | 2 | 0.5 | 1.0 | A half, B hard (대칭 swap) |
+| D | 2 | 0.75 | 1.0 | A 3/4, B hard |
+| E | 3 | 1.0 | 0.5 | g=3 분포로 동일 패턴 |
+| F | 3 | 1.0 | 0.75 | |
+| G | 3 | 0.5 | 1.0 | |
+| H | 3 | 0.75 | 1.0 | |
+| I | 4 | 1.0 | 0.5 | g=4 |
+| J | 4 | 1.0 | 0.75 | |
+| K | 4 | 0.5 | 1.0 | |
+| L | 4 | 0.25 | 1.0 | area-prop matched (g=4 → a_frac=0.25, b_frac=0.75) |
+
+### Dispatch
+- script: `D:/project/known-cnn/_run_iter37_AB_labels.sh` (100755).
+- chained polling on `outputs/_iter36_g2_LS_sweep.log` "[iter36] DONE".
+- log: `outputs/_iter37_AB_labels.log`.
+- bg pid: dispatched via `nohup bash _run_iter37_AB_labels.sh &`.
+- 12 trains × ~12 min ≈ 2.5 hr (start when iter36 finishes).
+
+### Eval
+- v15direct only (`chip_multilabel_v15direct`), I3/I6/I7/I10, n=50/cls, strength≥0.0, seed=42.
+
+### Hard rules 준수
+- TTA 영구 금지, batch=2 accum=8 안전, classification_chips/ 만 학습, 결과 폴더 삭제 X, atomic 변경 1회 (label rule axis).
+
+---
+
 ## v20 T7N retrain (260507)
 
 source: master `classification_chips/` v20 (fork sigma 1.0-1.5 → 1.8-2.5, 두께↑) + 7 fork-containing eval-set classes (4 single + 6 2-combo + 4 OOD-overlay 중 3 fork-containing) v20 reblended.
@@ -1200,4 +1241,282 @@ chip_FAR 의미를 보다 정확히 분리하려면: (a) Normal-only chip_FAR (2
 3. **재합성 후 동일 inference variants 다시 평가** — 새 eval set 으로 stage1 + stage2 둘 다 재실행. iter 4 ~ 로 notes 추가.
 
 이건 Stage 2 (현재 T5 BCE 학습 중) 완료 후에 실행 — GPU 1잡 룰 + 사용자 명시 "학습 다 끝나고".
+
+
+---
+
+## Cycle B+1 (260507): fork+sr fix — pos_weight axis only
+
+### 배경
+Cycle B winner T7N alone CF1 0.9406, fork F1 0.87, **fork+sr 2-combo recall 0.625** (★ weak).
+Hypothesis: fork legs visually weak vs scratch_rot dense lines after min-blend → model ignores fork.
+
+### Experiments dispatched
+- **B1**: T7 + BCE pos_weight={fork: 2.0} (4 axis only fork upweighted)
+  - code: `losses.py::BCEMultiHot` + `--pos-weight` CLI flag (T5/T7 only)
+  - tag `T7N_pwfk20_seed42`, 8ep, batch=8 accum=4, lr=1e-4, ls=0.20, cutmix-p=0.25
+- **B4 SKIPPED** — paired training requires multi-hot folder support in `collect_samples` +
+  dataset `__getitem__` + training loop tgt-build branch (cross-cutting). User directive
+  ("SKIP B4 if code complex") honored. `chip_multilabel/gen_pair_chips.py` written for future use.
+
+### Results — fork+sr recall comparison (I3, n=200/class, 3080 chips)
+
+| variant                         | CF1    | F1_fork | **fk+sr recall** | fk+sr+CrossScratch (OOD) | ni_FAR |
+|---|---:|---:|---:|---:|---:|
+| Cycle B baseline (T7N reported) | 0.9406 | 0.87    | **0.625**        | n/a                      | 0.00%  |
+| **B1 T7N + pos_weight fk=2.0**  | 0.8797 | 0.7734  | **0.6375**       | 0.4125                   | 0.00%  |
+
+### per-class F1 (B1)
+- bank_boundary: F1=0.9414 (P=0.9391 R=0.9437)
+- fork:          F1=0.7734 (P=0.9665 R=0.6446)  ← high precision low recall
+- scratch:       F1=0.8371 (P=0.9659 R=0.7385)
+- scratch_rot:   F1=0.9667 (P=0.9978 R=0.9375)
+
+### per-combo 2-bit recall (B1)
+- bank_boundary+fork:        0.6250
+- bank_boundary+scratch:     0.0563  ← weak
+- bank_boundary+scratch_rot: 0.4250
+- fork+scratch:              0.7375
+- **fork+scratch_rot:        0.6375**  ← +0.0125 marginal vs Cycle B
+- scratch+scratch_rot:       0.9812
+
+### 분석
+- pos_weight fk=2.0 가 fork **precision 0.9665** 만 끌어올리고 **recall 0.6446 그대로** —
+  loss 가 fork 양성을 더 강조했지만, threshold 검색 후 conservative 한 fork prob 분포 때문에
+  recall 안 따라옴. fork+sr 2-combo 도 +0.0125 negligible.
+- 가설 변경: fork+sr 약점은 **threshold/loss tuning 으로 못 풀고 데이터 (paired 합성) 필요**.
+  → B4 (paired supervised) 가 fundamental fix 일 가능성. 다음 cycle 에서 코드 patch
+  full implementation 하고 dispatch.
+- 흥미로운 sub-finding: bb+sc 2-combo 0.0563 만 극도로 약함 (다른 combo 0.42+) — bb+sc
+  visual pair 가 가장 어려운 듯. 별도 조사 trigger.
+
+### 산출
+- `outputs/logs_chip_multilabel/T7_T7N_pwfk20_seed42_260507_073921/best_model.pth` (fk@ep1)
+- `outputs/.../eval_I3/stage1_260507_074611/{eval_summary.json, report.md, bit_metrics_split.json}`
+- `chip_multilabel/gen_pair_chips.py` (B4 datagen ready, training-side code TBD)
+- code patches: `losses.py::BCEMultiHot.pos_weight`, `_train_chip_variant.py::--pos-weight`
+
+### 결론 / 후속 axis
+- pos_weight axis 결과 **net negative for fork+sr** (CF1 0.9406 → 0.8797, fork F1 0.87 → 0.77).
+  paper ablation 에 negative result 로 기록 가치 있음.
+- ★ **다음 cycle: B4 paired supervised** — `collect_samples_with_multihot` 새 helper 만들어
+  `(p, multihot_tensor or -1)` return → dataset 바꾸고 training tgt build branch 패치.
+  Effort ~1h, expected fork+sr recall lift > 0.85.
+
+## CutMix area-ratio ablation (260507) — 6 variants × T7N base
+
+base: T7 + BCE_LS=0.20 + Normal training, 8ep batch=8 accum=4 lr-head=1e-4 seed=42, Invalid eval-set 50 chip 새 텍스트 재합성됨. data: classification_chips master (200 defect+200 Normal), eval: chip_multilabel master (12 class, n_per_class=200).
+
+코드 patch (`_train_chip_variant.py`):
+- `--cutmix-mode` choices 에 `grid` 추가 (8×8 binary mask, OR rule for BCE).
+- `--cutmix-grid-prob` (default 0.5) — grid 의 per-cell flip prob (sweep axis).
+
+| variant | mode | area | CF1 | F1_bb | F1_fork | F1_sc | F1_sr | fork+sr R | bit_FAR | ni_FAR | ood_FAR |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| T7N **no_cutmix** ★ true baseline | none | 0% | **0.9162** | 0.936 | 0.832 | 0.936 | 0.961 | 0.675 | 5.48% | 20.00% | 14.69% |
+| T7N random_rect | single rect | ~50% | **0.9188** | 0.972 | 0.844 | 0.866 | 0.994 | 0.719 | 1.40% | 20.00% | 0.94% |
+| T7N scattered (10×~70px, r=0.62) | scattered | 62% | 0.8423 | 0.911 | 0.691 | 0.775 | 0.992 | **0.869** | 6.88% | 20.00% | 23.44% |
+| T7N grid 8×8 p=0.5 | grid binary | 50% | 0.8967 | 0.906 | 0.763 | 0.930 | 0.987 | 0.794 | 1.99% | 20.00% | 0.31% |
+| T7N grid 8×8 p=0.25 | grid binary | 25% | 0.8849 | 0.935 | 0.745 | 0.872 | 0.987 | 0.812 | 2.59% | 20.00% | 3.12% |
+| T7N grid 8×8 p=0.125 | grid binary | 12.5% | 0.8596 | 0.935 | 0.778 | 0.809 | 0.917 | 0.794 | 4.76% | 20.00% | 12.03% |
+| (ref) T7N v19zpp Cycle B (random rect r=0.5, prev master) | single rect | ~50% | 0.9406 | 0.980 | 0.870 | 0.92 | 1.00 | 0.625 | — | 0.00% | 1.41% |
+
+★ winner (CF1 + ni_FAR ≤ 5% 만족):
+- 단순 CF1 max: **T7N random_rect = 0.9188** (아주 근소; no_cutmix 0.9162 와 동률 수준).
+- 단순 baseline (no_cutmix) 가 CF1 0.9162 로 grid/scattered 보다 높음 → **CutMix area 단순 증가 = CF1 개선 X**. random_rect 0.5 만 미세 +0.0026 lift. 이는 v20 master + ni 새 텍스트 환경에서 CutMix 의 marginal value 가 작아졌음을 의미.
+- **fork+sr 2-combo recall 만 보면 winner = scattered 0.869** (baseline 0.675 → +0.194), 다음 grid25 0.812. 그러나 scattered 는 OOD over-fire (ood_FAR 23.4%) 와 fork F1 -0.14 trade-off.
+- ★ **ni_FAR 20% 모든 variant 동일** — 이는 새로 합성된 Invalid 가운데 큰 텍스트가 모든 모델에서 동일 패턴으로 fail (40/200 = 20%). CutMix mode 와 무관, **Invalid 텍스트 → 모델이 defect 신호로 해석**. 이건 next-step 에서 Invalid heuristic 보강 필요 (학습 데이터에 Invalid 추가 또는 추론 규칙).
+
+### 핵심 finding (260507)
+1. **area sweep 곡선 (no_cutmix → 50% → 62%) 단조 X** — random_rect (CF1 0.9188) > grid50 (0.8967) > grid25 (0.8849) > grid12 (0.8596) > scattered (0.8423). single rect mode 가 grid binary 보다 일관 우위 (50% area 비교: 0.9188 vs 0.8967).
+2. **scattered는 fork+sr 2-combo recall booster** (0.675 → 0.869) 지만 fork F1 collapse (0.83 → 0.69) 와 OOD over-fire (14.7% → 23.4%) 동반 — paper 에 negative trade-off 사례.
+3. **grid binary OR-label 모드 (이번 신규 추가)** 는 grid_prob 0.5 이 가장 좋고 (0.8967), 0.25/0.125 로 줄이면 scattered 와 비슷한 패턴 성능 저하. binary OR-label 의 본질적 한계 — soft area-prop label 안 씀.
+4. **ni_FAR 20% 고정** — 모델 변경으로 안 풀림. Invalid eval set 새 텍스트 vs 학습 시 Invalid 부재 mismatch (학습은 4 defect + Normal only).
+5. **ood_FAR random_rect 0.94% 가 best** — 단순 single rect 로도 OOD 분리력 유지. scattered 는 OOD 도 over-fire.
+
+### 다음 axis 제안
+- ★ Invalid 학습 추가 (`--include-invalid` 같은 flag 신설; y=-2 sentinel + zero-vector target). ni_FAR 20% 직접 타격.
+- B4 paired supervised (이전 propose) 는 fork+sr recall 만 노린 변경 — scattered 가 이미 0.869 달성하므로 priority 낮춤.
+- random_rect rect=0.3 / 0.7 sweep — 50% rect 가 best, 위/아래 곡률 확인 가치.
+
+### 산출
+- 6 train run dir: `outputs/T7_T7N_{no_cutmix,random_rect,scattered,grid50,grid25,grid12}_seed42_260507_*/`
+- 6 eval (I3) + bit_metrics_split.json each.
+- 코드 patch: `_train_chip_variant.py` (`grid` mode + `--cutmix-grid-prob`).
+
+## iter 19 complement CutMix sweep (260508)
+
+**Spec**: T7 + LS 0.20 + epochs=8 seed=1 cutmix-p=0.25 cutmix-mode=complement, 12 trains 매트릭스 (4 group × label_scale + 2 baselines pair=none). eval = run_stage1 I3,I6,I7,I10 n-per-class=50 strength-min=0.0.
+
+### iter19A 회수 결과 (학습 crash 후 best_model 만 남았던 cell)
+- run dir: `outputs/iter19A_complement_g2_l0.5_pmasked/T7_T7_iter19A_complement_g2_l0.5_masked_seed1_260508_140548/`
+- 학습은 epoch 1 직후 best 저장만 하고 crash (history.json/train_summary.json 모두 부재) — eval 만 별도로 회수.
+- **best cell = T0__I3, macro_f1 = 0.8078** (top1_11=0.5813, T=1.000, ECE=0.0312)
+- per-class F1: bank_boundary 0.9438 / fork 0.7993 / scratch 0.7064 / scratch_rot 0.7817
+- I10 0.8030 / I7 0.8003 / I6 0.7806 (I3 < I10 subset_acc 0.6562 > I3 0.5813)
+- 해석: epoch 1 best 라 sub-baseline. 실제 sweep evidence 로 부적합 — B-L 결과 비교 시 A 는 저평가 plot 이므로 footnote 처리.
+- eval report: `outputs/iter19A_.../eval_seed1/stage1_260508_141521/report.md`
+
+### sweep 진행 (B-L 11 trains, background)
+- launcher: `_run_iter19_complement_resume.sh` (set -e sequential, A line 제외)
+- log: `outputs/_iter19_complement_resume.log`
+- 백그라운드 task id: b3uinaqq5 (start 260508 14:16, 예상 ETA ~77분)
+- GPU 14:16:17 측정: 13.8 GB used / 99% util — train iter19-B 가동 중 confirm.
+
+### 12 train spec 매트릭스
+
+| TAG | group | label_scale | pair | batch | 비고 |
+|---|---|---|---|---|---|
+| A | 2 | 0.5  | masked | 4 | crashed → eval 만 회수 (macro 0.8078) |
+| B | 2 | 0.75 | masked | 4 | running (14:16) |
+| C | 2 | 1.0  | masked | 4 | queued |
+| D | 3 | 0.33 | masked | 4 | queued |
+| E | 3 | 0.67 | masked | 4 | queued |
+| F | 3 | 1.0  | masked | 4 | queued |
+| G | 4 | 0.25 | masked | 2 | queued (2N=8 chips) |
+| H | 4 | 0.5  | masked | 2 | queued |
+| I | 4 | 0.75 | masked | 2 | queued |
+| J | 4 | 1.0  | masked | 2 | queued |
+| K | 2 | 1.0  | none   | 4 | baseline (no pair) |
+| L | 4 | 1.0  | none   | 4 | baseline (no pair) |
+
+## iter 22 19C tune (260509)
+
+19C (FCM-PM, paper winner — T7 LS=0.20 + cutmix-p=0.25 complement g=2 LS=1.0 masked corner, batch 4 accum 4, 8 ep, seed 1) 의 (a) 3-seed verification + (b) same-mechanism hparam fine-tune sweep. 10 trains, 모두 dual-eval (v14class + v15direct, --variants I3,I6,I7,I10 --n-per-class 50 --seed 42).
+
+- launcher: `_run_iter22_19C_tune.sh` (set -e sequential, BASE19C 공통 + per-tag override)
+- log: `outputs/_iter22_19C_tune.log`
+- 백그라운드 task id: b7zv9mb8l (start 260509 12:53, 학습 ~7 min × 10 = ~70 min ETA)
+- GPU 12:53:27 측정: 2.3 GB used / 11% util — A_seed7 로딩 중 confirm.
+- 19C base reference: v14 bit_F1 0.9913 / v15 0.9691, ni_FAR 0%/3.75%, F1bb 1.0.
+
+### 10 train spec 매트릭스 (BASE19C: T7 --ls 0.20 --cutmix-p 0.25 --cutmix-mode complement --cutmix-n-groups 2 --cutmix-complete-label-scale 1.0 --cutmix-pair masked --cutmix-pair-fill corner)
+
+| TAG | seed | override | 의도 |
+|---|---|---|---|
+| A_seed7        | 7  | (none)                   | 3-seed verify (vs seed 1) |
+| B_seed42       | 42 | (none)                   | 3-seed verify (vs seed 1) |
+| C_LS010        | 1  | --ls 0.10                | LS sweep down |
+| D_LS030        | 1  | --ls 0.30                | LS sweep up |
+| E_cutmix015    | 1  | --cutmix-p 0.15          | CutMix freq down |
+| F_cutmix040    | 1  | --cutmix-p 0.40          | CutMix freq up |
+| G_droppath005  | 1  | --drop-path-rate 0.05    | stochastic depth |
+| H_ema095       | 1  | --ema-decay 0.95         | EMA target |
+| I_warmup2      | 1  | --warmup-epochs 2        | LR warmup |
+| J_lrhead5e5    | 1  | --lr-head 5e-5           | head LR ↓ |
+
+### 진행 status
+
+- 12:53 dispatched (background id b7zv9mb8l)
+- 13:42 KILLED externally — completed: A, B, C, D, E (train+dual-eval). F: train OK + eval_v14class started but interrupted mid-eval. G,H,I,J: not started.
+- 결과 path: `outputs/iter22<TAG>/T7_iter22<TAG>_seed*/best_model.pth + eval_v14class/ + eval_v15direct/`
+
+### 결과 (best cell macro_f1 across I3/I6/I7/I10)
+
+| TAG | seed | override | v14 best cell | v14 macro_f1 | v15 best cell | v15 macro_f1 | status |
+|---|---|---|---|---:|---|---:|---|
+| A_seed7        | 7  | —                       | I10 | **0.8285** | I10 | **0.8364** | done |
+| B_seed42       | 42 | —                       | I10 | **0.8506** | I6  | **0.8250** | done |
+| C_LS010        | 1  | --ls 0.10               | I6  | **0.8536** | I6  | **0.7540** | done |
+| D_LS030        | 1  | --ls 0.30               | I10 | **0.8457** | I10 | **0.8160** | done |
+| E_cutmix015    | 1  | --cutmix-p 0.15         | I10 | **0.7729** | I10 | **0.6933** | done |
+| F_cutmix040    | 1  | --cutmix-p 0.40         | —   | —          | —   | —          | train OK, eval interrupted |
+| G_droppath005  | 1  | --drop-path-rate 0.05   | —   | —          | —   | —          | not started |
+| H_ema095       | 1  | --ema-decay 0.95        | —   | —          | —   | —          | not started |
+| I_warmup2      | 1  | --warmup-epochs 2       | —   | —          | —   | —          | not started |
+| J_lrhead5e5    | 1  | --lr-head 5e-5          | —   | —          | —   | —          | not started |
+
+reference (19C seed 1, prior known): v14 0.9913 / v15 0.9691.
+
+### Observations (5 completed cells)
+
+- **모든 완료 cell (A~E) 가 19C seed 1 reference 0.9913 보다 한참 낮다 (0.77~0.85)** — biggest unexpected gap. 3-seed verify A (0.83) / B (0.85) 가 seed 1 (0.99) 와 0.14~0.16 격차 — 19C seed-1 결과가 lucky outlier 거나 iter19 이후 코드/데이터 drift 의심. F~J 재실행 + 19C 재현 verify 필요.
+- LS↓ (C 0.10) v14 0.8536 sweep 내 best; LS↑ (D 0.30) v14 0.8457; LS 는 이 범위에서 dominant lever 아님.
+- CutMix↓ (E 0.15) v14 0.7729 vs A 0.8285 = -0.056 — CutMix freq down 유의미하게 손해.
+- v14 > v15 일관 (+0.02~+0.10) — 도메인 gap 정상 패턴.
+
+### 다음 액션 후보 (사용자 결정 대기)
+
+1. F~J 재개 (G,H,I,J 신규 + F 는 모델 보존되어 있으니 eval 만 재실행 가능)
+2. 19C seed 1 reference 재현 verify (코드/데이터 drift 점검)
+3. 두 가지 병행
+
+---
+
+## Iter 30 — FCM-PM n_groups + LS sweep + 26B 3-seed (260509)
+
+T7 + cutmix-p 0.25 mode=complement pair=masked fill=corner, --ls 0.20 --epochs 8 batch 4 accum 4 (D/E/F batch 4 with g≤3, B/C batch 2 with g=5/6). Dual-eval v14class + v15direct, runtime sample n=50 strength 0.0 seed 42.
+
+**Reference baseline iter26B (g=3 LS=0.50 seed=1) on same dual-eval**: v14 **0.8524 (I6)** / v15 **0.8278 (I10)**.
+
+| cell             | n_groups | LS   | seed | v14 cell | v14 macro_f1 | v15 cell | v15 macro_f1 | status |
+|------------------|----------|------|------|----------|--------------|----------|--------------|--------|
+| A_g5_LS020       | 5        | 0.20 | 1    | I10      | 0.7919       | I10      | 0.6981       | done   |
+| B_g5_LS050       | 5        | 0.50 | 1    | I10      | 0.7752       | I6       | 0.7050       | done   |
+| C_g6_LS030       | 6        | 0.30 | 1    | I7       | 0.7625       | I10      | 0.7446       | done   |
+| D_g2_LS050       | 2        | 0.50 | 1    | I6       | **0.8617**   | I10      | **0.7805**   | done   |
+| E_g3_LS050_seed7 | 3        | 0.50 | 7    | —        | —            | —        | —            | running |
+| F_g3_LS050_seed42| 3        | 0.50 | 42   | —        | —            | —        | —            | queued |
+
+### Observations (4 done)
+
+- **No iter30 cell beats iter26B baseline (0.8524 / 0.8278) on either eval.** D (g=2 LS=0.50) closest: −0.011 v14 (I6 vs I6) but +0.034 still under v15 (0.7805 vs 0.8278 = −0.047).
+- FCM-PM `n_groups` higher (5/6) actively hurts vs g=2/3 — A/B/C all worse than D on v14 (≤0.79 vs 0.86) and v15.
+- **g=2 (D) > g=3 (26B) on v14** (0.8617 vs 0.8524, +0.009) but loses on v15 (0.7805 vs 0.8278). Mixed signal — E + F (g=3 multi-seed) needed to confirm.
+- Cell winner shifts per protocol: I10 dominant on v14, I6/I10 split on v15. Decision_tree variant choice is eval-set-sensitive.
+- LS sweep (0.20 / 0.30 / 0.50) inside iter30 not separated from g sweep — confound. Future: hold g=2 fixed and sweep LS only.
+
+### Next dispatched
+
+- **iter31** (`_run_iter31_26B_tune.sh`, b8epseiwz polling) — 7-train regularization tune around 26B base (EMA / drop_path / warmup / longer epochs / lr-head / combos). Will fire once iter30-resume queue clears.
+- **26B 3-seed mini-ensemble** (post-E/F) — prob-avg of iter26B seed=1 + iter30E seed=7 + iter30F seed=42 on T0__I10. If +Δ vs single seed, fold into 17-bag.
+- **iter32 KD** — placeholder script `_run_iter32_KD_skel.sh`. Awaits analyst spec at `docs/chip-multilabel/iters/iter_32_KD_spec.md`. Teacher = iter26B best_model.pth.
+
+
+## iter 32 KD distillation (260509)
+
+**Goal**: distill 14-bag ensemble (~0.99 v15) into single student via Hinton-2015 KD — close 0.97 → 0.99 single-model gap.
+
+**Teacher**: 14-member ensemble = iter21 (E,F,H) + iter22 (A,B,D,G) + iter24 (LS030 seed7/42) + iter26 (B,D,F,G,H). Avg sigmoid probs over `classification_chips/<class>/*.png` (5 dirs: 4 single + invalid_main; Normal absent).
+
+**Student recipe**: 26B base = T7 LS=0.20 epochs=8 batch=4 accum=4 seed=1 cutmix-p=0.25 mode=complement n-groups=3 label-scale=0.50 pair=masked fill=corner. **KD knobs (iter32A)**: α=0.5, T=4.0, skip-on-cutmix.
+
+**Files**:
+- `chip_multilabel/_kd_make_teacher_probs.py` (NEW, ~155 lines) — pre-compute parquet `outputs/_teacher_probs_14bag.parquet` (chip_path → 4 sigmoid prob columns).
+- `chip_multilabel/_train_chip_variant.py` — 4 CLI flags + 3 patches:
+  - 3a (after argparse): load parquet → `teacher_prob_map: dict[str, np.ndarray(4,)]`.
+  - 3b (`ChipFolderDataset`): accept `teacher_prob_map`, return 4-tuple `(x, y, mh, teacher_prob)` (zero-vec when missing). `evaluate()` drops the 4th element.
+  - 3c (train loop): KD loss = T²·BCE(sigmoid(z_S/T), sigmoid(z_T/T)) where z_T = log(p/(1−p)) with eps=1e-6 clamp. `loss = α·loss_pre_kd + (1−α)·l_kd`. Skip when: (i) batch shape mismatch (e.g., complement rebuilt x), (ii) cutmix-applied + `--kd-skip-on-cutmix`, (iii) flag empty.
+- `_run_iter32_KD.sh` (NEW, +x) — chains after iter31 (`grep [iter31] DONE`), runs Step 1 teacher parquet (skip-if-exists) → Step 2 student train → Step 3 dual eval v14class + v15direct (I3/I6/I7/I10).
+
+**Hard-rule compliance**: TTA disabled, no folder deletion, classification_chips/ only (no multi_combo_root), training-only KD (val drops teacher_prob 4th tuple slot).
+
+**Status (260509)**: code patched, dispatch script staged +x via `git update-index`, bash bg launched (chains on iter31 finish).
+
+
+## iter 35 area-proportional FCM-PM (260509)
+
+**Goal**: paper §6.13 missing axis. Current complement mode uses **symmetric** label rule (`mix_t[A] = mix_t[B] = label_scale`) which over-credits A relative to its actual cell area. iter35 tests **area-proportional** label: A occupies group_i (1/n cells), B occupies the other (n−1)/n cells → labels should reflect that ratio.
+
+**Patch** (`chip_multilabel/_train_chip_variant.py`):
+- New CLI flag `--cutmix-label-area-prop` (action=store_true), default off (= symmetric, backward compat).
+- Label rule (when flag set, complement mode only): `a_frac = 1/n_groups`, `b_frac = (n_groups−1)/n_groups`; `mix_t[a_cls] = a_frac * label_scale`, `mix_t[b_cls] = b_frac * label_scale`.
+- mask-chip label unchanged (mask is A only — area-prop irrelevant).
+
+**8-cell sweep table** (T7 LS=0.20 epochs=8 batch=2 accum=8 seed=1 cutmix-p=0.25 complement masked corner; `--cutmix-label-area-prop` always on):
+
+| Cell | n_groups | scale | A label | B label | hypothesis |
+|---|---|---|---|---|---|
+| A | 3 | 1.0 | 0.333 | 0.667 | pure area-prop, sum=1.0 |
+| B | 4 | 1.0 | 0.250 | 0.750 | pure, finer split |
+| C | 3 | 1.5 | 0.500 | 1.000 | B saturated (cap) |
+| D | 4 | 1.33 | 0.333 | 1.000 | B saturated, finer |
+| E | 3 | 0.5 | 0.167 | 0.333 | conservative |
+| F | 4 | 0.5 | 0.125 | 0.375 | conservative + finer |
+| G | 2 | 1.0 | 0.500 | 0.500 | sanity (= symmetric LS=0.5) |
+| H | 3 | 0.3 | 0.100 | 0.200 | extra-conservative |
+
+**Hard-rule compliance**: TTA disabled, no folder deletion, classification_chips/ only, batch=2 accum=8 (effective 16), v15-only eval (I3/I6/I7/I10 @ n=50).
+
+**Status (260509)**: trainer patched (≈12 lines including CLI), import OK, argparse usage shows flag. `_run_iter35_areaprop.sh` written +x mode 100755. **Chained on `grep [iter33] DONE`** (iter33 currently waiting on iter32 → iter32 not yet done). bash bg launched.
 

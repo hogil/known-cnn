@@ -1,0 +1,23 @@
+method,spatial,label,v14_bit_F1,v14_ni_FAR,v15_bit_F1,v15_ni_FAR,dual_pass,iter,notes
+Mixup_alpha_0.1,pixel_alpha_blend,soft_lambda_mix,0.9098,1.0000,0.8627,1.0000,No,28C,Mixup alpha=0.1 — palette destruction
+Mixup_alpha_0.2,pixel_alpha_blend,soft_lambda_mix,0.9875,0.0500,0.9834,1.0000,No,28A,Mixup alpha=0.2 (Zhang 2018 default) — v14 passes but v15 ni 100%
+Mixup_alpha_0.4,pixel_alpha_blend,soft_lambda_mix,0.9753,1.0000,0.9141,1.0000,No,28D,Mixup alpha=0.4 — palette destruction
+Mixup_alpha_1.0,pixel_alpha_blend,soft_lambda_mix,0.9092,1.0000,0.8924,1.0000,No,28B,Mixup alpha=1.0 — palette destruction
+Mixup_alpha_2.0,pixel_alpha_blend,soft_lambda_mix,0.9783,1.0000,0.9671,1.0000,No,28E,Mixup alpha=2.0 — palette destruction
+Mixup_a04_plus_CutMix_p05,pixel_alpha_blend+region_paste,soft_lambda_mix,0.9091,1.0000,0.8984,1.0000,No,28F,Mixup+CutMix combo — Mixup contamination NOT rescued
+CutMix_std_box_soft,std_box_cut_Yun2019,soft_lambda_mix,0.9120,1.0000,0.8500,1.0000,No,21C,std CutMix + LS soft — fails (iter21C T7N+std)
+CutMix_std_box_hard,std_box_cut_Yun2019,hard_one_hot,0.7381,1.0000,0.7616,1.0000,No,29A,std box-cut + hard label — bit_F1 collapse
+CutMix_grid_complete_no_mask_soft,grid_complete_no_pair_mask,soft_LS_0.5,0.9810,0.0500,0.9300,0.0250,Yes,21D,grid_complete + soft LS=0.5 (iter18 F1 winner repeat)
+CutMix_grid_complete_no_mask_hard,grid_complete_no_pair_mask,hard_LS_1.0,0.9369,0.0250,0.9248,1.0000,No,29C,grid_complete + hard label NO pair mask — v15 ni explodes
+CutMix_complement_pair_mask_soft,complement_g2_pair_mask,soft_LS_0.5,0.9921,1.0000,0.9953,1.0000,No,29B,F1-only winner — highest v15 bit_F1 but ni_FAR=100%
+CutMix_complement_pair_mask_hard,complement_g2_pair_mask,hard_LS_1.0,0.9913,0.0000,0.9691,0.0375,Yes,21E,FCM-PM ★ ONLY single-model dual-pass
+ENSEMBLE_iter25_6bag_LS020_LS030,complement_g2_pair_mask,hard_LS_1.0,0.9976,0.0000,0.9913,0.0000,Yes,25,iter25 6-seed I10 majority vote (3 LS=0.20 + 3 LS=0.30) thr>=4/6
+ENSEMBLE_iter27_14bag_diverse,complement_mix_g_LS_fill,hard_LS_1.0,1.0000,0.0000,0.9929,0.0000,Yes,27,★★★ paper headline — 14-bag majority vote thr>=5-6/14 (g x LS x CutMix-fill diversity)
+KD_alpha05_T4_skipcm,KD_distill_4bag_teacher,kd_soft_target,,,0.8952,0.0000,Yes,32A,KD baseline alpha=0.5 T=4 skip-on-cutmix — over-soften pivot
+KD_alpha03_T4_skipcm,KD_distill_4bag_teacher,kd_soft_target,,,0.9840,0.0000,Yes,33A,★ KD-student headline alpha=0.3 — sweet spot (-0.0105 vs 4-bag teacher at 1x cost)
+KD_alpha07_T4_skipcm,KD_distill_4bag_teacher,kd_soft_target,,,0.9747,0.0000,Yes,33B,alpha=0.7 over-trust teacher — drops 0.009
+KD_alpha05_T2_skipcm,KD_distill_4bag_teacher,kd_soft_target,,,0.9808,0.0125,Yes,33C,T=2 sharper teacher — +0.0113 F1 but +1.25% FAR (borderline)
+KD_alpha05_T8_skipcm,KD_distill_4bag_teacher,kd_soft_target,,,0.9695,0.0000,Yes,33D,T=8 over-flatten teacher — drops 0.011
+KD_alpha05_T4_withcm,KD_distill_4bag_teacher,kd_soft_target,,,0.8952,0.0000,Yes,33E,with-cutmix (NO skip) — teacher logits cached on un-augmented inputs do not match CutMix mosaics
+KD_alpha05_T4_ema095,KD_distill_4bag_teacher,kd_soft_target,,,0.9598,0.0000,Yes,33F,EMA 0.95 hurts -0.024 — small-data regime cannot stabilize EMA in 8 epochs
+KD_alpha05_T4_ep16,KD_distill_4bag_teacher,kd_soft_target,,,0.8952,0.0000,Yes,33G,epochs=16 collapses — over-fits teacher soft target

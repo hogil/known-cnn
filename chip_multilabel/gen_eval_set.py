@@ -30,7 +30,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .constants import (COMBO_KEYS, DEFAULT_CLASSIFICATION_CHIPS, SINGLE_KEYS)
+from .constants import (COMBO_KEYS, DEFAULT_CLASSIFICATION_CHIPS, SINGLE_KEYS,
+                        TRIPLE_COMBO_KEYS)
 
 CHIP_SIZE = 200
 ORANGE_RGB = (240, 160, 0)
@@ -71,6 +72,14 @@ def _min_blend(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     Where both chips have a defect at the same pixel, MIN gives a mixed darker color
     (acceptable: 'still a defect, not white')."""
     return np.minimum(a, b)
+
+
+def _min_blend_n(arrs: List[np.ndarray]) -> np.ndarray:
+    """N-way pixel-wise min (260508). Generalizes 2-class min-blend to 3+ sources
+    for multi-class combo synthesis. Same semantic as _min_blend extended."""
+    if len(arrs) < 2:
+        raise ValueError(f"need >=2 sources for blend, got {len(arrs)}")
+    return np.minimum.reduce(arrs).astype(np.uint8)
 
 
 def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
@@ -153,8 +162,9 @@ def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
     return img
 
 
-def _sanity_check(class_key: str, arr: np.ndarray, base1: np.ndarray | None,
-                  base2: np.ndarray | None) -> Tuple[bool, str]:
+def _sanity_check(class_key: str, arr: np.ndarray,
+                  bases: List[np.ndarray] | None = None) -> Tuple[bool, str]:
+    """260508: bases is now a list (was base1, base2). Supports N-way combo (3-class)."""
     if class_key == "Normal":
         if _whiteness(arr) < 0.70:
             return False, "normal_low_white"
@@ -169,12 +179,11 @@ def _sanity_check(class_key: str, arr: np.ndarray, base1: np.ndarray | None,
             return False, "invalid_no_border"
         return True, ""
     if "+" in class_key:
-        if base1 is None or base2 is None:
+        if not bases or len(bases) < 2:
             return False, "combo_missing_base"
         d_blend = _defect_pixel_ratio(arr)
-        d1 = _defect_pixel_ratio(base1)
-        d2 = _defect_pixel_ratio(base2)
-        if d_blend < max(d1, d2) - 0.01:
+        d_max = max(_defect_pixel_ratio(b) for b in bases)
+        if d_blend < d_max - 0.01:
             return False, "combo_defect_loss"
         return True, ""
     if class_key in SINGLE_KEYS:
@@ -227,7 +236,8 @@ def _defect_strength(arr_rgb: np.ndarray) -> float:
 
 def generate(out_root: Path, classification_chips_root: Path,
              per_defect: int, per_normal: int, per_invalid: int,
-             seed: int, source_strength_pct: float = 100.0) -> GenStats:
+             seed: int, source_strength_pct: float = 100.0,
+             include_triples: bool = False) -> GenStats:
     """Class-specific N (260506 user directive — defect/normal/invalid different counts).
 
     per_defect:  applied to each of 10 defect classes (4 single + 6 combo)
@@ -265,21 +275,22 @@ def generate(out_root: Path, classification_chips_root: Path,
         return d
 
     def _record(class_key: str, arr_or_img, base1_path: str, base2_path: str,
-                gen_method: str) -> bool:
+                gen_method: str, base3_path: str = "") -> bool:
         # Accept either numpy RGB array OR PIL Image (palette PNG).
         # Save the source object as-is (preserves palette mode), but compute
         # sanity & defect_pixel_ratio on the RGB conversion.
+        # 260508: optional base3_path for 3-class combo.
         if isinstance(arr_or_img, Image.Image):
             save_obj = arr_or_img
             arr_rgb = np.array(arr_or_img.convert("RGB"))
         else:
             save_obj = arr_or_img
             arr_rgb = arr_or_img
-        ok, reason = _sanity_check(
-            class_key, arr_rgb,
-            _load_chip_rgb(Path(base1_path)) if base1_path else None,
-            _load_chip_rgb(Path(base2_path)) if base2_path else None,
-        )
+        bases: List[np.ndarray] = []
+        for bp in (base1_path, base2_path, base3_path):
+            if bp:
+                bases.append(_load_chip_rgb(Path(bp)))
+        ok, reason = _sanity_check(class_key, arr_rgb, bases if bases else None)
         if not ok:
             rej_dir = out_root / "_rejected" / reason
             rej_dir.mkdir(parents=True, exist_ok=True)
@@ -298,6 +309,7 @@ def generate(out_root: Path, classification_chips_root: Path,
             "defect_pixel_ratio": _defect_pixel_ratio(arr_rgb),
             "base1_path": base1_path,
             "base2_path": base2_path,
+            "base3_path": base3_path,
             "gen_method": gen_method,
         })
         accepted[class_key] = idx + 1
@@ -314,7 +326,7 @@ def generate(out_root: Path, classification_chips_root: Path,
             if _record(cls, arr, str(f), "", "single_resample"):
                 n_made += 1
 
-    # 2) combos: min-blend (per_defect)
+    # 2) 2-combos: min-blend (per_defect)
     for combo in COMBO_KEYS:
         a, b = combo.split("+")
         n_made = 0
@@ -328,6 +340,25 @@ def generate(out_root: Path, classification_chips_root: Path,
             blended = _min_blend(arr_a, arr_b)
             if _record(combo, blended, str(fa), str(fb), "min_blend"):
                 n_made += 1
+
+    # 2b) 3-combos (260508): N-way min-blend
+    if include_triples:
+        for combo in TRIPLE_COMBO_KEYS:
+            a, b, c = combo.split("+")
+            n_made = 0
+            attempts = 0
+            while n_made < per_defect and attempts < per_defect * 3:
+                attempts += 1
+                fa = src_chips[a][int(rng.integers(0, len(src_chips[a])))]
+                fb = src_chips[b][int(rng.integers(0, len(src_chips[b])))]
+                fc = src_chips[c][int(rng.integers(0, len(src_chips[c])))]
+                arr_a = _load_chip_rgb(fa)
+                arr_b = _load_chip_rgb(fb)
+                arr_c = _load_chip_rgb(fc)
+                blended = _min_blend_n([arr_a, arr_b, arr_c])
+                if _record(combo, blended, str(fa), str(fb), "min_blend_n3",
+                           base3_path=str(fc)):
+                    n_made += 1
 
     # 3) normal (per_normal — typically larger to reflect real-env Normal prevalence)
     n_made = 0
@@ -346,7 +377,8 @@ def generate(out_root: Path, classification_chips_root: Path,
     # manifest + previews
     with open(out_root / "manifest.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["chip_path", "class_key", "defect_pixel_ratio",
-                                          "base1_path", "base2_path", "gen_method"])
+                                          "base1_path", "base2_path", "base3_path",
+                                          "gen_method"])
         w.writeheader()
         w.writerows(manifest_rows)
 
@@ -376,6 +408,8 @@ def main() -> None:
                     help="filter source chips to top-N%% by defect strength (100=all, 50=top half)")
     ap.add_argument("--clear", action="store_true",
                     help="DELETE existing out_root/ before generating (DANGEROUS — disabled by default)")
+    ap.add_argument("--include-triples", action="store_true",
+                    help="260508: also generate 4 3-combo classes (TRIPLE_COMBO_KEYS) → 14 class.")
     args = ap.parse_args()
 
     if args.per_class is not None:
@@ -389,11 +423,15 @@ def main() -> None:
         print(f"[WARN] removing existing {out_root}")
         shutil.rmtree(out_root)
 
-    print(f"[gen] target: defect={per_defect}/class × 10 + Normal={per_normal} + Invalid={per_invalid} "
-          f"= {per_defect*10 + per_normal + per_invalid} chips")
+    n_combo = 10 if args.include_triples else 10
+    n_def_classes = len(SINGLE_KEYS) + len(COMBO_KEYS) + (len(TRIPLE_COMBO_KEYS) if args.include_triples else 0)
+    print(f"[gen] target: defect={per_defect}/class × {n_def_classes} + Normal={per_normal} + Invalid={per_invalid} "
+          f"= {per_defect*n_def_classes + per_normal + per_invalid} chips "
+          f"(triples={'on' if args.include_triples else 'off'})")
     stats = generate(out_root, Path(args.classification_chips_root),
                      per_defect=per_defect, per_normal=per_normal, per_invalid=per_invalid,
-                     seed=args.seed, source_strength_pct=args.source_strength_pct)
+                     seed=args.seed, source_strength_pct=args.source_strength_pct,
+                     include_triples=args.include_triples)
     total_acc = sum(stats.accepted.values())
     total_rej = sum(stats.rejected.values())
     print(f"\n[gen] accepted total: {total_acc}")

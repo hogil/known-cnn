@@ -22,8 +22,7 @@ TRAIN_CLASSES: Tuple[str, ...] = (
 SINGLE_KEYS: Tuple[str, ...] = TRAIN_CLASSES
 
 COMBO_KEYS: Tuple[str, ...] = (
-    # 2-combo only (C(4,2) = 6) — 3-combo 4 class 사용자 directive 260507 삭제
-    # (scratch_rot pairing 으로 fork F1 발목 잡힘 증명, 16-class master 로 단순화)
+    # 2-combo (C(4,2) = 6).
     "bank_boundary+fork",
     "bank_boundary+scratch",
     "bank_boundary+scratch_rot",
@@ -31,6 +30,18 @@ COMBO_KEYS: Tuple[str, ...] = (
     "fork+scratch_rot",
     "scratch+scratch_rot",
 )
+
+# 260508 — 3-combo (C(4,3) = 4) 재도입. eval set 14-class spectrum 확장.
+# 사용자 directive 260508: "2 + 3-class combo 10 total". gen_eval_set.py 의
+# --include-triples flag 로만 사용. 학습 정책 (TRAIN_CLASSES 4 single) 은 그대로.
+TRIPLE_COMBO_KEYS: Tuple[str, ...] = (
+    "bank_boundary+fork+scratch",
+    "bank_boundary+fork+scratch_rot",
+    "bank_boundary+scratch+scratch_rot",
+    "fork+scratch+scratch_rot",
+)
+
+ALL_COMBO_KEYS: Tuple[str, ...] = COMBO_KEYS + TRIPLE_COMBO_KEYS
 
 SPECIAL_KEYS: Tuple[str, ...] = ("Normal", "Invalid")
 
@@ -57,7 +68,8 @@ OOD_OVERLAY_KEYS: Tuple[str, ...] = (
     "scratch+scratch_rot+ood_Starburst",
 )
 
-ALL_CLASS_KEYS: Tuple[str, ...] = SINGLE_KEYS + COMBO_KEYS + SPECIAL_KEYS + WAFER_PATTERN_KEYS + OOD_OVERLAY_KEYS
+ALL_CLASS_KEYS: Tuple[str, ...] = (SINGLE_KEYS + COMBO_KEYS + TRIPLE_COMBO_KEYS
+                                   + SPECIAL_KEYS + WAFER_PATTERN_KEYS + OOD_OVERLAY_KEYS)
 
 NUM_TRAIN = len(TRAIN_CLASSES)
 NUM_ALL = len(ALL_CLASS_KEYS)
@@ -102,6 +114,8 @@ def _build_key_to_labels() -> dict[str, frozenset[str]]:
         out[k] = frozenset({k})
     for k in COMBO_KEYS:
         out[k] = frozenset(k.split("+"))
+    for k in TRIPLE_COMBO_KEYS:
+        out[k] = frozenset(k.split("+"))
     out["Normal"] = frozenset()
     out["Invalid"] = frozenset({"__INVALID__"})
     # 260506 — 4 wafer-pattern OOD eval classes (chip-level pattern from wafer-canvas defect region)
@@ -128,7 +142,8 @@ def labels_to_class_key(active: frozenset[str], is_invalid: bool = False) -> str
     - active empty   -> 'Normal'
     - active size 1  -> single key
     - active size 2  -> 2-combo key (canonical sort)
-    - active size >= 3 -> caller must handle (no 3+combo class defined as of 260507)
+    - active size 3  -> 3-combo key (canonical sort) — 260508 재도입
+    - active size >= 4 -> caller must handle (no 4+combo class)
     """
     if is_invalid:
         return "Invalid"
@@ -143,4 +158,10 @@ def labels_to_class_key(active: frozenset[str], is_invalid: bool = False) -> str
         if key not in COMBO_KEYS:
             raise KeyError(f"unknown combo {key}; not in COMBO_KEYS")
         return key
-    raise ValueError(f"active set size {len(active)} >= 3 — no 3+combo class defined")
+    if len(active) == 3:
+        sorted_keys = sorted(active)
+        key = "+".join(sorted_keys)
+        if key not in TRIPLE_COMBO_KEYS:
+            raise KeyError(f"unknown 3-combo {key}; not in TRIPLE_COMBO_KEYS")
+        return key
+    raise ValueError(f"active set size {len(active)} >= 4 — no 4+combo class defined")

@@ -30,10 +30,12 @@ import numpy as np
 import pandas as pd
 
 from .constants import (ALL_CLASS_KEYS, COMBO_KEYS, OOD_OVERLAY_KEYS, SINGLE_KEYS,
-                        SPECIAL_KEYS, TRAIN_CLASSES, WAFER_PATTERN_KEYS)
+                        SPECIAL_KEYS, TRAIN_CLASSES, TRIPLE_COMBO_KEYS, WAFER_PATTERN_KEYS)
 
 NON_DEFECT_GT_CLASSES = ("Normal", "Invalid") + WAFER_PATTERN_KEYS  # 6 classes (legacy bundled — Row dropped 260507)
-DEFECT_GT_CLASSES = SINGLE_KEYS + COMBO_KEYS + OOD_OVERLAY_KEYS  # 14 classes (260507 + 4 OOD overlay)
+# 260508 — bug fix: TRIPLE_COMBO_KEYS 누락 발견. 4 3-class combo (b+f+sc, b+f+sr, b+sc+sr, f+sc+sr)
+# 가 per_class_all 카운트에서 빠져 19C bb F1 0.7339 (실제 0.9928) 같은 환영값 발생. 사용자 directive 정정.
+DEFECT_GT_CLASSES = SINGLE_KEYS + COMBO_KEYS + TRIPLE_COMBO_KEYS + OOD_OVERLAY_KEYS  # 18 classes
 
 # 260507 — split NON_DEFECT_GT into 3 groups (analyst Cycle A Step 1)
 #   normal_invalid: ('Normal', 'Invalid')           ★ paper main (real-env target)
@@ -55,6 +57,13 @@ def class_key_to_bits(class_key: str) -> np.ndarray:
     if class_key in COMBO_KEYS:
         for c in class_key.split("+"):
             bits[TRAIN_CLASSES.index(c)] = 1
+        return bits
+    if class_key in TRIPLE_COMBO_KEYS:
+        # 260508 — bug fix. 3-class combo (b+f+sc, b+f+sr, b+sc+sr, f+sc+sr) 가 missing 이라
+        # bb F1 0.7339 환영값 발생했음. trained-class 토큰만 추출.
+        for c in class_key.split("+"):
+            if c in TRAIN_CLASSES:
+                bits[TRAIN_CLASSES.index(c)] = 1
         return bits
     if class_key in OOD_OVERLAY_KEYS:
         # 260507 — 2 trained + 1 OOD overlay. GT bits = 2 trained only ('<a>+<b>+ood_<OOD>').
