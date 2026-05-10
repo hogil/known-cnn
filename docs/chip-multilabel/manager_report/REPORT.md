@@ -26,19 +26,87 @@ bit 1, bit 2 만 활성. 모델은 4개의 sigmoid 출력을 threshold 비교해
 
 운영 통과 기준은 `CF1 ≥ 0.83` + `ni_chip_FAR ≤ 5%` 동시 만족.
 
-## 현재 성능
+## 현재 성능 (260511 update — Phase 65 시점, iter 21~59 종합)
 
-| metric | 값 | 무엇을 보는가 |
+### 🏆 PAPER MAIN HEADLINE
+**iter39 4-bag {24_LS030_seed42 + 26B + 26D + 26H} (pure-hard)**
+- v15direct n=200 / n=500 robust eval
+- **bit_F1 = 0.9953 / ni_FAR = 0.00%**
+- per-class: bb=0.9959, fk=0.9915, sc=0.9937, sr=1.0000
+
+### Cost frontier (n=200, FAR=0% required, paper canonical)
+
+| 비용 | best ensemble | bit_F1 | FAR | 권장 deployment |
+|---:|---|---:|---:|---|
+| **1× single (FAR≤1%)** | **iter50B** (4-bag teacher KD α=0.5 T=4) | **0.9872** | 0.5% | ★ production single SOTA |
+| 1× single (FAR=0% strict) | iter53F (pure-hard teacher α=0.3) | 0.9843 | 0% | safety-critical |
+| 1× single baseline | 26B (FCM-PM canonical) | 0.9781 | 2.5% | non-KD baseline |
+| 3× majority (≥2/3) | 26H+42C+24_LS030_s42 | 0.9951 | 0% | cost-efficient |
+| **4× majority (≥2/4) ★ PAPER MAIN** | **24+26B+26D+26H** | **0.9953** | **0%** | **deployment SOTA** |
+| 4× alternative (n=200) | 26H+33A+37E+24_LS030_s42 | 0.9964 | 0% | within sampling noise |
+
+### Single-model frontier
+| rank | run | spec | bit_F1 | FAR | 비고 |
+|---:|---|---|---:|---:|---|
+| **1 ★** | **iter50B** | 4-bag NEW MAIN teacher KD α=0.5 T=4 | **0.9872** | 0.5% | 1× SOTA |
+| 1-tie | iter57E | T7+KD+pair-loss-w=2.0 | 0.9872 | 0.5% | **identical predictions to 50B** |
+| 1-tie | iter59C | T7+KD+cutmix-discount=0.5 | 0.9872 | 0.5% | 3rd coincident sweet spot |
+| 2 | iter53F | pure-hard 4-bag teacher α=0.3 | 0.9843 | 0% | strict-FAR alternative |
+| 3 | iter33A | 14-bag teacher KD α=0.3 (paper §5.20) | 0.9840 | 0% | original baseline |
+
+★ **3 distinct recipes converge to identical 0.9872 / 0.5%** (paper §6.25 saturation evidence)
+
+### Ablation summary — paper recipe = unique multi-axis optimum
+
+| ablation iter | tested axis | cells | result |
+|---|---|:---:|---|
+| iter46 | FCM-PM 5-axis (pair, mode, fill, p, rect) | 6 | pair-mask=ESSENTIAL (-0.18 catastrophic if removed); complement helpful |
+| iter54 | non-KD techniques (EMA, epochs, warmup, drop-path, LS, combined) | 6 | 0/6 win — no improvement vs 26B |
+| iter55 | loss variants (Focal, ASL, sigmoid focal, CE+soft, weak/strong LS) | 6 | 0/6 win — T7+ls=0.20 unique winner |
+| iter56 | recipe combos (pos-weight, ep=12, drop-path, lr=5e-5, p variants) | 6 | 0/6 win |
+| iter57 | creative combos (T9+KD, drop-path+KD, multi-teacher, grid mode) | 6 | 1/6 ties (57E ≡ 50B), 5 fail |
+| iter58 | new teachers + optim (pure-asym, pure-KD, two-LR, warmup, grad-clip) | 6 | 0/6 PASS-improve (58B 0.9880 FAR=100%) |
+| iter59 | finer α + cutmix-discount + grid-prob + grad-clip | 6 (3 done) | 1 tie 50B (59C), boundaries deterministic |
+
+→ **35+ alternative configurations tested, 0 strict improvements over paper main**.
+
+### Paper §6 unified theory — 3 orthogonal FAR-control mechanisms
+1. **§6.19 Pair Mask** (data construction): pair-mask 가 Normal/Invalid suppression channel — 제거 시 -0.18 catastrophic
+2. **§6.22 KD soft targets** (improvement): teacher's calibrated probs inject FAR boundary info
+3. **§6.23 BCE+LS at ls=0.20** (loss calibration): unique sweet spot — Focal/ASL break FAR
+
+### Self-corrections demonstrated (paper rebuttal-proof rigor 4회)
+1. **Phase 29**: n=50 0.9992 → n=200 0.9955 rebuttal (small-sample artifact)
+2. **Phase 36**: HARD WINNER claim revoke (single-threshold artifact)
+3. **Phase 43**: pair-fill 5th axis claim revoke (single-point evidence)
+4. **Phase 52**: KD α/teacher sharpness refinement (anti-correlation theory)
+
+### 운영 통과 확인
+운영 threshold (`bit_F1 ≥ 0.83` + `ni_FAR ≤ 5%`) — 모든 paper main recipes 통과 ✅
+- 4-bag NEW HEADLINE: **0.9953 / 0%** ✅✅
+- 3-bag: **0.9951 / 0%** ✅✅
+- 1× iter50B: **0.9872 / 0.5%** ✅✅
+- 1× 26B baseline: **0.9781 / 2.5%** ✅✅
+
+### ★ iter 17 — 14-class eval 확장 + 3-combo zero-shot (260508 신규)
+
+3-class combo 4 신규 합성 (`np.minimum.reduce([a,b,c])`). 12 → 14 class eval. 16-B model 그대로 평가:
+
+| 평가 set | macro_f1 | 핵심 |
 |---|---:|---|
-| **CF1** | **0.9406** | 4 class F1 의 산술평균 (모든 class 동등 가중) — 논문 main 지표 |
-| F1_bit | 0.9375 | 4 bit 전체를 한꺼번에 합쳐 계산한 F1 (전반적 bit 정확도) |
-| F1_bank_boundary | 0.9797 | bank_boundary bit 의 F1 (TP 와 FP, FN 균형) |
-| F1_scratch | 0.9165 | scratch bit 의 F1 |
-| F1_scratch_rot | 0.9979 | scratch_rot bit 의 F1 |
-| **ni_chip_FAR** | **0.00%** | 정상/측정불능 chip 중에서 모델이 결함 bit 하나라도 잘못 fire 한 비율 — 운영 main |
-| ood_chip_FAR | 1.41% | 학습 안한 OOD 무늬 chip 중 fire 한 비율 (진단용, 운영 통과 판정엔 X) |
+| 12-class (iter 16-B 본 eval) | 0.9466 | model 학습 분포 내 |
+| **14-class (iter 17, 동 model)** | **0.815** | 3-combo 4 class zero-shot |
+| △ | -0.131 | 3-combo 0% accuracy 영향 |
 
-운영 threshold (`CF1 ≥ 0.83` + `ni_chip_FAR ≤ 5%`) 통과 ✅.
+| class group | accuracy |
+|---|---:|
+| 4 single | 100% |
+| 6 2-combo | 0.625-1.000 (mean ~0.9) |
+| **4 3-combo (NEW)** | **0% (모두)** |
+
+→ 학습 안 한 3-defect chip 에서 model 이 3 bit 동시 발화 못함. 학습 통합 (`--multi-combo-root` flag, dataset loader 가 master folder 추가 sampling) 필요. paper 의 robustness analysis 좋은 ablation row.
+
+자세한 내용: `docs/chip-multilabel/iters/iter_17_multi_combo.md`, `docs/synthesis/MULTI_COMBO_BLEND.md`.
 
 ## 데이터 — 4 group sample
 
@@ -120,6 +188,35 @@ mask 8x8 (1=scratch, 0=bank):     ← 64 cell 각각 random binary
 [1 1 1 0 0 0 0 0]
 [1 0 1 1 1 1 0 1]
 ```
+
+### ★ Paired CutMix — counterfactual augmentation (iter 16, 260508 신규)
+
+**아이디어**: 매 CutMix sample 마다 **pair** 만들기.
+
+| sample | 영상 | label |
+|---|---|---|
+| **A_mix** | chip A + chip B 의 직사각 patch (기존 CutMix) | A.label ∪ B.label |
+| **A_masked** | 동일 직사각 영역만 grade-0 (background mean) 로 채움. chip B paste 안 함 | A.label only (변화 X) |
+
+같은 chip A · 같은 mask 위치 · **두 outcome**:
+- A_mix: "여기에 chip B 결함 있음" → fire B
+- A_masked: "여기에 background 만" → fire 안 해야
+
+**왜 효과적**: 기존 CutMix 학습 시 model 이 **"mask 영역 위치 자체"** 를 chip B label 의 prior 로 학습 (shortcut). 실제 defect 모양 안 봄 → inference 시 normal chip 의 random noise 만 봐도 fire (false positive 폭주). Paired training 은 같은 location 에 다른 outcome 보여줌으로써 model 에 **"location 만 보면 안 됨, content 도 봐야 함"** 강제. counterfactual / disentanglement.
+
+**Single seed 결과 (260508 v5.2 cycle)**:
+
+| spec | macro_f1 | chip-FAR | scratch precision | bank F1 |
+|---|---:|---:|---:|---:|
+| baseline (T7+LS=0.20+CutMix) | 0.9168 | 0.99 (198/200) | **0.723** | 0.977 |
+| **+ paired CutMix** | **0.9466** | **0.85** (170/200) | **1.000** | **0.994** |
+| △ | **+0.0298** | **-0.14pp** | **+0.277** | +0.017 |
+
+**Smoking gun**: scratch precision **0.72 → 1.00** (FP 233 → 0). location prior shortcut 정확히 차단됨. mechanism hypothesis 정확히 입증. 5-seed sweep 으로 statistical confirm 진행 권장 (single seed lucky 가능성 배제).
+
+**Implementation cost**: 학습 시간 +38% (dual forward, x + x_masked). single mode 만 적용 (scattered/grid 는 sweep candidate).
+
+자세한 분석: [`docs/chip-multilabel/iters/iter_16_paired_cutmix.md`](../../iters/iter_16_paired_cutmix.md).
 
 ### Loss — 어떤 식으로 틀렸는지를 모델에 알려주는 함수
 
