@@ -110,3 +110,102 @@ target soft-label `[bb=0.05, fork=0.85, sc=0.05, sr=0.05]` (LS ε=0.20). over-co
 ## paper grounding
 
 BCE / CF1 / F1_bit (Tsoumakas 2007, Wang 2016, Chen 2019), Label Smoothing (Müller 2019), Focal (Lin 2017), ASL (Ridnik 2021), CutMix (Yun 2019, Walawalkar 2020, Sumbul 2024), Knowledge Distillation (Hinton 2015, Yang 2023 multi-label).
+
+---
+
+## 260513 update — val_margin selection + iter116J NEW SOTA
+
+### val_f1 → val_margin selection 전환 효과 (★)
+
+**val_margin** = mean(prob[positive bits]) − max(prob[negative bits]) per chip, averaged. **Decision boundary sharpness 직접 측정**.
+
+기존 val_f1 (per-bit BCE F1) 은 small val (n=163, single-label only) 에서 saturate (3 reachable values 0.9818/0.9847/0.9907) → coin-flip selection. val_margin = continuous spectrum + anti-saturation + multi-label friendly.
+
+**Pooled Spearman ρ vs eval bit_F1 (iter101A/111/112 audit, 35 ckpts)**:
+| metric | ρ | 평가 |
+|---|---|---|
+| val_acc | -0.42 | anti-correlated |
+| val_f1 | -0.10 | saturate noise |
+| val_auroc | +0.30 | unstable (plateau 1.0000) |
+| val_bce | -0.03 | noise |
+| **val_margin** | **+0.56** | ★ best correlated |
+
+### NEW SOTA — iter116J (절대 룰 준수)
+
+```
+Recipe: ConvNeXtV2-Base FCMAE 384 + T7 BCE+LS=0.30 + ep=10
+        + cutmix-mode complement g=3 pair=masked corner cls=0.5 p=0.25
+        + --no-normal + --val-criterion margin_max + --save-every-epoch
+        + seed=1, batch 2 accum 8, lr=1e-4 (cosine)
+```
+
+| candidate | bit_F1 | Total FAR | comparison |
+|---|---|---|---|
+| **★ iter116J val_margin (ep6)** | **0.9943** | **0.00%** | ZERO FAR paper headline |
+| iter116J val_f1 (ep1) | 0.9422 | 0.00% | same recipe, val_f1 selection |
+| iter116F (g=4 LS=0.30) val_margin | 0.9953 | 0.24% | balance |
+| iter112 ep06 val_f1 (이전) | 0.9964 | 0.83% | high F1 but FAR 비싸짐 |
+| iter46E (옛 룰 Normal trained) | 0.9755 | 1.07% | reference baseline |
+
+→ **+0.052 bit_F1 vs val_f1 selection** (same recipe, only criterion 변경)
+→ **+0.018 bit_F1 vs iter46E + Total FAR -1.07%** (절대 룰 + val_margin combined)
+
+### iter116J val_margin vs val_f1 — per-bit active/inactive prob distribution
+
+format: `mean ± std` (prob 분포)
+
+**val_f1 (ep1)** :
+| group | n | bb_pos | bb_neg | fk_pos | fk_neg | sc_pos | sc_neg | sr_pos | sr_neg |
+|---|---|---|---|---|---|---|---|---|---|
+| single | 640 | 0.87±0.01 | 0.14±0.02 | 0.85±0.03 | 0.15±0.01 | 0.79±0.02 | 0.14±0.01 | 0.84±0.01 | 0.17±0.01 |
+| 2-combo | 960 | 0.69±0.15 | 0.19±0.08 | 0.41±0.16 | 0.15±0.02 | 0.26±0.11 | 0.12±0.02 | 0.60±0.14 | 0.17±0.02 |
+| 3-combo | 640 | 0.60±0.15 | 0.22±0.06 | 0.23±0.08 | 0.14±0.02 | 0.18±0.06 | 0.12±0.02 | 0.44±0.11 | 0.18±0.01 |
+| Normal | 160 | N/A | 0.41±0.02 | N/A | 0.20±0.01 | N/A | 0.42±0.04 | N/A | 0.40±0.02 |
+| Invalid | 40 | N/A | 0.38±0.03 | N/A | 0.15±0.02 | N/A | 0.30±0.02 | N/A | 0.35±0.02 |
+| OOD | 640 | N/A | 0.43±0.04 | N/A | 0.16±0.01 | N/A | 0.43±0.03 | N/A | 0.35±0.02 |
+
+**val_margin (ep6)** :
+| group | n | bb_pos | bb_neg | fk_pos | fk_neg | sc_pos | sc_neg | sr_pos | sr_neg |
+|---|---|---|---|---|---|---|---|---|---|
+| single | 640 | 0.87±0.00 | 0.15±0.01 | 0.85±0.01 | 0.15±0.01 | 0.85±0.01 | 0.15±0.01 | 0.84±0.00 | 0.14±0.00 |
+| 2-combo | 960 | 0.67±0.07 | 0.13±0.02 | **0.53±0.12** | 0.12±0.02 | **0.43±0.09** | 0.10±0.01 | 0.54±0.10 | 0.13±0.01 |
+| 3-combo | 640 | 0.52±0.09 | 0.13±0.03 | 0.34±0.10 | 0.11±0.02 | 0.25±0.07 | 0.09±0.01 | 0.42±0.05 | 0.12±0.01 |
+| Normal | 160 | N/A | 0.37±0.02 | N/A | 0.23±0.01 | N/A | 0.48±0.01 | N/A | 0.23±0.01 |
+| Invalid | 40 | N/A | 0.30±0.02 | N/A | 0.21±0.01 | N/A | 0.24±0.01 | N/A | 0.23±0.01 |
+| OOD | 640 | N/A | 0.39±0.02 | N/A | 0.23±0.02 | N/A | 0.45±0.02 | N/A | 0.23±0.01 |
+
+### 핵심 변화 (val_f1 → val_margin)
+
+| metric | val_f1 → val_margin | Δ |
+|---|---|---|
+| 2-combo fork_pos | 0.41 → 0.53 | **+0.12** ★ |
+| 2-combo scratch_pos | 0.26 → 0.43 | **+0.17** ★★ |
+| 2-combo inactive bits | 0.12-0.19 → 0.10-0.13 | -0.03~-0.06 |
+| OOD/Normal max_prob | 0.45~0.48 (gate 0.55 미만 유지) | 동등 안전 |
+| bit_F1 (absolute rule) | **0.9422 → 0.9943** | **+0.052** ★★ |
+| Total FAR | 0.00% → 0.00% | tied |
+
+### FAR=0 메커니즘 (★ I13 entropy gate)
+
+`max_prob < 0.55 → Normal 강제` 가 FAR 의 핵심 차단막. per-bit threshold 만으론 OOD chip 의 scratch prob 0.45 가 threshold 0.18 초과 → false fire. **gate 가 모든 bit 평탄한 chip (OOD/Normal) 차단** :
+
+| group | max_prob mean | gate (0.55) 통과 |
+|---|---|---|
+| single | 0.85 | ✓ |
+| 2-combo | 0.65 (bb/sr 강함) | ✓ |
+| 3-combo | 0.51 | △ boundary |
+| OOD | 0.45 (모든 bit 평탄) | ✗ |
+| Normal | 0.48 | ✗ |
+| Invalid | 0.30 | ✗ |
+
+→ **2-combo 는 항상 1-2 bit peaked, OOD 는 flat 분포** — 이 차이가 분리 enabling factor.
+
+### Code patches (260512-13)
+
+| flag | 효과 |
+|---|---|
+| `--val-criterion {acc,f1,auroc,bce_min,brier_min,margin_max,f1_best_tau}` | 7 selection criterion |
+| `--save-every-epoch` | per-epoch ckpt 저장 |
+| `--cutmix-mode bisect_h/v/rand` | 절반 split cutmix (paper §6 NEW axis) |
+| `--no-normal` | 절대 룰 enforce |
+

@@ -125,6 +125,7 @@ def _multihot_from_combo_name(name: str) -> np.ndarray:
 def collect_samples(root: Path, include_normal: bool = True,
                     multi_combo_root: Path | None = None,
                     multi_combo_n_per_class: int | None = None,
+                    max_per_class_defect: int | None = None,
                     rng_seed: int = 42) -> List[Tuple[Path, int, np.ndarray]]:
     """Collect train samples.
 
@@ -132,15 +133,22 @@ def collect_samples(root: Path, include_normal: bool = True,
     - single class: y = TRAIN_CLASSES.index(cname), multihot = one-hot
     - Normal: y = NORMAL_SENTINEL (-1), multihot = [0,0,0,0]
     - multi-combo (NEW): y = MULTI_COMBO_SENTINEL (-2), multihot = parsed from folder name
+
+    260512: max_per_class_defect — limit defect class chip count (low-data ablation).
     """
     out: List[Tuple[Path, int, np.ndarray]] = []
+    rng_def = np.random.default_rng(rng_seed)
     for ci, cname in enumerate(TRAIN_CLASSES):
         d = root / cname
         if not d.exists():
             raise FileNotFoundError(f"missing class dir: {d}")
         mh = np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
         mh[ci] = 1
-        for png in sorted(d.glob("*.png")):
+        files = sorted(d.glob("*.png"))
+        if max_per_class_defect is not None and len(files) > max_per_class_defect:
+            idx = rng_def.choice(len(files), size=max_per_class_defect, replace=False)
+            files = [files[i] for i in sorted(idx)]
+        for png in files:
             out.append((png, ci, mh.copy()))
     if include_normal:
         nd = root / "Normal"
@@ -229,7 +237,17 @@ class ModelEMA:
 
 
 def build_model(num_classes: int, init_ckpt: Path,
-                drop_path_rate: float = 0.0) -> Tuple[torch.nn.Module, str, int]:
+                drop_path_rate: float = 0.0,
+                backbone_timm: str = None,
+                img_size_override: int = None) -> Tuple[torch.nn.Module, str, int]:
+    # Mode A: timm pretrained download (backbone comparison, --backbone-timm flag set)
+    if backbone_timm:
+        img_size = int(img_size_override) if img_size_override else 224
+        model = timm.create_model(backbone_timm, pretrained=True, num_classes=num_classes,
+                                  drop_path_rate=drop_path_rate)
+        print(f"[init] backbone={backbone_timm} (timm pretrained download), img_size={img_size}")
+        return model, backbone_timm, img_size
+    # Mode B: local ckpt (default ConvNeXtV2-base path)
     ckpt = torch.load(init_ckpt, map_location="cpu", weights_only=False)
     backbone = ckpt["backbone"]
     img_size = int(ckpt["img_size"])
@@ -246,20 +264,26 @@ def build_model(num_classes: int, init_ckpt: Path,
 
 @torch.no_grad()
 def evaluate(model, loader, device, num_classes: int):
-    """val_acc on defect samples only (y >= 0). Normal sentinel (y=-1) skipped because
-    4-way argmax can't represent 'no defect' — Normal evaluated separately via max-prob check.
+    """Returns dict {val_acc, val_f1, val_auroc, val_loss} for selection criterion options.
+    260512 (user): val_acc on 4-way argmax has only ~2 reachable values (160/163, 161/163)
+    on tiny val split → coin-flip best selection. Switch to val_f1 macro (per-bit F1 average,
+    continuous spectrum) or val_auroc macro (threshold-independent) for proper selection.
     """
+    import numpy as _np
+    from sklearn.metrics import f1_score as _f1_score, roc_auc_score as _roc_auc_score
     model.eval()
     correct = 0
     total = 0
     correct_normal = 0
     total_normal = 0
     use_amp = device.type == "cuda"
-    NORMAL_MAX_PROB = 0.5  # Normal correct if max sigmoid < 0.5
+    NORMAL_MAX_PROB = 0.5
+    all_y_int = []   # for legacy val_acc compat
+    all_mh = []      # multi-hot GT (defect: one-hot, Normal: zeros)
+    all_probs = []   # sigmoid logits per-bit
     for batch in loader:
-        # 260508 — 3-tuple (x, y, mh).  260509 — 4-tuple adds teacher_prob (val skips KD).
         if len(batch) == 4:
-            x, y, mh, _tp = batch  # val: drop teacher_prob (KD is training-only)
+            x, y, mh, _tp = batch
             mh = mh.to(device, non_blocking=True)
         elif len(batch) == 3:
             x, y, mh = batch
@@ -271,34 +295,92 @@ def evaluate(model, loader, device, num_classes: int):
         y = y.to(device, non_blocking=True)
         with torch.amp.autocast(device_type=device.type, enabled=use_amp):
             logits = model(x)
-        # defect: argmax accuracy (single class only — y >= 0)
+        probs = torch.sigmoid(logits)
         defect_mask = (y >= 0)
         if defect_mask.any():
             pred = logits[defect_mask].argmax(dim=1)
             correct += int((pred == y[defect_mask]).sum())
             total += int(defect_mask.sum())
-        # multi-combo (y == -2): multi-hot subset accuracy (all bits correct via 0.5 threshold)
         if mh is not None:
             multi_mask = (y == MULTI_COMBO_SENTINEL)
             if multi_mask.any():
-                probs = torch.sigmoid(logits[multi_mask])
-                pred_bin = (probs >= 0.5).float()
+                probs_m = probs[multi_mask]
+                pred_bin = (probs_m >= 0.5).float()
                 exact = (pred_bin == mh[multi_mask]).all(dim=1)
                 correct += int(exact.sum())
                 total += int(multi_mask.sum())
-        # Normal: max sigmoid < threshold = correct
         normal_mask = (y == NORMAL_SENTINEL)
         if normal_mask.any():
-            probs = torch.sigmoid(logits[normal_mask])
-            max_p = probs.max(dim=1).values
+            probs_n = probs[normal_mask]
+            max_p = probs_n.max(dim=1).values
             correct_normal += int((max_p < NORMAL_MAX_PROB).sum())
             total_normal += int(normal_mask.sum())
+        # Accumulate per-bit prob + multi-hot GT for F1/AUROC
+        # GT mh: provided in 3/4-tuple. For defect single-label, mh is one-hot.
+        if mh is not None:
+            all_mh.append(mh.detach().cpu().numpy())
+            all_probs.append(probs.detach().cpu().numpy())
+        all_y_int.append(y.detach().cpu().numpy())
+    # val_acc (legacy)
     defect_acc = correct / max(total, 1)
     normal_acc = correct_normal / max(total_normal, 1) if total_normal > 0 else None
     if normal_acc is not None:
-        # Combined: weighted avg of defect_acc and normal_acc
-        return (correct + correct_normal) / max(total + total_normal, 1)
-    return defect_acc
+        val_acc = (correct + correct_normal) / max(total + total_normal, 1)
+    else:
+        val_acc = defect_acc
+    # val_f1 macro + val_auroc macro (per-bit, defect samples only — Normal y=-1 has zero mh)
+    val_f1 = float('nan')
+    val_auroc = float('nan')
+    if all_mh:
+        mh_all = _np.concatenate(all_mh, axis=0)   # (N, num_classes)
+        probs_all = _np.concatenate(all_probs, axis=0)
+        # mask: defect samples only (mh has at least one 1)
+        defect_idx = mh_all.sum(axis=1) > 0
+        if defect_idx.sum() > 0:
+            mh_d = mh_all[defect_idx]
+            probs_d = probs_all[defect_idx]
+            pred_d = (probs_d >= 0.5).astype(_np.int32)
+            try:
+                val_f1 = float(_f1_score(mh_d, pred_d, average='macro', zero_division=0))
+            except Exception:
+                val_f1 = float('nan')
+            try:
+                # AUROC: needs at least 1 positive + 1 negative per bit; defect-only may be all-positive
+                # → use ALL samples (defect + Normal). Normal mh=zero gives negatives.
+                val_auroc = float(_roc_auc_score(mh_all, probs_all, average='macro'))
+            except Exception:
+                val_auroc = float('nan')
+    # 260512 night — analyst opus metric ideas (saturation-robust)
+    val_bce = float('nan'); val_brier = float('nan')
+    val_margin = float('nan'); val_f1_best_tau = float('nan')
+    if all_mh and defect_idx.sum() > 0:
+        eps = 1e-6
+        p_clip = _np.clip(probs_d, eps, 1.0 - eps)
+        # A1: val BCE loss (Cole 2021 SPML — continuous, anti-saturation)
+        val_bce = float(-(mh_d * _np.log(p_clip) + (1 - mh_d) * _np.log(1 - p_clip)).mean())
+        # A3: Brier score (proper scoring rule)
+        val_brier = float(((p_clip - mh_d) ** 2).mean())
+        # A4: confidence margin (positive prob - max negative prob)
+        try:
+            pos_score = (probs_d * mh_d).sum(axis=1) / _np.maximum(mh_d.sum(axis=1), 1)
+            # max negative bit prob per sample
+            neg_mask = (1 - mh_d).astype(bool)
+            neg_score = _np.where(neg_mask, probs_d, -_np.inf).max(axis=1)
+            val_margin = float((pos_score - neg_score).mean())
+        except Exception:
+            val_margin = float('nan')
+        # A6: best-τ F1 sweep [0.3, 0.7] (decouples threshold artifact)
+        try:
+            f1_at_tau = []
+            for t in _np.linspace(0.3, 0.7, 9):
+                pred_t = (probs_d >= t).astype(_np.int32)
+                f1_at_tau.append(_f1_score(mh_d, pred_t, average='macro', zero_division=0))
+            val_f1_best_tau = float(max(f1_at_tau))
+        except Exception:
+            val_f1_best_tau = float('nan')
+    return {"val_acc": float(val_acc), "val_f1": val_f1, "val_auroc": val_auroc,
+            "val_bce": val_bce, "val_brier": val_brier,
+            "val_margin": val_margin, "val_f1_best_tau": val_f1_best_tau}
 
 
 def main():
@@ -310,8 +392,37 @@ def main():
                     help="optional tag suffix for out_dir name")
     ap.add_argument("--data-root", default="D:/project/data/wm-811k/classification_chips")
     ap.add_argument("--init-ckpt", default=DEFAULT_BACKBONE_CKPT)
+    ap.add_argument("--backbone-timm", type=str, default=None,
+                    help="If set, use timm.create_model(pretrained=True) instead of --init-ckpt. "
+                         "Use for backbone comparison (e.g. 'vit_base_patch16_384.augreg_in21k_ft_in1k').")
+    ap.add_argument("--img-size", type=int, default=None,
+                    help="Override img_size for --backbone-timm mode (default 224).")
     ap.add_argument("--out-root", default="outputs/logs_chip_multilabel")
     ap.add_argument("--epochs", type=int, default=10)
+    ap.add_argument("--best-from-epoch", type=int, default=0,
+                    help="Only consider epochs >= this for best_model.pth selection. "
+                         "Default 0 = save best from any epoch. Use 5 to skip ep1-4 "
+                         "(rationale: backbone with quick val_acc plateau often picks "
+                         "early under-trained ckpt; multi-label perf usually peaks later).")
+    ap.add_argument("--save-every-epoch", action="store_true",
+                    help="Save epoch_NN_model.pth at every epoch end (in addition to "
+                         "best_model.pth). Used for per-epoch eval / multi-label selection. "
+                         "Disk cost: ~350 MB × epochs (cleanup recommended after eval).")
+    ap.add_argument("--val-criterion",
+                    choices=["acc", "f1", "auroc", "bce_min", "brier_min",
+                             "margin_max", "f1_best_tau"],
+                    default="acc",
+                    help="Which val metric drives best_model.pth selection. "
+                         "260512 user: val_acc broken (2 values). "
+                         "f1/auroc: existing patches. "
+                         "260512 night analyst (Cole 2021): bce_min, brier_min, margin_max, "
+                         "f1_best_tau — saturation-robust proper scoring rules. "
+                         "_min variants pick smallest value (sign-flipped in selection logic).")
+    ap.add_argument("--freeze-backbone", action="store_true",
+                    help="Linear probe mode: freeze all backbone params, train only "
+                         "classifier head. Tests pretrained representation quality on chip "
+                         "domain. Standard SSL paper baseline (FCMAE / DINOv3 / Swin V1 all "
+                         "report linear probe). 260512 user directive.")
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
@@ -356,7 +467,8 @@ def main():
     # iter 12 (260506) — scattered CutMix + soft proportional label
     ap.add_argument("--cutmix-mode", type=str, default="single",
                     choices=["single", "scattered", "grid", "grid_sparse",
-                             "grid_complete", "complement", "mixup"],
+                             "grid_complete", "complement", "mixup",
+                             "bisect_h", "bisect_v", "bisect_rand"],
                     help="CutMix mode. 'single' (default) = original random rectangle "
                          "(OR multi-hot label or soft λ for CE-soft). "
                          "'scattered' = N small patches + soft proportional label "
@@ -392,6 +504,10 @@ def main():
                     help="Explicit (A_label, B_label) for complement mode. Format 'A,B' "
                          "e.g., '1.0,0.5' (A hard, B half). Overrides --cutmix-complete-label-scale "
                          "and --cutmix-label-area-prop. paper §6.16 asymmetric axis.")
+    ap.add_argument("--cutmix-other-label", type=float, default=0.0,
+                    help="Label value for off-class bits in mix chip (260512). Default 0 (hard zero). "
+                         "Non-zero = label smoothing for 'neutral' bits — chip mix 의 A/B class 가 아닌 "
+                         "2 bits 에 적용. e.g., 0.1 → 'soft uncertain' for off-class.")
     ap.add_argument("--cutmix-n-patches", type=int, default=5,
                     help="Number of small patches for scattered mode (default 5). "
                          "Used only when --cutmix-mode=scattered.")
@@ -478,9 +594,32 @@ def main():
     print(f"[train] data: train={len(train_samples)} val={len(val_samples)} classes={TRAIN_CLASSES}")
 
     model, backbone, img_size = build_model(num_classes=len(TRAIN_CLASSES),
+                                             backbone_timm=args.backbone_timm,
+                                             img_size_override=args.img_size,
                                             init_ckpt=Path(args.init_ckpt),
                                             drop_path_rate=args.drop_path_rate)
     model = model.to(device)
+    # 260512 — --freeze-backbone: linear probe mode (classifier-only training)
+    if args.freeze_backbone:
+        # Freeze everything
+        n_total = 0
+        n_trainable = 0
+        for p in model.parameters():
+            p.requires_grad = False
+            n_total += p.numel()
+        # Unfreeze classifier head only
+        try:
+            head = model.get_classifier()
+        except Exception:
+            head = getattr(model, 'head', None) or getattr(model, 'fc', None) or getattr(model, 'classifier', None)
+        if head is None:
+            raise RuntimeError("Could not locate classifier head; cannot --freeze-backbone")
+        for p in head.parameters():
+            p.requires_grad = True
+            n_trainable += p.numel()
+        print(f"[init] FROZEN backbone, classifier-only training: "
+              f"{n_trainable:,} trainable / {n_total:,} total params "
+              f"({100.0*n_trainable/max(n_total,1):.2f}%)")
 
     ema = ModelEMA(model, decay=args.ema_decay) if args.ema_decay > 0 else None
     if ema is not None:
@@ -552,6 +691,11 @@ def main():
         elif args.cutmix_mode in ("grid_complete", "grid_sparse"):
             print(f"[train] CutMix enabled mode={args.cutmix_mode} p={args.cutmix_p} "
                   f"label_scale={args.cutmix_complete_label_scale}")
+        elif args.cutmix_mode in ("bisect_h", "bisect_v", "bisect_rand"):
+            # 260513 — half-image bisect cutmix (paper §6.X NEW axis, analyst opus)
+            print(f"[train] CutMix enabled mode={args.cutmix_mode} p={args.cutmix_p} "
+                  f"pair={args.cutmix_pair} label_scale={args.cutmix_complete_label_scale} "
+                  f"ab_labels={args.cutmix_ab_labels or 'symmetric'}")
         else:
             print(f"[train] CutMix enabled mode=single p={args.cutmix_p} "
                   f"rect={args.cutmix_rect}")
@@ -814,7 +958,10 @@ def main():
                                         x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
                                         mix[:, y0:y1, x0:x1] = chip_a[:, y0:y1, x0:x1]
                                     new_x.append(mix.unsqueeze(0))
-                                    mix_t = torch.zeros(len(TRAIN_CLASSES), device=device)
+                                    # 260512: other-label LS support. Initialize with cutmix_other_label
+                                    # for all bits, then overwrite A/B class bits below.
+                                    other_lbl = float(args.cutmix_other_label)
+                                    mix_t = torch.full((len(TRAIN_CLASSES),), other_lbl, device=device)
                                     if args.cutmix_ab_labels:
                                         # paper §6.16: explicit asymmetric (A_label, B_label)
                                         a_lbl, b_lbl = [float(v) for v in args.cutmix_ab_labels.split(',')]
@@ -857,6 +1004,70 @@ def main():
                             x = torch.cat(new_x, dim=0)
                             tgt = torch.cat(new_tgt, dim=0)
                             do_pair = False  # complement has its own paired branch (mask chips)
+                        elif args.cutmix_mode in ("bisect_h", "bisect_v", "bisect_rand"):
+                            # 260513 — half-image bisect cutmix (paper §6.X NEW axis).
+                            # Single boundary, A=one half, B=other half. 50/50 area.
+                            # Tests whether coherent contiguous regions match chip multi-label
+                            # manifold better than 8x8 grid scatter (complement g=2).
+                            # Pair counterfactual (--cutmix-pair=masked) supported.
+                            include_mask = (args.cutmix_pair == "masked")
+                            corner_per_chip = x[:, :, :8, :8].mean(dim=(2, 3), keepdim=True)
+                            label_scale = float(args.cutmix_complete_label_scale)
+                            new_x: List[torch.Tensor] = []
+                            new_tgt: List[torch.Tensor] = []
+                            for bi in range(bs):
+                                if not bool(valid_mask[bi].item()):
+                                    new_x.append(x[bi:bi+1])
+                                    new_tgt.append(tgt[bi:bi+1])
+                                    continue
+                                a_cls = int(y[bi].item())
+                                b_cls = int(y[perm[bi]].item())
+                                chip_a = x[bi]
+                                chip_b = x[perm[bi]]
+                                cor_a = corner_per_chip[bi]
+                                # decide orientation
+                                if args.cutmix_mode == "bisect_h":
+                                    orient = "h"
+                                elif args.cutmix_mode == "bisect_v":
+                                    orient = "v"
+                                else:
+                                    orient = "h" if float(np.random.rand()) < 0.5 else "v"
+                                # build mix chip: A on one half, B on the other
+                                mix = chip_b.clone()
+                                if orient == "h":
+                                    mix[:, : H // 2, :] = chip_a[:, : H // 2, :]
+                                else:
+                                    mix[:, :, : W // 2] = chip_a[:, :, : W // 2]
+                                new_x.append(mix.unsqueeze(0))
+                                # label rule
+                                other_lbl = float(args.cutmix_other_label) if hasattr(args, 'cutmix_other_label') else 0.0
+                                mix_t = torch.full((len(TRAIN_CLASSES),), other_lbl, device=device)
+                                if args.cutmix_ab_labels:
+                                    a_lbl, b_lbl = [float(v) for v in args.cutmix_ab_labels.split(',')]
+                                    mix_t[a_cls] = a_lbl
+                                    mix_t[b_cls] = b_lbl
+                                else:
+                                    mix_t[a_cls] = label_scale
+                                    mix_t[b_cls] = label_scale
+                                new_tgt.append(mix_t.unsqueeze(0))
+                                if include_mask:
+                                    # paired counterfactual: B-half filled with A's corner -> A only
+                                    mask = mix.clone()
+                                    if orient == "h":
+                                        mask[:, H // 2:, :] = cor_a
+                                    else:
+                                        mask[:, :, W // 2:] = cor_a
+                                    new_x.append(mask.unsqueeze(0))
+                                    mask_t = torch.zeros(len(TRAIN_CLASSES), device=device)
+                                    if args.cutmix_ab_labels:
+                                        a_lbl, _ = [float(v) for v in args.cutmix_ab_labels.split(',')]
+                                        mask_t[a_cls] = a_lbl
+                                    else:
+                                        mask_t[a_cls] = label_scale
+                                    new_tgt.append(mask_t.unsqueeze(0))
+                            x = torch.cat(new_x, dim=0)
+                            tgt = torch.cat(new_tgt, dim=0)
+                            do_pair = False  # bisect has its own paired branch (mask chips)
                         elif args.cutmix_mode == "grid_complete":
                             # 260508 — deterministic 50/50 split, full chip cover
                             # 64 cells = 32 chip A + 32 chip B (no whitespace, both defects fully present)
@@ -1037,18 +1248,45 @@ def main():
                     ema.update(model)
         sched.step()
         eval_model = ema.module if ema is not None else model
-        val_acc = evaluate(eval_model, val_loader, device, num_classes=len(TRAIN_CLASSES))
+        val_metrics = evaluate(eval_model, val_loader, device, num_classes=len(TRAIN_CLASSES))
+        val_acc = val_metrics["val_acc"]
+        val_f1 = val_metrics["val_f1"]
+        val_auroc = val_metrics["val_auroc"]
+        val_bce = val_metrics.get("val_bce", float('nan'))
+        val_brier = val_metrics.get("val_brier", float('nan'))
+        val_margin = val_metrics.get("val_margin", float('nan'))
+        val_f1_best_tau = val_metrics.get("val_f1_best_tau", float('nan'))
+        # 260512: pick criterion for best selection (default acc backward-compat,
+        # f1/auroc/bce_min/brier_min/margin_max/f1_best_tau for multi-label selection).
+        def _safe(v, fb):
+            return v if v == v else fb  # NaN fallback
+        c = args.val_criterion
+        if c == "f1":          val_for_best = _safe(val_f1, val_acc)
+        elif c == "auroc":     val_for_best = _safe(val_auroc, val_acc)
+        elif c == "bce_min":   val_for_best = -_safe(val_bce, -val_acc)   # negate for max
+        elif c == "brier_min": val_for_best = -_safe(val_brier, -val_acc)
+        elif c == "margin_max":val_for_best = _safe(val_margin, val_acc)
+        elif c == "f1_best_tau":val_for_best = _safe(val_f1_best_tau, val_acc)
+        else:                  val_for_best = val_acc
         active = getattr(loss_fn, "last_active", loss_name)
         avg_loss = running / max(nb, 1)
         history.append({"epoch": ep, "train_loss": avg_loss, "val_acc": val_acc,
+                        "val_f1": val_f1, "val_auroc": val_auroc,
+                        "val_bce": val_bce, "val_brier": val_brier,
+                        "val_margin": val_margin, "val_f1_best_tau": val_f1_best_tau,
                         "lr": optim.param_groups[0]["lr"], "loss_active": active})
-        print(f"[ep {ep:02d}] loss={avg_loss:.4f} val_acc={val_acc:.4f} loss_active={active}")
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        print(f"[ep {ep:02d}] loss={avg_loss:.4f} v_acc={val_acc:.4f} "
+              f"v_f1={val_f1:.4f} v_auroc={val_auroc:.4f} "
+              f"v_bce={val_bce:.4f} v_brier={val_brier:.4f} "
+              f"v_margin={val_margin:.4f} v_f1bτ={val_f1_best_tau:.4f} "
+              f"sel={c}({val_for_best:.4f}) loss_active={active}")
+        save_state_dict = None
+        if val_for_best > best_val_acc and ep >= args.best_from_epoch:
+            best_val_acc = val_for_best
             best_epoch = ep
-            save_state = (ema.module.state_dict() if ema is not None else model.state_dict())
+            save_state_dict = (ema.module.state_dict() if ema is not None else model.state_dict())
             torch.save({
-                "model": save_state,
+                "model": save_state_dict,
                 "classes": list(TRAIN_CLASSES),
                 "img_size": img_size,
                 "backbone": backbone,
@@ -1061,6 +1299,20 @@ def main():
                 "grad_clip": args.grad_clip,
                 "drop_path_rate": args.drop_path_rate,
             }, out_dir / "best_model.pth")
+        # 260512 — --save-every-epoch: per-epoch ckpt for multi-label selection bug fix
+        if args.save_every_epoch:
+            if save_state_dict is None:
+                save_state_dict = (ema.module.state_dict() if ema is not None else model.state_dict())
+            torch.save({
+                "model": save_state_dict,
+                "classes": list(TRAIN_CLASSES),
+                "img_size": img_size,
+                "backbone": backbone,
+                "val_acc": float(val_acc),
+                "epoch": ep,
+                "variant": args.variant,
+                "loss_name": loss_name,
+            }, out_dir / f"epoch_{ep:02d}_model.pth")
 
     elapsed = time.time() - t_total
     print(f"[train] DONE  best_val_acc={best_val_acc:.4f} @ ep{best_epoch}  elapsed={elapsed:.1f}s")
