@@ -57,6 +57,29 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
+# Per-rank batch for H100 80GB + bf16 amp (per-rank, NOT divided by world_size).
+# Effective global batch = BATCH_PER_GPU * world_size.
+case "$BACKBONE" in
+    *convnextv2_large*384*) BATCH_PER_GPU=24 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=32 ;;
+    *vit_base*384*)         BATCH_PER_GPU=48 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=48 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=48 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=96 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=192 ;;  # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=192 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=128 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=128 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=128 ;;
+    *)                      BATCH_PER_GPU=32 ;;   # safe fallback
+esac
+
+# DataLoader workers: 64 CPU server / N GPU - 8 ~ 16 per rank safe.
+TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
+WORKERS_PER_RANK=$(( TOTAL_CPU / NGPU / 2 ))
+[ "$WORKERS_PER_RANK" -lt 4 ]  && WORKERS_PER_RANK=4
+[ "$WORKERS_PER_RANK" -gt 16 ] && WORKERS_PER_RANK=16
+
 MODEL_BASE="$OUT_BASE/$BACKBONE"
 LOG="$MODEL_BASE/_run_ddp.log"
 mkdir -p "$OUT_BASE" "$MODEL_BASE"
@@ -97,16 +120,21 @@ fi
 #   (200, f1)        (200, margin_max)
 
 train_cell() {
-    local GPU=$1; local TN=$2; local SEL=$3
+    local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
     local OUT_ROOT="${MODEL_BASE}/model_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
-        echo "$(date) [ddp GPU${GPU}] skip ${TAG} ($BACKBONE)" >> "$LOG"
+        echo "$(date) [ddp] skip ${TAG} ($BACKBONE)" >> "$LOG"
         return 0
     fi
-    echo "$(date) [ddp GPU${GPU}] TRAIN ${TAG} ($BACKBONE)" >> "$LOG"
-    CUDA_VISIBLE_DEVICES=$GPU python -u -m chip_multilabel._train_chip_variant \
-        --variant T7 --ls 0.30 --epochs 10 --batch 2 --accum 8 --seed 1 \
+    echo "$(date) [ddp] TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU" >> "$LOG"
+    # True torchrun DDP: each rank sees --batch as its OWN batch (per-rank).
+    # effective global batch = BATCH_PER_GPU * NGPU
+    torchrun --standalone --nproc_per_node="$NGPU" \
+        -m chip_multilabel._train_chip_variant \
+        --variant T7 --ls 0.30 --epochs 10 \
+        --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
+        --num-workers "$WORKERS_PER_RANK" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
@@ -114,49 +142,20 @@ train_cell() {
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
-        >> "${LOG}.gpu${GPU}" 2>&1
+        >> "${LOG}.train" 2>&1
     local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
     [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth
-    echo "$(date) [ddp GPU${GPU}] DONE ${TAG}" >> "$LOG"
+    echo "$(date) [ddp] DONE ${TAG}" >> "$LOG"
 }
 
-echo "$(date) [ddp] === STAGE 2: parallel training (6 cells / $NGPU GPUs) ===" >> "$LOG"
-
-# Distribution strategy
-# Cells (T=train_n, S=selection):
-#   c1=(50, f1)    c2=(50, margin)   c3=(100, f1)
-#   c4=(100, margin) c5=(200, f1)    c6=(200, margin)
-PIDS=()
-if [ "$NGPU" -ge 6 ]; then
-    # 1 cell per GPU
-    train_cell 0  50  f1         & PIDS+=($!)
-    train_cell 1  50  margin_max & PIDS+=($!)
-    train_cell 2  100 f1         & PIDS+=($!)
-    train_cell 3  100 margin_max & PIDS+=($!)
-    train_cell 4  200 f1         & PIDS+=($!)
-    train_cell 5  200 margin_max & PIDS+=($!)
-elif [ "$NGPU" -ge 4 ]; then
-    # 1-2 cells/GPU on 4 GPUs
-    ( train_cell 0 50  f1; train_cell 0 50  margin_max ) & PIDS+=($!)
-    ( train_cell 1 100 f1; train_cell 1 100 margin_max ) & PIDS+=($!)
-    train_cell 2 200 f1         & PIDS+=($!)
-    train_cell 3 200 margin_max & PIDS+=($!)
-elif [ "$NGPU" -ge 2 ]; then
-    # 3 cells/GPU on 2 GPUs
-    ( train_cell 0 50  f1; train_cell 0 100 f1; train_cell 0 200 f1 )            & PIDS+=($!)
-    ( train_cell 1 50  margin_max; train_cell 1 100 margin_max; train_cell 1 200 margin_max ) & PIDS+=($!)
-else
-    # Single GPU sequential
-    for TN in 50 100 200; do
-        for SEL in f1 margin_max; do
-            train_cell 0 $TN $SEL
-        done
+echo "$(date) [ddp] === STAGE 2: sequential torchrun DDP (6 cells on $NGPU GPUs each) ===" >> "$LOG"
+# True DDP: each train_cell uses ALL $NGPU GPUs via torchrun. Cells run
+# sequentially (since they share GPUs). Effective global batch per cell =
+# BATCH_PER_GPU * NGPU.
+for TN in 50 100 200; do
+    for SEL in f1 margin_max; do
+        train_cell "$TN" "$SEL"
     done
-fi
-
-# Wait for all parallel trains
-for pid in "${PIDS[@]}"; do
-    wait $pid || echo "$(date) [ddp] train pid $pid failed" >> "$LOG"
 done
 echo "$(date) [ddp] all trainings complete" >> "$LOG"
 

@@ -229,7 +229,8 @@ class ModelEMA:
     def update(self, model: torch.nn.Module) -> None:
         self.num_updates += 1
         decay_t = min(self.target_decay, (1.0 + self.num_updates) / (10.0 + self.num_updates))
-        for ema_v, v in zip(self.module.state_dict().values(), model.state_dict().values()):
+        _src = model.module if hasattr(model, "module") else model
+        for ema_v, v in zip(self.module.state_dict().values(), _src.state_dict().values()):
             if ema_v.dtype.is_floating_point:
                 ema_v.mul_(decay_t).add_(v.detach().to(ema_v.dtype), alpha=1.0 - decay_t)
             else:
@@ -579,9 +580,35 @@ def main():
                     help="Skip KD term when CutMix is applied to a sample. v1 simpler default.")
     args = ap.parse_args()
 
+    # ------------------------------------------------------------------
+    # DDP init (torchrun env://) - per-rank batch = args.batch (NOT divided),
+    # effective global batch = args.batch * world_size.
+    # On single-GPU / non-torchrun, all dist.* are no-ops.
+    # ------------------------------------------------------------------
+    import torch.distributed as dist
+    from torch.nn.parallel import DistributedDataParallel as DDP
+    from torch.utils.data.distributed import DistributedSampler
+    _ws = int(os.environ.get("WORLD_SIZE", "1"))
+    _ddp = _ws > 1
+    if _ddp:
+        dist.init_process_group("nccl", init_method="env://")
+        _local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(_local_rank)
+        device = torch.device("cuda", _local_rank)
+        _rank = dist.get_rank()
+        if _rank != 0:
+            # Silence non-main rank to avoid duplicated stdout
+            import builtins
+            builtins.print = lambda *a, **k: None
+        print(f"[ddp] init: rank={_rank}/{_ws} local_rank={_local_rank} "
+              f"per_rank_batch={args.batch} effective_batch={args.batch * _ws}")
+    else:
+        _local_rank = 0
+        _rank = 0
+        device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
+
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
     # 260509 — load teacher probs for KD (iter32). Empty dict if --kd-teacher-probs not set.
     teacher_prob_map: dict = {}
@@ -618,6 +645,9 @@ def main():
                                             init_ckpt=Path(args.init_ckpt),
                                             drop_path_rate=args.drop_path_rate)
     model = model.to(device)
+    if _ddp:
+        model = DDP(model, device_ids=[_local_rank], output_device=_local_rank,
+                    find_unused_parameters=args.freeze_backbone)
     # 260512 — --freeze-backbone: linear probe mode (classifier-only training)
     if args.freeze_backbone:
         # Freeze everything
@@ -648,10 +678,18 @@ def main():
                                  teacher_prob_map=teacher_prob_map)
     val_ds = ChipFolderDataset(val_samples, img_size, train=False,
                                teacher_prob_map=teacher_prob_map)
-    train_loader = DataLoader(train_ds, batch_size=args.batch, shuffle=True,
-                              num_workers=args.num_workers, drop_last=False)
-    val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False,
-                            num_workers=args.num_workers)
+    train_sampler = (DistributedSampler(train_ds, shuffle=True, seed=args.seed)
+                     if _ddp else None)
+    _dl_kw = dict(num_workers=args.num_workers,
+                  pin_memory=(device.type == "cuda"),
+                  persistent_workers=(args.num_workers > 0),
+                  prefetch_factor=4 if args.num_workers > 0 else None)
+    train_loader = DataLoader(train_ds, batch_size=args.batch,
+                              sampler=train_sampler,
+                              shuffle=(train_sampler is None),
+                              drop_last=_ddp,
+                              **_dl_kw)
+    val_loader = DataLoader(val_ds, batch_size=args.batch, shuffle=False, **_dl_kw)
 
     loss_name = VARIANT_TO_LOSS[args.variant]
     build_kw = {}
@@ -756,6 +794,8 @@ def main():
     best_epoch = -1
     t_total = time.time()
     for ep in range(1, args.epochs + 1):
+        if train_sampler is not None:
+            train_sampler.set_epoch(ep)
         model.train()
         if isinstance(loss_fn, BCEThenASL):
             loss_fn.set_epoch(ep - 1)
@@ -1303,7 +1343,8 @@ def main():
         if val_for_best > best_val_acc and ep >= args.best_from_epoch:
             best_val_acc = val_for_best
             best_epoch = ep
-            save_state_dict = (ema.module.state_dict() if ema is not None else model.state_dict())
+            save_state_dict = (ema.module.state_dict() if ema is not None
+                                else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
             torch.save({
                 "model": save_state_dict,
                 "classes": list(TRAIN_CLASSES),
@@ -1321,7 +1362,8 @@ def main():
         # 260512 — --save-every-epoch: per-epoch ckpt for multi-label selection bug fix
         if args.save_every_epoch:
             if save_state_dict is None:
-                save_state_dict = (ema.module.state_dict() if ema is not None else model.state_dict())
+                save_state_dict = (ema.module.state_dict() if ema is not None
+                                else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
             torch.save({
                 "model": save_state_dict,
                 "classes": list(TRAIN_CLASSES),
@@ -1339,7 +1381,8 @@ def main():
     # 260506 — also save final-epoch model. val_acc (4-way single-class) often saturates
     # at ep1 for multi-hot training (e.g., sc+sr CutMix), causing best_model.pth to be
     # under-trained. final_epoch_model.pth captures end-of-training weights for comparison.
-    final_state = (ema.module.state_dict() if ema is not None else model.state_dict())
+    final_state = (ema.module.state_dict() if ema is not None
+                   else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
     torch.save({
         "model": final_state,
         "classes": list(TRAIN_CLASSES),
