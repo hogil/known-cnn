@@ -1,213 +1,130 @@
 """
-Mega matrix - backbone weight downloader for closed-network servers.
+Pretrained backbone weights downloader (mega_matrix).
 
-Downloads multiple timm backbone weights from HuggingFace Hub, converts each to
-PyTorch .pth (torch.save state_dict), and saves to mega_matrix/weights/.
+HuggingFace 에서 timm pretrained 가중치를 받아 mega_matrix/weights/{model_id}.pth
+로 저장한다. 파일명은 timm/HF 정식 model id 그대로 (e.g.
+convnextv2_base.fcmae_ft_in22k_in1k_384.pth).
 
-Usage (on an internet-connected machine):
-    python mega_matrix/download.py                      # download all in BACKBONES
-    python mega_matrix/download.py --only convnextv2    # download names matching substring
-    python mega_matrix/download.py --list               # print BACKBONES list and exit
+- 항상 MODELS 목록 전부 시도. 1개 실패해도 나머지는 계속 진행.
+- 이미 있는 파일은 자동 skip (재다운 안 함, verify 통과 시).
+- 학습/추론 코드는 항상 pretrained=False + weights/{model_name}.pth 로드
+  (mega_matrix/run.sh 가 자동 --backbone-timm-weights passthrough).
+- 가중치 파일은 절대 git 에 올리지 않는다 (.gitignore 처리됨).
+- 폐쇄망 서버: 인터넷 머신에서 받아 mega_matrix/weights/ 폴더 통째로 FTP/scp.
 
-Then scp mega_matrix/weights/ to the server. run.sh / run_ddp.sh auto-detects
-mega_matrix/weights/<backbone>.pth and passes --backbone-timm-weights.
-
-Manual override:
-    python -m chip_multilabel._train_chip_variant \\
-        --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 \\
-        --backbone-timm-weights mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.pth \\
-        ... (other args)
-
-Add backbones by appending to BACKBONES. Format:
-    (timm_model_name, hf_repo_id, [candidate_filenames_in_repo])
-
-Filenames usually `model.safetensors` first, `pytorch_model.bin` fallback.
+Usage:
+    python mega_matrix/download.py             # MODELS 전부, 이미 있는 건 skip
+    python mega_matrix/download.py --force     # 이미 있어도 덮어쓰기
+    python mega_matrix/download.py --only X    # 이름에 X 가 포함된 것만
+    python mega_matrix/download.py --list      # MODELS 목록만 출력
 """
-import sys
 import argparse
+import os
+import sys
 from pathlib import Path
 
-PROJ_ROOT = Path(__file__).parent.parent
+import timm
+import torch
+
 WEIGHTS_DIR = Path(__file__).parent / "weights"
-WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# (timm_model_name, hf_repo_id, candidate filenames in HF repo to try in order)
-BACKBONES = [
-    # Primary - mega_matrix baseline winner
-    ("convnextv2_base.fcmae_ft_in22k_in1k_384",
-     "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
-     ["model.safetensors", "pytorch_model.bin"]),
-
-    # Large variant (200M params, val_f1 reference)
-    ("convnextv2_large.fcmae_ft_in22k_in1k_384",
-     "timm/convnextv2_large.fcmae_ft_in22k_in1k_384",
-     ["model.safetensors", "pytorch_model.bin"]),
-
-    # Swin V2 384 (windowed attention, prior iter95/iter98 reference)
-    ("swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
-     "timm/swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
-     ["model.safetensors", "pytorch_model.bin"]),
-
-    # ViT base 384 (transformer baseline)
-    ("vit_base_patch16_384.augreg_in21k_ft_in1k",
-     "timm/vit_base_patch16_384.augreg_in21k_ft_in1k",
-     ["model.safetensors", "pytorch_model.bin"]),
-
-    # DeiT3 base 384 (distilled ViT, often strong on small data)
-    ("deit3_base_patch16_384.fb_in22k_ft_in1k",
-     "timm/deit3_base_patch16_384.fb_in22k_ft_in1k",
-     ["model.safetensors", "pytorch_model.bin"]),
-
-    # EfficientNetV2 (smaller, faster - speed-tier reference, 224 input)
-    ("efficientnetv2_rw_m.agc_in1k",
-     "timm/efficientnetv2_rw_m.agc_in1k",
-     ["model.safetensors", "pytorch_model.bin"]),
+# HF / timm model id (파일명으로 그대로 사용)
+MODELS = [
+    # mega_matrix baseline winner (paper)
+    "convnextv2_base.fcmae_ft_in22k_in1k_384",
+    # 비교군 (img-size 384)
+    "convnextv2_large.fcmae_ft_in22k_in1k_384",
+    "swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
+    "vit_base_patch16_384.augreg_in21k_ft_in1k",
+    "deit3_base_patch16_384.fb_in22k_ft_in1k",
+    # 비교군 (img-size 224, smaller/faster)
+    "convnextv2_tiny.fcmae_ft_in22k_in1k",
+    "convnextv2_base.fcmae_ft_in22k_in1k",
+    "tf_efficientnetv2_s.in21k_ft_in1k",
+    "swin_tiny_patch4_window7_224.ms_in22k_ft_in1k",
+    "maxvit_tiny_tf_224.in1k",
+    "vit_base_patch16_clip_224.laion2b_ft_in12k_in1k",
 ]
 
 
-def log(msg):
-    print(f"[dl] {msg}", flush=True)
+def verify_state_dict(path: Path) -> None:
+    """Fail fast if a .pth file is not a readable non-empty PyTorch state_dict."""
+    state = torch.load(str(path), map_location="cpu", weights_only=False)
+    if not hasattr(state, "keys") or len(state) == 0:
+        raise ValueError("not a non-empty state_dict")
 
 
-def load_state_dict_any(src_path: Path):
-    """Load state_dict from .safetensors / .bin / .pt / .pth."""
-    if src_path.suffix == ".safetensors":
-        from safetensors.torch import load_file
-        return load_file(str(src_path))
-    import torch
-    sd = torch.load(str(src_path), map_location="cpu", weights_only=False)
-    if isinstance(sd, dict) and "state_dict" in sd:
-        sd = sd["state_dict"]
-    return sd
-
-
-def get_input_size(timm_name: str) -> int:
-    """Derive input H/W from timm pretrained_cfg (no weight load)."""
-    import timm
-    m = timm.create_model(timm_name, pretrained=False)
-    cfg = m.pretrained_cfg or {}
-    isz = cfg.get("input_size", (3, 224, 224))
-    return int(isz[-1])
-
-
-def download_and_convert(timm_name: str, repo_id: str, candidates: list) -> Path:
-    """Download from HF, convert to .pth via torch.save, return .pth path."""
-    import torch
-    from huggingface_hub import hf_hub_download
-    from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
-
-    target_pth = WEIGHTS_DIR / f"{timm_name}.pth"
-    if target_pth.exists() and target_pth.stat().st_size > 1_000_000:
-        log(f"  {target_pth.name} exists ({target_pth.stat().st_size / 1e6:.1f} MB), skip")
-        return target_pth
-
-    last_err = None
-    for fname in candidates:
-        log(f"  fetch {repo_id}/{fname}")
+def download_one(model_name: str, force: bool = False) -> str:
+    """단일 모델 다운로드. 반환: 'ok' / 'skip' / 'fail'."""
+    out_path = WEIGHTS_DIR / f"{model_name}.pth"
+    if out_path.exists() and not force:
+        size_mb = out_path.stat().st_size / 1e6
         try:
-            cached = hf_hub_download(repo_id=repo_id, filename=fname,
-                                     cache_dir=str(WEIGHTS_DIR / "_hf_cache"))
-        except (EntryNotFoundError, RepositoryNotFoundError) as e:
-            last_err = e
-            log(f"  not in repo, trying next candidate")
-            continue
+            verify_state_dict(out_path)
         except Exception as e:
-            last_err = e
-            log(f"  ERROR fetching {fname}: {e}")
-            continue
-
-        log(f"  convert -> {target_pth.name}")
-        sd = load_state_dict_any(Path(cached))
-        torch.save(sd, str(target_pth))
-        log(f"  saved {target_pth.name} ({target_pth.stat().st_size / 1e6:.1f} MB)")
-        return target_pth
-
-    raise RuntimeError(f"All candidate files failed for {repo_id}: {last_err}")
-
-
-def verify_load(timm_name: str, weight_path: Path) -> bool:
-    """Sanity check: load via timm pretrained_cfg_overlay(file=...) + dummy forward."""
-    import timm
-    import torch
+            print(f"  invalid {out_path.name} ({type(e).__name__}: {e}); re-downloading",
+                  file=sys.stderr)
+        else:
+            print(f"  skip   {out_path.name} ({size_mb:.0f} MB, verified)")
+            return "skip"
+    print(f"  download {model_name} ...")
     try:
-        input_size = get_input_size(timm_name)
-        model = timm.create_model(timm_name, pretrained=True,
-                                  pretrained_cfg_overlay=dict(file=str(weight_path)),
-                                  num_classes=4)
-        model.eval()
-        with torch.no_grad():
-            x = torch.randn(1, 3, input_size, input_size)
-            y = model(x)
-        log(f"  verify OK: input={input_size}x{input_size}, output={tuple(y.shape)}")
-        return True
+        m = timm.create_model(model_name, pretrained=True)
+        torch.save(m.state_dict(), str(out_path))
+        verify_state_dict(out_path)
+        size_mb = out_path.stat().st_size / 1e6
+        print(f"  saved  {out_path.name} ({size_mb:.0f} MB, verified)")
+        return "ok"
     except Exception as e:
-        log(f"  verify FAIL: {e}")
-        return False
-
-
-def cleanup_hf_cache():
-    """Remove _hf_cache/ after conversion (the .pth has everything we need)."""
-    import shutil
-    cache_dir = WEIGHTS_DIR / "_hf_cache"
-    if cache_dir.exists():
-        try:
-            shutil.rmtree(cache_dir)
-            log(f"  cleaned {cache_dir.name}/")
-        except Exception as e:
-            log(f"  cache cleanup skipped: {e}")
+        print(f"  FAIL   {model_name}: {type(e).__name__}: {e}", file=sys.stderr)
+        return "fail"
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Download timm backbones for offline use")
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--force", action="store_true", help="이미 있어도 덮어쓰기")
     ap.add_argument("--only", type=str, default=None,
-                    help="Substring filter - only download backbones whose timm_name contains this")
-    ap.add_argument("--list", action="store_true",
-                    help="Print BACKBONES list and exit")
-    ap.add_argument("--no-cleanup", action="store_true",
-                    help="Keep _hf_cache/ after conversion (debug)")
+                    help="이름에 substring 포함된 모델만")
+    ap.add_argument("--list", action="store_true", help="MODELS 목록만 출력")
     args = ap.parse_args()
 
     if args.list:
-        log("Configured backbones:")
-        for n, r, _ in BACKBONES:
-            log(f"  {n:<60s}  ({r})")
+        print(f"Configured MODELS ({len(MODELS)}):")
+        for n in MODELS:
+            print(f"  {n}")
         return
 
-    targets = BACKBONES
+    targets = MODELS
     if args.only:
-        targets = [b for b in BACKBONES if args.only in b[0]]
-        log(f"filter '{args.only}' -> {len(targets)}/{len(BACKBONES)} backbones")
+        targets = [m for m in MODELS if args.only in m]
+        print(f"Filter '{args.only}' -> {len(targets)}/{len(MODELS)} models")
         if not targets:
-            log("no matches, abort")
+            print("No matches.", file=sys.stderr)
             sys.exit(1)
 
-    log(f"target dir: {WEIGHTS_DIR}")
-    log(f"backbones: {len(targets)}")
-    failed = []
-    for timm_name, repo_id, candidates in targets:
-        log(f"=== {timm_name} ===")
-        try:
-            wpath = download_and_convert(timm_name, repo_id, candidates)
-        except Exception as e:
-            log(f"  DOWNLOAD FAILED: {e}")
-            failed.append(timm_name)
-            continue
-        if not verify_load(timm_name, wpath):
-            failed.append(timm_name)
+    WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Targets: {len(targets)} models")
+    print(f"Output:  {WEIGHTS_DIR}/{{model_name}}.pth")
+    print()
 
-    if not args.no_cleanup:
-        cleanup_hf_cache()
+    counts = {"ok": 0, "skip": 0, "fail": 0}
+    failures = []
+    for i, name in enumerate(targets, 1):
+        print(f"[{i}/{len(targets)}] {name}")
+        result = download_one(name, force=args.force)
+        counts[result] += 1
+        if result == "fail":
+            failures.append(name)
+        print()
 
-    log("=== summary ===")
-    for timm_name, _, _ in BACKBONES:
-        target = WEIGHTS_DIR / f"{timm_name}.pth"
-        size_mb = target.stat().st_size / 1e6 if target.exists() else 0
-        status = "OK" if target.exists() and timm_name not in failed else ("FAIL" if timm_name in failed else "skip")
-        log(f"  [{status:<4s}] {target.name} ({size_mb:.1f} MB)")
-    if failed:
-        log(f"FAILED: {failed}")
+    print("=" * 60)
+    print(f"Done: {counts['ok']} downloaded, {counts['skip']} skipped, {counts['fail']} failed")
+    if failures:
+        print("Failures:")
+        for n in failures:
+            print(f"  - {n}")
         sys.exit(1)
-    log("DONE - copy mega_matrix/weights/ to the server.")
 
 
 if __name__ == "__main__":
