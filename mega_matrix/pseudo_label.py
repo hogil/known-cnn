@@ -172,6 +172,15 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
         log(f"  pseudo model {sel} exists, skip retrain")
     else:
         log(f"  retrain on pseudo_train (sel={sel})")
+        # Offline weights passthrough (closed-network server)
+        backbone_name = "convnextv2_base.fcmae_ft_in22k_in1k_384"
+        weights_dir = PROJ_ROOT / "mega_matrix" / "weights"
+        offline_wpath = None
+        for ext in (".safetensors", ".bin"):
+            p = weights_dir / f"{backbone_name}{ext}"
+            if p.exists():
+                offline_wpath = p
+                break
         cmd = [
             sys.executable, "-u", "-m", "chip_multilabel._train_chip_variant",
             "--variant", "T7", "--ls", "0.30", "--epochs", "10",
@@ -184,11 +193,14 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             "--cutmix-pair-fill", "corner",
             "--cutmix-p", "0.25", "--cutmix-n-groups", "3",
             "--cutmix-complete-label-scale", "0.5",
-            "--backbone-timm", "convnextv2_base.fcmae_ft_in22k_in1k_384",
+            "--backbone-timm", backbone_name,
             "--img-size", "384",
             "--out-root", str(out_root),
             "--tag", f"pseudo_{sel}",
         ]
+        if offline_wpath:
+            cmd += ["--backbone-timm-weights", str(offline_wpath)]
+            log(f"  using offline weights {offline_wpath.name}")
         subprocess.run(cmd, check=False, cwd=str(PROJ_ROOT))
         # Cleanup
         runs = list(out_root.glob("T*/"))

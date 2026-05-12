@@ -41,6 +41,18 @@ done
 
 echo "$(date) [mega] start (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)" > "$LOG"
 
+# Offline weights (closed-network server) — auto-passthrough if file exists
+BACKBONE_NAME="convnextv2_base.fcmae_ft_in22k_in1k_384"
+OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE_NAME}.safetensors"
+[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE_NAME}.bin"
+if [ -f "$OFFLINE_WEIGHTS" ]; then
+    BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
+    echo "$(date) [mega] offline backbone weights: $OFFLINE_WEIGHTS" >> "$LOG"
+else
+    BACKBONE_WEIGHTS_FLAG=""
+    echo "$(date) [mega] online mode (no $OFFLINE_WEIGHTS) — timm will fetch from HF" >> "$LOG"
+fi
+
 # ======================================================================
 # Stage 1: data generation
 # ======================================================================
@@ -66,6 +78,7 @@ train_one() {
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "convnextv2_base.fcmae_ft_in22k_in1k_384" --img-size 384 \
+        $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
         >> "$LOG" 2>&1
     local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)

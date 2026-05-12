@@ -239,13 +239,25 @@ class ModelEMA:
 def build_model(num_classes: int, init_ckpt: Path,
                 drop_path_rate: float = 0.0,
                 backbone_timm: str = None,
-                img_size_override: int = None) -> Tuple[torch.nn.Module, str, int]:
-    # Mode A: timm pretrained download (backbone comparison, --backbone-timm flag set)
+                img_size_override: int = None,
+                backbone_timm_weights: str = None) -> Tuple[torch.nn.Module, str, int]:
+    # Mode A: timm pretrained (HF download OR offline file via --backbone-timm-weights)
     if backbone_timm:
         img_size = int(img_size_override) if img_size_override else 224
-        model = timm.create_model(backbone_timm, pretrained=True, num_classes=num_classes,
-                                  drop_path_rate=drop_path_rate)
-        print(f"[init] backbone={backbone_timm} (timm pretrained download), img_size={img_size}")
+        if backbone_timm_weights:
+            wpath = Path(backbone_timm_weights)
+            if not wpath.is_file():
+                raise FileNotFoundError(f"--backbone-timm-weights not found: {wpath}")
+            # timm-native offline load: overlay pretrained_cfg with local file
+            model = timm.create_model(backbone_timm, pretrained=True,
+                                      pretrained_cfg_overlay=dict(file=str(wpath)),
+                                      num_classes=num_classes,
+                                      drop_path_rate=drop_path_rate)
+            print(f"[init] backbone={backbone_timm} (offline weights {wpath}), img_size={img_size}")
+        else:
+            model = timm.create_model(backbone_timm, pretrained=True, num_classes=num_classes,
+                                      drop_path_rate=drop_path_rate)
+            print(f"[init] backbone={backbone_timm} (timm pretrained download), img_size={img_size}")
         return model, backbone_timm, img_size
     # Mode B: local ckpt (default ConvNeXtV2-base path)
     ckpt = torch.load(init_ckpt, map_location="cpu", weights_only=False)
@@ -395,6 +407,12 @@ def main():
     ap.add_argument("--backbone-timm", type=str, default=None,
                     help="If set, use timm.create_model(pretrained=True) instead of --init-ckpt. "
                          "Use for backbone comparison (e.g. 'vit_base_patch16_384.augreg_in21k_ft_in1k').")
+    ap.add_argument("--backbone-timm-weights", type=str, default=None,
+                    help="Offline-mode local weight file (.safetensors / .bin / .pt) for "
+                         "--backbone-timm. Used on closed networks where HF auto-download is "
+                         "blocked. Run `python mega_matrix/download_weights.py` on an "
+                         "internet machine first, copy mega_matrix/weights/ to the server, "
+                         "then pass --backbone-timm-weights mega_matrix/weights/<file>.")
     ap.add_argument("--img-size", type=int, default=None,
                     help="Override img_size for --backbone-timm mode (default 224).")
     ap.add_argument("--out-root", default="outputs/logs_chip_multilabel")
@@ -596,6 +614,7 @@ def main():
     model, backbone, img_size = build_model(num_classes=len(TRAIN_CLASSES),
                                              backbone_timm=args.backbone_timm,
                                              img_size_override=args.img_size,
+                                             backbone_timm_weights=args.backbone_timm_weights,
                                             init_ckpt=Path(args.init_ckpt),
                                             drop_path_rate=args.drop_path_rate)
     model = model.to(device)

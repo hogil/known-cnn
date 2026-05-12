@@ -22,6 +22,8 @@ mega_matrix/
 ├── run_ddp.sh           # parallel across N GPUs
 ├── gen_data.py          # data 생성 (train + eval, per-class scale)
 ├── pseudo_label.py      # ★ NEW — pseudo-label stage
+├── download_weights.py  # ★ NEW — offline (closed-network) backbone fetch
+├── weights/             # ★ NEW — pre-downloaded backbone .safetensors (gitignored)
 └── make_report.py       # summary.md + plots
 ```
 
@@ -192,6 +194,60 @@ bash mega_matrix/run_ddp.sh --gpus 4
 | GPU OOM (batch 2) | accum 16 으로 |
 | disk full (각 model 350 MB × 18 evals) | `rm -f epoch_*.pth` 자동 적용 |
 | `chip_multilabel.gen_eval_set` 실패 | classification_chips/ 가 가능 max 200/class 만 보유 — 더 큰 combo pool 필요 시 `_synth_multi_chips.py` 별도 호출 |
+
+## 폐쇄망 (closed-network) 서버 사용
+
+서버가 인터넷 차단 → timm 의 `pretrained=True` 가 HuggingFace 다운로드 실패.
+해결: 인터넷 머신에서 weight 받아서 `mega_matrix/weights/` 폴더 통째 서버에 복사.
+
+### Step 1. 인터넷 머신에서 weight 다운로드
+
+```bash
+cd /path/to/known-cnn
+python mega_matrix/download_weights.py
+# → mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.safetensors (~360 MB)
+# verify 단계까지 자동 실행 (timm 로 더미 forward 통과 확인)
+```
+
+### Step 2. 서버로 폴더 복사
+
+```bash
+scp -r mega_matrix/weights/ user@server:/path/to/known-cnn/mega_matrix/
+# 또는 git LFS / rsync / USB
+```
+
+### Step 3. 서버에서 평소대로 실행
+
+```bash
+bash mega_matrix/run_ddp.sh --gpus 4
+# run.sh / run_ddp.sh 가 mega_matrix/weights/*.safetensors 존재 시
+# --backbone-timm-weights <path> 자동 passthrough → HF download 안 함
+# pseudo_label.py 도 동일 적용
+```
+
+### 다른 backbone 추가하려면
+
+`mega_matrix/download_weights.py` 의 `BACKBONES` 리스트에 (timm_name, hf_repo_id, filenames) 추가:
+
+```python
+BACKBONES = [
+    ("convnextv2_base.fcmae_ft_in22k_in1k_384", "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
+     ["model.safetensors", "pytorch_model.bin"]),
+    # 추가 backbone
+    ("swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
+     "timm/swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
+     ["model.safetensors", "pytorch_model.bin"]),
+]
+```
+
+### 수동 override (다른 backbone 학습할 때)
+
+```bash
+python -m chip_multilabel._train_chip_variant \
+    --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 \
+    --backbone-timm-weights mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.safetensors \
+    (... 나머지 args)
+```
 
 ## 절대 룰 (260512) 준수
 
