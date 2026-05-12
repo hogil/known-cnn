@@ -28,39 +28,57 @@ PROJ_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJ_ROOT"
 
 OUT_BASE=outputs/_mega_matrix
-LOG=$OUT_BASE/_run_ddp.log
-mkdir -p "$OUT_BASE"
+BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
 
 # Default flags
-DO_DATA=1; DO_EVAL=1; DO_REPORT=1
+DO_DATA=1; DO_EVAL=1; DO_REPORT=1; DO_PSEUDO=1
 NGPU=$(nvidia-smi -L 2>/dev/null | wc -l)
 [ "$NGPU" -lt 1 ] && NGPU=1
 
-for arg in "$@"; do
-    case $arg in
+while [ $# -gt 0 ]; do
+    case $1 in
         --skip-data) DO_DATA=0 ;;
         --skip-eval) DO_EVAL=0 ;;
+        --skip-pseudo) DO_PSEUDO=0 ;;
         --skip-report) DO_REPORT=0 ;;
         --gpus) shift; NGPU=$1 ;;
-        --gpus=*) NGPU="${arg#--gpus=}" ;;
+        --gpus=*) NGPU="${1#--gpus=}" ;;
+        --backbone) shift; BACKBONE="$1" ;;
+        --backbone=*) BACKBONE="${1#--backbone=}" ;;
         --help|-h) head -25 "$0" | tail -20; exit 0 ;;
     esac
+    shift
 done
 
-echo "$(date) [ddp] start N_GPU=$NGPU" > "$LOG"
+# Derive input img-size from backbone name pattern
+case "$BACKBONE" in
+    *384*) IMG_SIZE=384 ;;
+    *256*) IMG_SIZE=256 ;;
+    *)     IMG_SIZE=224 ;;
+esac
 
-# Offline weights (closed-network server) — auto-passthrough if file exists
-BACKBONE_NAME="convnextv2_base.fcmae_ft_in22k_in1k_384"
-OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE_NAME}.safetensors"
-[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE_NAME}.bin"
+MODEL_BASE="$OUT_BASE/$BACKBONE"
+LOG="$MODEL_BASE/_run_ddp.log"
+mkdir -p "$OUT_BASE" "$MODEL_BASE"
+export MEGA_MODEL_BASE="$MODEL_BASE"
+
+echo "$(date) [ddp] start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU" > "$LOG"
+
+# Offline weights (closed-network) — auto-passthrough
+OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
+[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.safetensors"
+[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.bin"
 if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
-    echo "$(date) [ddp] offline backbone weights: $OFFLINE_WEIGHTS" >> "$LOG"
+    echo "$(date) [ddp] offline weights: $OFFLINE_WEIGHTS" >> "$LOG"
 else
     BACKBONE_WEIGHTS_FLAG=""
-    echo "$(date) [ddp] online mode (no $OFFLINE_WEIGHTS) — timm will fetch from HF" >> "$LOG"
+    echo "$(date) [ddp] online mode (no $OFFLINE_WEIGHTS) - timm will fetch from HF" >> "$LOG"
 fi
-export BACKBONE_WEIGHTS_FLAG
+export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
+export MEGA_MODEL_BASE="$MODEL_BASE"
+export MEGA_BACKBONE="$BACKBONE"
+export MEGA_IMG_SIZE="$IMG_SIZE"
 
 # ======================================================================
 # 1. Data generation (sequential, single CPU)
@@ -81,19 +99,19 @@ fi
 train_cell() {
     local GPU=$1; local TN=$2; local SEL=$3
     local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${OUT_BASE}/model_${TAG}"
+    local OUT_ROOT="${MODEL_BASE}/model_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
-        echo "$(date) [ddp GPU${GPU}] skip ${TAG}" >> "$LOG"
+        echo "$(date) [ddp GPU${GPU}] skip ${TAG} ($BACKBONE)" >> "$LOG"
         return 0
     fi
-    echo "$(date) [ddp GPU${GPU}] TRAIN ${TAG}" >> "$LOG"
+    echo "$(date) [ddp GPU${GPU}] TRAIN ${TAG} ($BACKBONE)" >> "$LOG"
     CUDA_VISIBLE_DEVICES=$GPU python -u -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs 10 --batch 2 --accum 8 --seed 1 \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
-        --backbone-timm "convnextv2_base.fcmae_ft_in22k_in1k_384" --img-size 384 \
+        --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
         >> "${LOG}.gpu${GPU}" 2>&1
@@ -147,14 +165,14 @@ echo "$(date) [ddp] all trainings complete" >> "$LOG"
 # ======================================================================
 eval_cell() {
     local GPU=$1; local TN=$2; local SEL=$3; local EN=$4
-    local MODEL_ROOT="${OUT_BASE}/model_train${TN}_${SEL}"
+    local MODEL_ROOT="${MODEL_BASE}/model_train${TN}_${SEL}"
     local RUN=$(ls -d "$MODEL_ROOT"/T*/ 2>/dev/null | head -1)
     [ -z "$RUN" ] && return 0
     local EVAL_OUT="${RUN}eval_${EN}"
     [ -d "$EVAL_OUT" ] && return 0
     local EVAL_SET="${OUT_BASE}/eval_n${EN}"
     [ ! -d "$EVAL_SET" ] && return 0
-    echo "$(date) [ddp GPU${GPU}] EVAL train${TN}_${SEL} eval${EN}" >> "$LOG"
+    echo "$(date) [ddp GPU${GPU}] EVAL train${TN}_${SEL} eval${EN} ($BACKBONE)" >> "$LOG"
     CUDA_VISIBLE_DEVICES=$GPU python -u -m chip_multilabel.run_stage1 \
         --model "${RUN}best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \

@@ -62,6 +62,7 @@ logs_canvas_round28/
 logs_build_obj_id/
 
 # mega_matrix offline backbone weights (large binaries — downloaded per-machine)
+mega_matrix/weights/*.pth
 mega_matrix/weights/*.safetensors
 mega_matrix/weights/*.bin
 mega_matrix/weights/*.pt

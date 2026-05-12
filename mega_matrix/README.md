@@ -18,12 +18,13 @@ Self-contained 5-stage pipeline: data 생성 → 학습 → 평가 → pseudo-la
 ```
 mega_matrix/
 ├── README.md            # ★ this — 사용법
-├── run.sh               # all-in-one (single GPU)
-├── run_ddp.sh           # parallel across N GPUs
+├── run.sh               # 1-backbone all-in-one (single GPU)
+├── run_ddp.sh           # 1-backbone parallel across N GPUs
+├── run_all.sh           # ★ NEW — loops every backbone in weights/
+├── download.py          # ★ multi-backbone downloader (closed-network)
+├── weights/             # pre-downloaded backbone <name>.pth (gitignored)
 ├── gen_data.py          # data 생성 (train + eval, per-class scale)
-├── pseudo_label.py      # ★ NEW — pseudo-label stage
-├── download_weights.py  # ★ NEW — offline (closed-network) backbone fetch
-├── weights/             # ★ NEW — pre-downloaded backbone .safetensors (gitignored)
+├── pseudo_label.py      # pseudo-label stage (per-backbone)
 └── make_report.py       # summary.md + plots
 ```
 
@@ -58,6 +59,28 @@ bash mega_matrix/run.sh
 ### Multi-GPU server (DDP-style, 4 GPU → ~80 min)
 ```bash
 bash mega_matrix/run_ddp.sh --gpus 4
+```
+
+### 특정 backbone (1개) — `--backbone <name>`
+```bash
+bash mega_matrix/run.sh     --backbone swinv2_base_window12to24_192to384.ms_in22k_ft_in1k
+bash mega_matrix/run_ddp.sh --gpus 4 --backbone vit_base_patch16_384.augreg_in21k_ft_in1k
+# img-size 는 name 의 "384"/"256"/"224" 패턴으로 자동 결정
+# weights/<backbone>.pth 있으면 offline mode 자동
+# 결과는 outputs/_mega_matrix/<backbone>/ 아래
+```
+
+### ★ 모든 backbone 순차 평가 — `run_all.sh`
+```bash
+# weights/*.pth 모두 발견 → 순차로 run.sh / run_ddp.sh 호출
+bash mega_matrix/run_all.sh                       # auto-detect GPU
+bash mega_matrix/run_all.sh --gpus 4              # DDP
+bash mega_matrix/run_all.sh --only convnextv2     # name substring filter
+bash mega_matrix/run_all.sh --skip-pseudo         # forward flag to inner script
+
+# 데이터 생성은 첫 backbone 에서만 → 이후 backbone 은 --skip-data 자동
+# 각 backbone 산출은 outputs/_mega_matrix/<backbone>/ 아래로 격리
+# 종합 로그: outputs/_mega_matrix/_run_all_summary.log
 ```
 
 ### 부분 실행
@@ -204,10 +227,20 @@ bash mega_matrix/run_ddp.sh --gpus 4
 
 ```bash
 cd /path/to/known-cnn
-python mega_matrix/download_weights.py
-# → mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.safetensors (~360 MB)
-# verify 단계까지 자동 실행 (timm 로 더미 forward 통과 확인)
+python mega_matrix/download.py                  # 모든 backbone (~2-3 GB)
+python mega_matrix/download.py --only convnext  # substring filter
+python mega_matrix/download.py --list           # backbone 목록만 출력
+# → mega_matrix/weights/<backbone>.pth (torch.save 포맷, .safetensors 변환됨)
+# verify 단계 자동 — timm pretrained_cfg_overlay(file=...) 로 더미 forward 통과 확인
 ```
+
+기본 BACKBONES (download.py 안에 정의, 추가하려면 list 에 append):
+- convnextv2_base.fcmae_ft_in22k_in1k_384 (~360 MB, paper baseline winner)
+- convnextv2_large.fcmae_ft_in22k_in1k_384 (~800 MB)
+- swinv2_base_window12to24_192to384.ms_in22k_ft_in1k (~340 MB)
+- vit_base_patch16_384.augreg_in21k_ft_in1k (~340 MB)
+- deit3_base_patch16_384.fb_in22k_ft_in1k (~340 MB)
+- efficientnetv2_rw_m.agc_in1k (~210 MB, 224 input)
 
 ### Step 2. 서버로 폴더 복사
 
@@ -227,7 +260,7 @@ bash mega_matrix/run_ddp.sh --gpus 4
 
 ### 다른 backbone 추가하려면
 
-`mega_matrix/download_weights.py` 의 `BACKBONES` 리스트에 (timm_name, hf_repo_id, filenames) 추가:
+`mega_matrix/download.py` 의 `BACKBONES` 리스트에 (timm_name, hf_repo_id, filenames) 추가:
 
 ```python
 BACKBONES = [

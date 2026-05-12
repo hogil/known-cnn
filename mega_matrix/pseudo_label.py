@@ -22,10 +22,17 @@ from PIL import Image
 import timm
 import torchvision.transforms as T
 
+import os
+
 PROJ_ROOT = Path(__file__).parent.parent
-OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"
+OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"          # shared data root (train_n*, eval_n*)
+# Per-backbone model namespace (set by run.sh / run_ddp.sh / run_all.sh via env)
+# Falls back to OUT_BASE for legacy single-backbone use
+MODEL_BASE = Path(os.environ.get("MEGA_MODEL_BASE", str(OUT_BASE)))
+BACKBONE = os.environ.get("MEGA_BACKBONE", "convnextv2_base.fcmae_ft_in22k_in1k_384")
+IMG_SIZE = int(os.environ.get("MEGA_IMG_SIZE", "384"))
 PSEUDO_POOL_SRC = Path("D:/project/data/wm-811k/chip_multilabel_v15direct_n1000")
-PSEUDO_TRAIN_DIR = OUT_BASE / "pseudo_train"
+PSEUDO_TRAIN_DIR = MODEL_BASE / "pseudo_train"
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 CONF_THRESHOLD = 0.85   # max_prob >= 0.85 for pseudo-label inclusion
 
@@ -41,7 +48,7 @@ def find_best_primary_model():
     best = (None, None, -1.0, None)  # (TN, SEL, bit_F1, run_path)
     for tn in [50, 100, 200]:
         for sel in ["f1", "margin_max"]:
-            model_root = OUT_BASE / f"model_train{tn}_{sel}"
+            model_root = MODEL_BASE / f"model_train{tn}_{sel}"
             runs = list(model_root.glob("T*/"))
             if not runs:
                 continue
@@ -167,17 +174,16 @@ def build_pseudo_train_dir(filt_df, base_train="train_n200"):
 
 def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
     """Train new model on pseudo_train + evaluate."""
-    out_root = OUT_BASE / f"model_pseudo_{sel}"
+    out_root = MODEL_BASE / f"model_pseudo_{sel}"
     if out_root.exists():
         log(f"  pseudo model {sel} exists, skip retrain")
     else:
-        log(f"  retrain on pseudo_train (sel={sel})")
+        log(f"  retrain on pseudo_train (sel={sel}, backbone={BACKBONE})")
         # Offline weights passthrough (closed-network server)
-        backbone_name = "convnextv2_base.fcmae_ft_in22k_in1k_384"
         weights_dir = PROJ_ROOT / "mega_matrix" / "weights"
         offline_wpath = None
-        for ext in (".safetensors", ".bin"):
-            p = weights_dir / f"{backbone_name}{ext}"
+        for ext in (".pth", ".safetensors", ".bin"):
+            p = weights_dir / f"{BACKBONE}{ext}"
             if p.exists():
                 offline_wpath = p
                 break
@@ -193,8 +199,8 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             "--cutmix-pair-fill", "corner",
             "--cutmix-p", "0.25", "--cutmix-n-groups", "3",
             "--cutmix-complete-label-scale", "0.5",
-            "--backbone-timm", backbone_name,
-            "--img-size", "384",
+            "--backbone-timm", BACKBONE,
+            "--img-size", str(IMG_SIZE),
             "--out-root", str(out_root),
             "--tag", f"pseudo_{sel}",
         ]
@@ -248,12 +254,12 @@ def main():
     if not PSEUDO_POOL_SRC.exists():
         log(f"ERROR: pool {PSEUDO_POOL_SRC} missing")
         return
-    pred_df = predict_pool(best_ckpt, PSEUDO_POOL_SRC)
-    pred_df.to_csv(OUT_BASE / "pseudo_preds.csv", index=False)
+    pred_df = predict_pool(best_ckpt, PSEUDO_POOL_SRC, img_size=IMG_SIZE)
+    pred_df.to_csv(MODEL_BASE / "pseudo_preds.csv", index=False)
 
     log("Step 3: filter high-confidence pseudo-labels")
     filt = filter_high_conf(pred_df, thr=CONF_THRESHOLD)
-    filt.to_csv(OUT_BASE / "pseudo_preds_filtered.csv", index=False)
+    filt.to_csv(MODEL_BASE / "pseudo_preds_filtered.csv", index=False)
 
     log("Step 4: build pseudo_train directory (base train + pseudo-labeled)")
     pseudo_train = build_pseudo_train_dir(filt, base_train=f"train_n{tn}")
