@@ -21,8 +21,16 @@ from sklearn.metrics import f1_score
 BITS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']
 SHORT = {'bank_boundary': 'bb', 'fork': 'fk', 'scratch': 'sc', 'scratch_rot': 'sr'}
 
-OUT_BASE = Path(os.environ.get("MEGA_MODEL_BASE", "outputs/_mega_matrix"))
-REPORT_DIR = Path("docs/chip-multilabel/manager_report")
+# OUT_BASE / MODEL_BASE = the GROUP folder for this run (TS-prefixed)
+# Group dir convention: $OUT_BASE/<TS>_<backbone>/
+#   summary_mega_sweep.md, figs_mega/ — both written here
+#   train{TN}_{SEL}/<inner_run>/best_model.pth + eval_{EN}/stage1_*/
+# Backward compat: if MEGA_GROUP_DIR not set, fall back to MEGA_MODEL_BASE or default.
+GROUP_DIR = Path(os.environ.get("MEGA_GROUP_DIR",
+                                os.environ.get("MEGA_MODEL_BASE",
+                                               "outputs/_mega_matrix")))
+OUT_BASE = GROUP_DIR    # alias for find_model_root globs
+REPORT_DIR = GROUP_DIR
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR = REPORT_DIR / "figs_mega"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,7 +41,11 @@ SELS = ['f1', 'margin_max']
 
 
 def find_model_root(tn, sel):
-    cands = list(OUT_BASE.glob(f"*_model_train{tn}_{sel}")) + list(OUT_BASE.glob(f"model_train{tn}_{sel}"))
+    # New layout: GROUP/train{tn}_{sel}/   (TS prefix is on GROUP_DIR, not cell)
+    # Legacy layouts: GROUP/<TS>_model_train{tn}_{sel}/ , GROUP/model_train{tn}_{sel}/
+    cands = (list(OUT_BASE.glob(f"train{tn}_{sel}"))
+             + list(OUT_BASE.glob(f"*_model_train{tn}_{sel}"))
+             + list(OUT_BASE.glob(f"model_train{tn}_{sel}")))
     return sorted([p for p in cands if p.is_dir()], key=lambda p: p.name, reverse=True)
 
 

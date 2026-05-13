@@ -101,15 +101,22 @@ fi
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
 TRAIN_WORKERS="$TOTAL_CPU"
 
-MODEL_BASE="$OUT_BASE/$BACKBONE"   # per-backbone model namespace (data shared at OUT_BASE)
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
 LOG_BACKBONE="${LOG_BACKBONE//:/_}"
 LOG_BACKBONE="${LOG_BACKBONE// /_}"
-LOG_DIR="$OUT_BASE/logs"
-LOG="$LOG_DIR/${RUN_STAMP}_pid$$_${LOG_BACKBONE}_run.log"
-mkdir -p "$OUT_BASE" "$MODEL_BASE" "$LOG_DIR"
-export MEGA_MODEL_BASE="$MODEL_BASE"   # consumed by pseudo_label.py / make_report.py
+# GROUP folder = single per-run namespace with TS prefix
+#   $OUT_BASE/<TS>_<backbone>/
+#     summary_mega_sweep.md  +  figs_mega/   (written by make_report.py)
+#     train{TN}_{SEL}/<inner_run>/best_model.pth + eval_{EN}/stage1_*/
+# Data (train_n{TN}, eval_n{EN}) stays at $OUT_BASE root for reuse across groups.
+GROUP_DIR="$OUT_BASE/${RUN_STAMP}_${LOG_BACKBONE}"
+MODEL_BASE="$GROUP_DIR"
+LOG_DIR="$GROUP_DIR/logs"
+LOG="$LOG_DIR/run.log"
+mkdir -p "$OUT_BASE" "$GROUP_DIR" "$LOG_DIR"
+export MEGA_GROUP_DIR="$GROUP_DIR"     # consumed by make_report.py
+export MEGA_MODEL_BASE="$MODEL_BASE"   # consumed by pseudo_label.py / make_report.py (legacy alias)
 export MEGA_BACKBONE="$BACKBONE"
 export MEGA_IMG_SIZE="$IMG_SIZE"
 export WM811K_ROOT="$DATA_BASE"
@@ -148,7 +155,7 @@ fi
 train_one() {
     local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${MODEL_BASE}/${RUN_STAMP}_model_${TAG}"
+    local OUT_ROOT="${MODEL_BASE}/${TAG}"   # GROUP/<TAG>/<inner_run>/...
     if [ -d "$OUT_ROOT" ]; then
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
@@ -193,7 +200,7 @@ fi
 # ======================================================================
 eval_one() {
     local TN=$1; local SEL=$2; local EN=$3
-    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "*_model_train${TN}_${SEL}" -o -name "model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
+    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "train${TN}_${SEL}" -o -name "*_model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
     local RUN=$(find "$MODEL_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     if [ -z "$RUN" ]; then
         log "SKIP eval train${TN}_${SEL} eval_${EN}: no trained run under $MODEL_ROOT"

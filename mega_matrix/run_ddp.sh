@@ -119,14 +119,17 @@ fi
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
 WORKERS_PER_RANK="$TOTAL_CPU"
 
-MODEL_BASE="$OUT_BASE/$BACKBONE"
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
 LOG_BACKBONE="${LOG_BACKBONE//:/_}"
 LOG_BACKBONE="${LOG_BACKBONE// /_}"
-LOG_DIR="$OUT_BASE/logs"
-LOG="$LOG_DIR/${RUN_STAMP}_pid$$_${LOG_BACKBONE}_run_ddp.log"
-mkdir -p "$OUT_BASE" "$MODEL_BASE" "$LOG_DIR"
+# GROUP folder = single per-run namespace with TS prefix (same convention as run.sh)
+GROUP_DIR="$OUT_BASE/${RUN_STAMP}_${LOG_BACKBONE}"
+MODEL_BASE="$GROUP_DIR"
+LOG_DIR="$GROUP_DIR/logs"
+LOG="$LOG_DIR/run_ddp.log"
+mkdir -p "$OUT_BASE" "$GROUP_DIR" "$LOG_DIR"
+export MEGA_GROUP_DIR="$GROUP_DIR"
 export MEGA_MODEL_BASE="$MODEL_BASE"
 
 log() {
@@ -172,7 +175,7 @@ fi
 train_cell() {
     local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${MODEL_BASE}/${RUN_STAMP}_model_${TAG}"
+    local OUT_ROOT="${MODEL_BASE}/${TAG}"
     if [ -d "$OUT_ROOT" ]; then
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
@@ -222,7 +225,7 @@ log "all trainings complete"
 # ======================================================================
 eval_cell() {
     local GPU=$1; local TN=$2; local SEL=$3; local EN=$4
-    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "*_model_train${TN}_${SEL}" -o -name "model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
+    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "train${TN}_${SEL}" -o -name "*_model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
     local RUN=$(find "$MODEL_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     if [ -z "$RUN" ]; then
         log "SKIP eval train${TN}_${SEL} eval${EN}: no trained run under $MODEL_ROOT"
