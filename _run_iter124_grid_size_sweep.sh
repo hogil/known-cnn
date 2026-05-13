@@ -1,27 +1,32 @@
 #!/bin/bash
-# iter124 — FCM-PM TRUE grid cell size ablation (paper §6 NEW axis)
+# iter124 — FCM-PM grid×group ablation (paper §6 NEW axis, clean parameterization)
 #
-# Discovery: GRID is hardcoded at 8 (= 64 cells of 48x48 px at img_size=384).
-# n_groups only PARTITIONS those 64 cells. Real cell-pixel-size is GRID-dim.
-# Patched trainer with --cutmix-grid-dim flag; this sweep varies GRID at
-# FIXED n_groups (3 = iter116J baseline) to isolate cell-size effect.
+# User insight: GRID should equal n_groups * n where n is the per-group cell
+# multiplier. This eliminates leftover cells (current iter116J GRID=8/g=3 has
+# 64/3=21+1 leftover - uneven groups). Clean grids guarantee each group has
+# exactly n^2 cells.
 #
-# Baseline (frozen from iter116J): T7 BCE+LS=0.30, lr 1e-4, ep 10,
-# val_margin selection, save_every_epoch, cutmix-mode=complement, pair=masked,
-# fill=corner, p=0.25, n_groups=3, label-scale=0.5.
+# Baseline (frozen): T7 BCE+LS=0.30, lr 1e-4, ep 10, val_margin, save_every_epoch,
+# cutmix-mode=complement, pair=masked, fill=corner, p=0.25, label-scale=0.5.
 #
-# Cells (only --cutmix-grid-dim varies):
-#   124a: GRID=4    (16 cells, 96x96 px)  - very coarse
-#   124b: GRID=6    (36 cells, 64x64 px)  - coarse
-#   124c: GRID=8    (64 cells, 48x48 px)  - iter116J baseline (re-run for fair eval)
-#   124d: GRID=12   (144 cells, 32x32 px) - fine
-#   124e: GRID=16   (256 cells, 24x24 px) - very fine
+# Cells (only --cutmix-grid-dim and --cutmix-n-groups vary together as g*n):
 #
-# Plus group=2 bisect direction comparison (independent of GRID axis):
-#   124f: bisect_h  (200x100 horizontal halves)
-#   124g: bisect_v  (100x200 vertical halves)
+# Group=2 axis (2n x 2n grid):
+#   124a: g=2 n=1  GRID=2  (4 cells, 192x192 each, 2 cells/group)
+#   124b: g=2 n=2  GRID=4  (16 cells, 96x96, 8 cells/group)
+#   124c: g=2 n=3  GRID=6  (36 cells, 64x64, 18 cells/group)
+#   124d: g=2 n=4  GRID=8  (64 cells, 48x48, 32 cells/group)  - same cell-size as iter116J
 #
-# 7 cells sequential single-GPU, ~63-70 min total. eval = chip_multilabel_v15direct_n200.
+# Group=3 axis (3n x 3n grid):
+#   124e: g=3 n=1  GRID=3  (9 cells, 128x128, 3 cells/group)
+#   124f: g=3 n=2  GRID=6  (36 cells, 64x64, 12 cells/group)
+#   124g: g=3 n=3  GRID=9  (81 cells, 43x43, 27 cells/group)
+#
+# Bisect direction (group=2 special, halves are 2x1 grid not 2x2):
+#   124h: bisect_h (top/bottom halves, 384x192 each)
+#   124i: bisect_v (left/right halves, 192x384 each)
+#
+# 9 cells sequential single-GPU, ~80 min total. eval = chip_multilabel_v15direct_n200.
 
 set -e
 cd "$(dirname "$0")"
@@ -33,23 +38,25 @@ EVAL_SET="D:/project/data/wm-811k/chip_multilabel_v15direct_n200"
 OUT_BASE="outputs"
 SUMMARY="${OUT_BASE}/_iter124_grid_size_sweep_summary.log"
 : > "$SUMMARY"
-echo "$(date) [iter124] sweep start" | tee -a "$SUMMARY"
+echo "$(date) [iter124] sweep start (clean GRID = n_groups * n)" | tee -a "$SUMMARY"
 
 train_one() {
-    local TAG="$1"; local MODE="$2"; local GRID="$3"
+    local TAG="$1"; local MODE="$2"; local NG="$3"; local N="$4"
     local OUT_ROOT="${OUT_BASE}/iter124_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
         echo "$(date) [iter124] $TAG already exists, skip" | tee -a "$SUMMARY"
         return 0
     fi
-    echo "$(date) [iter124] TRAIN $TAG (mode=$MODE GRID=$GRID)" | tee -a "$SUMMARY"
 
-    # bisect modes ignore GRID/n_groups
     local GRID_FLAG=""
     local NG_FLAG=""
     if [ "$MODE" = "complement" ]; then
+        local GRID=$((NG * N))
         GRID_FLAG="--cutmix-grid-dim $GRID"
-        NG_FLAG="--cutmix-n-groups 3"
+        NG_FLAG="--cutmix-n-groups $NG"
+        echo "$(date) [iter124] TRAIN $TAG (complement g=$NG n=$N GRID=$GRID cells=$((GRID*GRID)))" | tee -a "$SUMMARY"
+    else
+        echo "$(date) [iter124] TRAIN $TAG (mode=$MODE)" | tee -a "$SUMMARY"
     fi
 
     python -X utf8 -m chip_multilabel._train_chip_variant \
@@ -83,22 +90,19 @@ eval_one() {
         >> "${OUT_BASE}/_iter124_${TAG}_eval.log" 2>&1 || true
 }
 
-# === 5 GRID-dim cells (fixed n_groups=3) ===
-train_one a_grid4  complement 4
-eval_one  a_grid4
-train_one b_grid6  complement 6
-eval_one  b_grid6
-train_one c_grid8  complement 8
-eval_one  c_grid8
-train_one d_grid12 complement 12
-eval_one  d_grid12
-train_one e_grid16 complement 16
-eval_one  e_grid16
+# === group=2 axis (2n x 2n grid), n ∈ {1,2,3,4} ===
+train_one a_g2_n1 complement 2 1; eval_one a_g2_n1
+train_one b_g2_n2 complement 2 2; eval_one b_g2_n2
+train_one c_g2_n3 complement 2 3; eval_one c_g2_n3
+train_one d_g2_n4 complement 2 4; eval_one d_g2_n4
 
-# === 2 group=2 bisect direction cells ===
-train_one f_bisect_h bisect_h 0
-eval_one  f_bisect_h
-train_one g_bisect_v bisect_v 0
-eval_one  g_bisect_v
+# === group=3 axis (3n x 3n grid), n ∈ {1,2,3} ===
+train_one e_g3_n1 complement 3 1; eval_one e_g3_n1
+train_one f_g3_n2 complement 3 2; eval_one f_g3_n2
+train_one g_g3_n3 complement 3 3; eval_one g_g3_n3
+
+# === bisect direction (group=2 special) ===
+train_one h_bisect_h bisect_h 0 0; eval_one h_bisect_h
+train_one i_bisect_v bisect_v 0 0; eval_one i_bisect_v
 
 echo "$(date) [iter124] sweep complete" | tee -a "$SUMMARY"
