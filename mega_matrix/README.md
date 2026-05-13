@@ -246,18 +246,23 @@ HF/timm 자동 다운로드를 시도하지 않는다. `mega_matrix/weights/` �
 cd /path/to/known-cnn
 python mega_matrix/download.py --allow-download                  # 모든 backbone (~2-3 GB)
 python mega_matrix/download.py --allow-download --only convnext  # substring filter
-python mega_matrix/download.py --list                            # backbone 목록만 출력
+python mega_matrix/download.py --list                            # 목록 + timm registry 검증
 # 기본 `python mega_matrix/download.py` 는 verify/skip only; 네트워크 사용 안 함
 # → mega_matrix/weights/<backbone>.pth
 ```
 
-기본 MODELS (download.py 안에 정의, 추가하려면 list 에 append):
+기본 MODELS (`download.py` 안에 정의, `timm.list_models(pretrained=True)`로 검증):
 - convnextv2_base.fcmae_ft_in22k_in1k_384 (~360 MB, paper baseline winner)
 - convnextv2_large.fcmae_ft_in22k_in1k_384 (~800 MB)
 - swinv2_base_window12to24_192to384.ms_in22k_ft_in1k (~340 MB)
 - vit_base_patch16_384.augreg_in21k_ft_in1k (~340 MB)
 - deit3_base_patch16_384.fb_in22k_ft_in1k (~340 MB)
-- efficientnetv2_rw_m.agc_in1k (~210 MB, 224 input)
+- convnextv2_tiny.fcmae_ft_in22k_in1k (~115 MB, 224 input)
+- convnextv2_base.fcmae_ft_in22k_in1k (~355 MB, 224 input)
+- tf_efficientnetv2_s.in21k_ft_in1k (~88 MB, 224 input)
+- swin_tiny_patch4_window7_224.ms_in22k_ft_in1k (~113 MB, 224 input)
+- maxvit_tiny_tf_224.in1k (~124 MB, 224 input)
+- vit_base_patch16_clip_224.laion2b_ft_in12k_in1k (~344 MB, 224 input)
 
 ### Step 2. 서버로 폴더 복사
 

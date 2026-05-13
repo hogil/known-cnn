@@ -20,9 +20,17 @@ Usage:
     python mega_matrix/download.py --list      # MODELS 목록만 출력
 """
 import argparse
+import difflib
 import os
 import sys
 from pathlib import Path
+
+# Default closed-network mode must be active before importing timm/huggingface helpers.
+if "--allow-download" not in sys.argv:
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
 
 import timm
 import torch
@@ -65,6 +73,24 @@ def find_existing_weight(model_name: str) -> Path | None:
         if p.exists():
             return p
     return None
+
+
+def validate_timm_models(model_names: list[str]) -> list[str]:
+    """Return configured names that are not real timm pretrained model ids."""
+    available = set(timm.list_models(pretrained=True))
+    return [name for name in model_names if name not in available]
+
+
+def print_invalid_models(invalid: list[str]) -> None:
+    available = sorted(timm.list_models(pretrained=True))
+    print("ERROR: invalid timm pretrained model id(s):", file=sys.stderr)
+    for name in invalid:
+        print(f"  - {name}", file=sys.stderr)
+        suggestions = difflib.get_close_matches(name, available, n=5, cutoff=0.55)
+        if suggestions:
+            print("    close matches:", file=sys.stderr)
+            for s in suggestions:
+                print(f"      {s}", file=sys.stderr)
 
 
 def download_one(model_name: str, force: bool = False, allow_download: bool = False) -> str:
@@ -114,9 +140,16 @@ def main():
     args = ap.parse_args()
 
     if args.list:
+        available = set(timm.list_models(pretrained=True))
+        print(f"timm: {getattr(timm, '__version__', 'unknown')}")
         print(f"Configured MODELS ({len(MODELS)}):")
         for n in MODELS:
-            print(f"  {n}")
+            mark = "OK" if n in available else "MISSING"
+            print(f"  [{mark}] {n}")
+        invalid = [n for n in MODELS if n not in available]
+        if invalid:
+            print_invalid_models(invalid)
+            sys.exit(2)
         return
 
     targets = MODELS
@@ -127,12 +160,13 @@ def main():
             print("No matches.", file=sys.stderr)
             sys.exit(1)
 
+    invalid = validate_timm_models(targets)
+    if invalid:
+        print_invalid_models(invalid)
+        sys.exit(2)
+
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
-    if not args.allow_download:
-        os.environ.setdefault("HF_HUB_OFFLINE", "1")
-        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
-        os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
-        os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    print(f"timm: {getattr(timm, '__version__', 'unknown')}")
     print(f"Targets: {len(targets)} models")
     print(f"Weights: {WEIGHTS_DIR}/{{model_name}}.{{pth,safetensors,bin}}")
     print(f"Network: {'ENABLED (--allow-download)' if args.allow_download else 'DISABLED'}")
