@@ -29,6 +29,8 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 OUT_BASE=outputs/_mega_matrix    # shared train/eval data root
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
@@ -59,21 +61,21 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# H100 default per-GPU batch for small chip PNGs. Reduced to 1/4 of the
-# aggressive table after CUDA OOM in full mega-matrix runs.
+# H100 default per-GPU batch for small chip PNGs. Reduced to 1/8 of the
+# original aggressive table after CUDA OOM in full mega-matrix runs.
 case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=24 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=32 ;;
-    *vit_base*384*)         BATCH_PER_GPU=48 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=48 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=48 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=96 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=192 ;;  # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=192 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=128 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=128 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=128 ;;
-    *)                      BATCH_PER_GPU=32 ;;
+    *convnextv2_large*384*) BATCH_PER_GPU=12 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=16 ;;
+    *vit_base*384*)         BATCH_PER_GPU=24 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=24 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=24 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=48 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=96 ;;   # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=96 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=64 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=64 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=64 ;;
+    *)                      BATCH_PER_GPU=16 ;;
 esac
 
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
@@ -98,7 +100,8 @@ log() {
 
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU accum=1 workers=$TRAIN_WORKERS data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
+CUTMIX_FORWARD_MULT=4  # complement + masked + n_groups=2 expands train forward batch up to 4x
+log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 workers=$TRAIN_WORKERS cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
 # Offline weights (closed-network) — .pth only
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"

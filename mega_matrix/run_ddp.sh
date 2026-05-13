@@ -35,6 +35,7 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 OUT_BASE=outputs/_mega_matrix
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
@@ -70,23 +71,23 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# Per-rank batch for H100 80GB + small chip PNGs. Reduced to 1/4 of the
-# aggressive table after CUDA OOM in full mega-matrix runs.
+# Per-rank batch for H100 80GB + small chip PNGs. Reduced to 1/8 of the
+# original aggressive table after CUDA OOM in full mega-matrix runs.
 # Per-rank, NOT divided by world_size.
 # Effective global batch = BATCH_PER_GPU * world_size.
 case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=24 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=32 ;;
-    *vit_base*384*)         BATCH_PER_GPU=48 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=48 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=48 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=96 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=192 ;;  # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=192 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=128 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=128 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=128 ;;
-    *)                      BATCH_PER_GPU=32 ;;   # safe fallback
+    *convnextv2_large*384*) BATCH_PER_GPU=12 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=16 ;;
+    *vit_base*384*)         BATCH_PER_GPU=24 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=24 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=24 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=48 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=96 ;;   # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=96 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=64 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=64 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=64 ;;
+    *)                      BATCH_PER_GPU=16 ;;   # safe fallback
 esac
 
 # DataLoader workers: use full logical CPU count per rank.
