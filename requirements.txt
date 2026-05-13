@@ -2,10 +2,10 @@
 # For H100/CUDA, install the matching PyTorch CUDA wheels for the machine
 # if the default pip index does not provide the desired CUDA build.
 # Example:
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+#   pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cu121
 
-torch>=2.2
-torchvision>=0.17
+torch==2.3.1
+torchvision==0.18.1
 timm>=1.0
 
 numpy>=1.24
