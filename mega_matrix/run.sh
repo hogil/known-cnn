@@ -67,21 +67,22 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# H100 default per-GPU batch for small chip PNGs. Reduced to 1/8 of the
-# original aggressive table after CUDA OOM in full mega-matrix runs.
+# H100 batch table — sized to ~60 GB / 80 GB (~75% utilization) to leave headroom
+# for activations and FCM-PM forward-batch multiplier (up to 4x). All values
+# reduced ~25% from prior table that filled VRAM completely (260514 user feedback).
 case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=12 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=16 ;;
-    *vit_base*384*)         BATCH_PER_GPU=24 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=24 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=24 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=48 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=96 ;;   # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=96 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=64 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=64 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=64 ;;
-    *)                      BATCH_PER_GPU=16 ;;
+    *convnextv2_large*384*) BATCH_PER_GPU=9 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=12 ;;
+    *vit_base*384*)         BATCH_PER_GPU=18 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=18 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=18 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=36 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=72 ;;   # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=72 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=48 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=48 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=48 ;;
+    *)                      BATCH_PER_GPU=12 ;;
 esac
 
 # Smoke mode override: 1 cell × 1 epoch × tiny data × micro batch
