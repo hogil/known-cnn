@@ -65,28 +65,27 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# Per-rank batch for H100 80GB + bf16 amp (per-rank, NOT divided by world_size).
+# Per-rank batch for H100 80GB + small chip PNGs (~18KB avg, ~26KB p99).
+# Per-rank, NOT divided by world_size.
 # Effective global batch = BATCH_PER_GPU * world_size.
 case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=24 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=32 ;;
-    *vit_base*384*)         BATCH_PER_GPU=48 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=48 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=48 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=96 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=192 ;;  # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=192 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=128 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=128 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=128 ;;
-    *)                      BATCH_PER_GPU=32 ;;   # safe fallback
+    *convnextv2_large*384*) BATCH_PER_GPU=96 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=128 ;;
+    *vit_base*384*)         BATCH_PER_GPU=192 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=192 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=192 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=384 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=768 ;;   # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=768 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=512 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=512 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=512 ;;
+    *)                      BATCH_PER_GPU=128 ;;   # safe fallback
 esac
 
-# DataLoader workers: 64 CPU server / N GPU - 8 ~ 16 per rank safe.
+# DataLoader workers: use full logical CPU count per rank.
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
-WORKERS_PER_RANK=$(( TOTAL_CPU / NGPU / 2 ))
-[ "$WORKERS_PER_RANK" -lt 4 ]  && WORKERS_PER_RANK=4
-[ "$WORKERS_PER_RANK" -gt 16 ] && WORKERS_PER_RANK=16
+WORKERS_PER_RANK="$TOTAL_CPU"
 
 MODEL_BASE="$OUT_BASE/$BACKBONE"
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
@@ -104,7 +103,7 @@ log() {
 
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
+log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER_GPU accum=1 workers_per_rank=$WORKERS_PER_RANK data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
 
 # Offline weights (closed-network) — auto-passthrough
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
@@ -147,7 +146,7 @@ train_cell() {
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
     fi
-    log "TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU"
+    log "TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU workers_per_rank=$WORKERS_PER_RANK"
     # True torchrun DDP: each rank sees --batch as its OWN batch (per-rank).
     # effective global batch = BATCH_PER_GPU * NGPU
     set +e

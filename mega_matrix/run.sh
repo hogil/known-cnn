@@ -54,6 +54,26 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
+# H100 default per-GPU batch for small chip PNGs (~18KB avg, ~26KB p99).
+# Single-GPU run uses the same per-rank table as DDP and keeps accum=1.
+case "$BACKBONE" in
+    *convnextv2_large*384*) BATCH_PER_GPU=96 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=128 ;;
+    *vit_base*384*)         BATCH_PER_GPU=192 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=192 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=192 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=384 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=768 ;;   # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=768 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=512 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=512 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=512 ;;
+    *)                      BATCH_PER_GPU=128 ;;
+esac
+
+TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
+TRAIN_WORKERS="$TOTAL_CPU"
+
 MODEL_BASE="$OUT_BASE/$BACKBONE"   # per-backbone model namespace (data shared at OUT_BASE)
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
@@ -73,7 +93,7 @@ log() {
 
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
+log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU accum=1 workers=$TRAIN_WORKERS data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
 # Offline weights (closed-network) — auto-passthrough if file exists
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
@@ -106,10 +126,11 @@ train_one() {
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
     fi
-    log "TRAIN ${TAG} ($BACKBONE)"
+    log "TRAIN ${TAG} ($BACKBONE) batch=$BATCH_PER_GPU workers=$TRAIN_WORKERS"
     set +e
     python -u -m chip_multilabel._train_chip_variant \
-        --variant T7 --ls 0.30 --epochs 10 --batch 2 --accum 8 --seed 1 \
+        --variant T7 --ls 0.30 --epochs 10 --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
+        --num-workers "$TRAIN_WORKERS" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \

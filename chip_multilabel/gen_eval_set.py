@@ -309,8 +309,18 @@ def generate(out_root: Path, classification_chips_root: Path,
         accepted[class_key] = idx + 1
         return True
 
+    def _progress(kind: str, class_key: str, made: int, target: int, attempts: int) -> None:
+        if target <= 0:
+            return
+        step = max(1, target // 10)
+        if made == 1 or made == target or made % step == 0:
+            pct = 100.0 * made / target
+            print(f"[gen] {kind} {class_key}: {made}/{target} ({pct:.0f}%) attempts={attempts}",
+                  flush=True)
+
     # 1) single defects: resample with replacement (per_defect)
     for cls in SINGLE_KEYS:
+        print(f"[gen] single {cls}: start target={per_defect}", flush=True)
         n_made = 0
         attempts = 0
         while n_made < per_defect and attempts < per_defect * 3:
@@ -319,9 +329,11 @@ def generate(out_root: Path, classification_chips_root: Path,
             arr = _load_chip_rgb(f)
             if _record(cls, arr, str(f), "", "single_resample"):
                 n_made += 1
+                _progress("single", cls, n_made, per_defect, attempts)
 
     # 2) 2-combos: min-blend (per_defect)
     for combo in COMBO_KEYS:
+        print(f"[gen] combo2 {combo}: start target={per_defect}", flush=True)
         a, b = combo.split("+")
         n_made = 0
         attempts = 0
@@ -334,10 +346,12 @@ def generate(out_root: Path, classification_chips_root: Path,
             blended = _min_blend(arr_a, arr_b)
             if _record(combo, blended, str(fa), str(fb), "min_blend"):
                 n_made += 1
+                _progress("combo2", combo, n_made, per_defect, attempts)
 
     # 2b) 3-combos (260508): N-way min-blend
     if include_triples:
         for combo in TRIPLE_COMBO_KEYS:
+            print(f"[gen] combo3 {combo}: start target={per_defect}", flush=True)
             a, b, c = combo.split("+")
             n_made = 0
             attempts = 0
@@ -353,20 +367,29 @@ def generate(out_root: Path, classification_chips_root: Path,
                 if _record(combo, blended, str(fa), str(fb), "min_blend_n3",
                            base3_path=str(fc)):
                     n_made += 1
+                    _progress("combo3", combo, n_made, per_defect, attempts)
 
     # 3) normal (per_normal — typically larger to reflect real-env Normal prevalence)
+    print(f"[gen] normal Normal: start target={per_normal}", flush=True)
     n_made = 0
+    attempts = 0
     while n_made < per_normal:
+        attempts += 1
         arr = _make_normal_chip(rng)
         if _record("Normal", arr, "", "", "synth_baseline"):
             n_made += 1
+            _progress("normal", "Normal", n_made, per_normal, attempts)
 
     # 4) invalid (per_invalid)
+    print(f"[gen] invalid Invalid: start target={per_invalid}", flush=True)
     n_made = 0
+    attempts = 0
     while n_made < per_invalid:
+        attempts += 1
         arr = _make_invalid_chip(rng)
         if _record("Invalid", arr, "", "", "synth_invalid_white_border"):
             n_made += 1
+            _progress("invalid", "Invalid", n_made, per_invalid, attempts)
 
     # manifest + previews
     with open(out_root / "manifest.csv", "w", newline="", encoding="utf-8") as f:
