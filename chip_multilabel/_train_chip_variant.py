@@ -485,6 +485,13 @@ def main():
     ap.add_argument("--cutmix-rect", type=float, default=0.5,
                     help="rectangle area fraction for CutMix paste (default 0.5 = half-image).")
     # iter 12 (260506) — scattered CutMix + soft proportional label
+    ap.add_argument("--cutmix-grid-dim", type=int, default=8,
+                    help="Spatial grid dimension for complement/grid_complete cutmix "
+                         "(GRID x GRID cells, each cell H/GRID x W/GRID px). "
+                         "n_groups partitions the GRID*GRID cells. Sweep this to vary "
+                         "per-cell pixel size at fixed n_groups (paper §6 NEW axis). "
+                         "Default 8 (= legacy 8x8 = 48x48 px cells at img_size=384). "
+                         "GRID must be >= n_groups. Suggested sweep: {4, 6, 8, 12, 16}.")
     ap.add_argument("--cutmix-mode", type=str, default="single",
                     choices=["single", "scattered", "grid", "grid_sparse",
                              "grid_complete", "complement", "mixup",
@@ -979,9 +986,9 @@ def main():
                             # n_groups = 2/3/4. label_scale = 0.5/0.75/1.0 etc.
                             # NOTE: bypasses standard pair logic (do_pair from outer scope) —
                             # complement has its own paired branch built-in via mask chips.
-                            GRID = 8
+                            GRID = max(2, int(args.cutmix_grid_dim))
                             n_cells = GRID * GRID
-                            n_groups = max(2, min(int(args.cutmix_n_groups), 8))
+                            n_groups = max(2, min(int(args.cutmix_n_groups), n_cells))
                             cells_per_group = n_cells // n_groups
                             label_scale = float(args.cutmix_complete_label_scale)
                             cell_h = H // GRID
@@ -1130,8 +1137,8 @@ def main():
                             do_pair = False  # bisect has its own paired branch (mask chips)
                         elif args.cutmix_mode == "grid_complete":
                             # 260508 — deterministic 50/50 split, full chip cover
-                            # 64 cells = 32 chip A + 32 chip B (no whitespace, both defects fully present)
-                            GRID = 8
+                            # GRID*GRID cells = half chip A + half chip B (no whitespace, both defects fully present)
+                            GRID = max(2, int(args.cutmix_grid_dim))
                             n_cells = GRID * GRID
                             half = n_cells // 2
                             cell_h = H // GRID
