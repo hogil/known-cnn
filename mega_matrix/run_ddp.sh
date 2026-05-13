@@ -70,22 +70,23 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# Per-rank batch for H100 80GB + small chip PNGs (~18KB avg, ~26KB p99).
+# Per-rank batch for H100 80GB + small chip PNGs. Reduced to 1/4 of the
+# aggressive table after CUDA OOM in full mega-matrix runs.
 # Per-rank, NOT divided by world_size.
 # Effective global batch = BATCH_PER_GPU * world_size.
 case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=96 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=128 ;;
-    *vit_base*384*)         BATCH_PER_GPU=192 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=192 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=192 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=384 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=768 ;;   # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=768 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=512 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=512 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=512 ;;
-    *)                      BATCH_PER_GPU=128 ;;   # safe fallback
+    *convnextv2_large*384*) BATCH_PER_GPU=24 ;;
+    *swinv2_base*384*)      BATCH_PER_GPU=32 ;;
+    *vit_base*384*)         BATCH_PER_GPU=48 ;;
+    *deit3_base*384*)       BATCH_PER_GPU=48 ;;
+    *convnextv2_base*384*)  BATCH_PER_GPU=48 ;;
+    *convnextv2_base*)      BATCH_PER_GPU=96 ;;   # 224
+    *convnextv2_tiny*)      BATCH_PER_GPU=192 ;;  # 224
+    *swin_tiny*224*)        BATCH_PER_GPU=192 ;;
+    *maxvit_tiny*224*)      BATCH_PER_GPU=128 ;;
+    *vit_base*clip*224*)    BATCH_PER_GPU=128 ;;
+    *efficientnetv2*)       BATCH_PER_GPU=128 ;;
+    *)                      BATCH_PER_GPU=32 ;;   # safe fallback
 esac
 
 # DataLoader workers: use full logical CPU count per rank.
