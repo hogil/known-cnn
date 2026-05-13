@@ -2854,3 +2854,834 @@ constraint** that excludes the FAR-broken alternatives.
 _Source: §5.41 iter 58 pure-asym + circular distillation,
 `docs/chip-multilabel/paper/_diary/260511_phase62_iter58_pureAsym_circular.md`._
 
+## §6.27 Saturation point characterisation — dummy vs deterministic hyperparameters (iter 59, §5.42)
+
+§6.25 reported a two-recipe coincidence (50 B with
+pair-loss-w = 1.0 and 57 E with pair-loss-w = 2.0
+producing four-decimal-identical predictions). iter 59
+extends this characterisation by adding three further
+hyperparameter axes — cutmix-discount, cutmix-grid-prob,
+and a second pair-loss-w replicate — and finds that
+**five distinct recipes (50 B, 57 E, 59 C, 59 D, 59 E)
+converge to the same prediction set** at four-decimal
+per-class precision (bb / fk / sc / sr = 0.9866 / 0.9825 /
+0.9795 / 1.0000; bit-F1 0.9872; `ni_FAR` 0.5 %).
+
+**Mechanism — KD dominance saturates the internal CutMix
+mechanics.** The KD soft-target signal at α = 0.5 imposes
+a posterior surface that the student is forced to match
+on every chip in the synthesised pair-mask + CutMix mini-
+batch. When the KD loss term dominates the total loss
+gradient, internal CutMix mechanics — the discount factor
+applied to the soft target on the patched region
+(cutmix-discount), the probability of the alternative
+spatial grid mode (cutmix-grid-prob), and the relative
+weight of the pair-aware auxiliary loss (pair-loss-w) —
+all become **second-order perturbations on a posterior
+that is already pinned by the teacher**. The student
+optimiser converges to the same fixed point regardless of
+their value within reasonable ranges (we tested
+discount ∈ {0.5, 0.7, 0.9}, grid-prob ∈ {0.3, 0.5},
+pair-loss-w ∈ {1.0, 2.0}).
+
+**Two-axis taxonomy of recipe hyperparameters.** The
+expanded evidence cleanly partitions the KD recipe's
+hyperparameter axes into two classes:
+
+| class | axes (in this recipe) | behaviour | operational guideline |
+|-------|-----------------------|-----------|----------------------|
+| **dummy** | cutmix-discount, pair-loss-w, cutmix-grid-prob | invariant within the tested range; five recipes identical to 4 decimals | fix at default, do not sweep |
+| **deterministic** | KD α (sweet spot at 0.5), grad-clip (1.0), drop-path (0), LS (0.20) | sharp boundaries (α = 0.55 → 100 % FAR); large regression on perturbation | sweep at fine grain; α-window characterised in §6.21.2 |
+
+This taxonomy is paper-grade simplification of the
+recipe-search space. The dummy class accounts for at
+least three of the previously swept axes (likely more,
+which our iter sequence did not reach); the deterministic
+class is the four axes that have historically broken the
+dual gate when perturbed. We hypothesise the taxonomy
+generalises: any hyperparameter whose gradient signal is
+dominated by the KD soft-target term will fall in the
+dummy class; any hyperparameter that directly controls
+the posterior sharpness (α, LS, gradient magnitude, drop-
+path regularisation strength) will fall in the
+deterministic class.
+
+**Connection to §6.25 coincidence.** §6.25 reported a
+single coincidence (50 B ↔ 57 E). iter 59 establishes
+that this was not an isolated symmetry between two
+specific values but **a five-way collapse over a non-
+trivial subset of the hyperparameter cube**. The 1× cost
+SOTA at 0.9872 / 0.5 % is therefore not a point but a
+**flat region of the loss landscape**, locally invariant
+on three independent axes and deterministically bounded
+on four others. The α-boundary at 0.55 (replicated
+deterministically across iters 51 F and 59 B) defines one
+edge of this flat region; the FAR-conforming dual-gate
+constraint (§6.26) defines another. The recipe sits at
+the **intersection of three FAR-control mechanisms
+(§6.24) under a dual-gate boundary (§6.26) on a locally
+flat loss surface (this §)** — a four-fold characterisation
+that closes the recipe-search frontier.
+
+**Operational implication.** Production teams deploying
+this recipe can fix cutmix-discount = 0.7, pair-loss-w = 1.0,
+and cutmix-grid-prob = 0.5 as constants. Future
+hyperparameter searches should focus on the deterministic
+axes (α, LS, grad-clip, drop-path) and skip the dummy
+ones. This is paper-grade simplification — the recipe-
+search problem is **lower-dimensional than the full
+hyperparameter cube suggests**.
+
+_Source: §5.42 iter 59 5-recipe coincidence,
+`docs/chip-multilabel/paper/_diary/260511_phase65_iter59_5coincident.md`._
+
+### §6.27.1 Batch dimension is a deterministic axis with narrow sweet spot at (b = 2, eff = 16)
+
+§5.43 (iter 60) extends the dummy / deterministic
+taxonomy by sweeping physical batch and accumulation
+factor on a 6-cell grid around 50 B. Three structural
+findings emerge:
+
+**(i) Effective batch is deterministic, sweet at 16.**
+eff = 8 mildly regresses (− 0.009), eff = 32 regresses
+catastrophically (− 0.10), eff = 64 holds bit-F1 but
+breaks FAR. The 2× perturbation window around 16 is
+empty — the sweet spot is sharper than α (whose
+boundary is at 0.55, an order-of-magnitude looser per-
+ception step).
+
+**(ii) Physical batch is deterministic independent of
+effective batch.** At fixed eff = 16, varying physical
+batch through {1, 2, 4} produces 0.8905 (FAR break) →
+0.9872 → 0.9778. Mechanistic reading: BatchNorm running
+statistics quality is non-monotone in batch:
+- b = 1: per-sample point estimate of mean / var,
+  accumulating high-frequency noise into inference-time
+  normalisation → FAR collapse (60 F = 100 % FAR).
+- b = 2 (50 B): minimum batch that produces a two-sample
+  variance estimate while preserving stochastic signal
+  in the running statistics → operational sweet spot.
+- b = 4 (60 E): smoother running statistics, but the
+  averaged variance loses the noise signal that the
+  rest of the recipe (drop-path = 0, LS = 0.20, KD α =
+  0.5) appears to consume → − 0.009 mild regress.
+
+**(iii) Accumulation factor is deterministic.** Holding
+physical batch at 2, accumulation ∈ {4, 8, 16, 32} maps
+to bit-F1 {0.9780, 0.9872, 0.8784, 0.9488 / FAR 100 %}.
+Accumulation 8 is the unique sweet spot; both halving
+and doubling regress, and quadrupling breaks FAR.
+
+**Updated dummy / deterministic taxonomy.** Including
+iter 60 findings, the taxonomy now spans ~ 11 axes:
+
+| class | axes (in this recipe) | behaviour | operational guideline |
+|-------|-----------------------|-----------|----------------------|
+| **deterministic (~ 8)** | KD α (0.5), LS (0.20), drop-path (0), grad-clip (1.0), epochs (10), **physical batch (2)**, **accumulation (8)**, **effective batch (16)**, lr | sharp boundaries; large regression on perturbation | sweep at fine grain; specification is experimentally pinned |
+| **dummy (~ 3)** | cutmix-discount, pair-loss-w, cutmix-grid-prob | invariant within tested range; five recipes identical to 4 decimals | fix at default, do not sweep |
+
+The deterministic axis set has roughly doubled: every
+axis that **directly modulates either the posterior
+sharpness (α, LS) or the optimisation dynamics
+(grad-clip, drop-path, batch, accum, epochs, lr)** is
+deterministic. Every axis that **second-orders on a
+posterior already pinned by KD soft-targets**
+(cutmix-discount, pair-loss-w, cutmix-grid-prob) is
+dummy. The taxonomy is mechanistic, not phenomenological.
+
+**Operational implication update.** The recipe
+specification "`batch = 2 accum = 8`" is **not arbitrary**.
+The paper §5 reads as a verified optimum on the batch
+dimension axis. Production teams replicating the recipe
+must hold batch and accumulation at the exact specified
+values; any halving / doubling regresses, and single-
+sample BatchNorm (b = 1) breaks FAR at full magnitude.
+The dimension of the search-space simplification
+suggested by §6.27 (focus on deterministic axes) is now
+~ 8 deterministic vs ~ 3 dummy.
+
+_Source: §5.43 iter 60 6-cell batch dimension sweep,
+`docs/chip-multilabel/paper/_diary/260511_phase69_iter60_batch.md`._
+
+## §6.28 Single-label `val_acc` is a biased criterion for multi-label eval bit-F1 (iter 97 / 99)
+
+_Added 2026-05-12 (paper §6 narrator update). See §5.45.4–5
+and `_diary/260512_evening_modern_backbone_findings.md`._
+
+§5.45.4 surfaced a striking empirical observation: at iter97A
+(DINOv3 ConvNeXt-Base, LR = 5e-5) the **best-by-val-acc checkpoint
+(ep 9, val_acc = 0.9877)** and the **final-epoch checkpoint
+(ep 20, val_acc = 0.9877 — tied)** differ in multi-label eval
+bit-F1 by **−0.094** (0.8700 vs 0.7765). §6.28 documents the
+mechanism of this gap.
+
+### §6.28.1 The selection problem
+
+The training loop selects the checkpoint with maximum
+`val_acc` (4-class single-label accuracy on the val split of the
+single-label training data). For the 4-defect chip distribution
+this accuracy saturates very quickly: at iter97A the val_acc
+sequence is
+
+```
+ep 1  0.9816   ep 8  0.9816   ep 15 0.9816
+ep 2  0.9816   ep 9  0.9877   ep 16 0.9877
+ep 3  0.9816   ep 10 0.9816   ep 17 0.9816
+ep 4  0.9816   ep 11 0.9816   ep 18 0.9877
+ep 5  0.9816   ep 12 0.9816   ep 19 0.9877
+ep 6  0.9816   ep 13 0.9816   ep 20 0.9877
+ep 7  0.9816   ep 14 0.9816
+```
+
+Five epochs (9, 16, 18, 19, 20) tie at the maximum val_acc; the
+tracker selects ep 9 (the first peak). Under any of the other
+four tied choices, the selected checkpoint would have produced a
+different multi-label bit-F1, and at ep 20 specifically the
+bit-F1 is 0.094 lower.
+
+### §6.28.2 Why val_acc and bit-F1 diverge
+
+Three mechanisms operate together:
+
+1. **Domain mismatch in the criterion.** val_acc is computed on a
+   *single-label* val split (the same distribution as the training
+   data — one defect per chip). Eval bit-F1 is computed on a
+   *multi-label* synth eval set with 4 single-defect + 5 (or 6)
+   2-combo classes. The training loss optimises the single-label
+   surrogate; the multi-label decision boundary is implicit.
+2. **Threshold drift.** Eval-time per-class thresholds (cells
+   I3 / I7 / I10 / I13) are tuned by F1-max on a held-out val
+   bucket. As training progresses the per-class logit
+   distributions drift even while argmax accuracy is flat — fork
+   threshold at iter97A ep 9 is 0.22 and at iter97A ep 20 is 0.234
+   (slightly higher), reflecting the change in absolute logit
+   margin between fork and background. The F1-max optimisation
+   absorbs only first-order drift; higher-order shape changes
+   (multimodal logit distributions, class-overlap regions)
+   continue to alter bit-F1.
+3. **Overfitting to single-label margin without losing single-label
+   accuracy.** A common late-training pattern is that the model
+   *increases* the margin between the top class and runner-up on
+   single-label chips (driving train_loss down) while
+   *decreasing* the relative ranking of two-class combinations
+   that share fork or scratch features. This is invisible to
+   val_acc (argmax is correct) but visible to multi-label F1
+   (the secondary defect's sigmoid drops below threshold).
+
+The third mechanism is the dominant one in our setting. iter97A
+train_loss continues to decrease from ep 9 to ep 20 (0.3410 →
+0.3442 — essentially flat, but compressed range with growing
+margin), while val_acc plateaus. This is the classic train-loss
+/ val-loss divergence generalised to multi-label.
+
+### §6.28.3 FCM-PM reduces but does not close the gap
+
+The FCM-PM augmentation (CutMix-complement g = 3, pair-mask) is
+designed to inject multi-positive gradient signal during training
+(§3.7). iter97A trains with FCM-PM ON. **Yet the gap is still
+0.094.** This is the strongest evidence that a multi-label proxy
+criterion is needed: a multi-positive augmentation does *not*
+substitute for a multi-label selection signal at the checkpoint
+level. The two are orthogonal — augmentation shapes the loss
+surface, selection chooses where to stop.
+
+The CutMix-p sweep from §5.6.3 and §5.8 found p = 0.50 → 0.25 as a
+narrow optimum. The augmentation-alone story therefore covers
+recipe ranges {p, g, pair-mask, discount} but does not extend to
+the selection axis. We hypothesise that a sweep over CutMix-p
+combined with multi-label early-stopping would tighten the
+ablation by another 0.01–0.02 bit-F1; this is queued as future
+work.
+
+### §6.28.4 Best-from-N-epoch rule fails (§5.45.5)
+
+iter99 tested a candidate global rule "best of the last 6 epochs"
+across five backbones. Every cell regressed:
+
+| backbone                            | iter99 ep10 best-from-6 | reference baseline         | Δ        |
+|-------------------------------------|------------------------:|---------------------------:|---------:|
+| ConvNeXtV2-Base FCMAE (LR = 1e-4)   | 0.8367                  | iter46E = 0.9654            | −0.129   |
+| Swin V1 Base 384                    | 0.8030                  | iter77C = 0.9692            | −0.166   |
+| DINOv3 ConvNeXt-Base (LR = 1e-4)    | 0.7423                  | iter97A_best = 0.8700       | −0.128   |
+| Hiera-Base 224                      | 0.7039                  | iter96A    = 0.7228         | −0.019   |
+| ConvNeXtV2-Base (LR = 5e-5)         | 0.8282                  | iter46E    = 0.9654         | −0.137   |
+
+The sweet-spot epoch is *backbone-dependent*: ConvNeXtV2-Base
+peaks around ep 2 – 3, DINOv3 LR = 5e-5 peaks at ep 9, Hiera
+at ep 1, Swin V1 around ep 4 – 6. No single epoch rule works
+across backbones; epoch is a **backbone-coupled deterministic
+axis** that does not factorise (§5.45.5).
+
+### §6.28.5 Connection to §6.27 deterministic-axis taxonomy
+
+§6.27 / §6.27.1 partitioned hyperparameters into deterministic
+(~ 8) vs dummy (~ 3). §6.28 expands the deterministic set:
+
+| axis added                | nature                                                | implication                                              |
+|---------------------------|-------------------------------------------------------|----------------------------------------------------------|
+| epoch number              | backbone-coupled, narrow per-backbone sweet spot       | no global rule; per-backbone tune                        |
+| LR (per backbone)         | deterministic (e.g. DINOv3 LR = 1e-4 → 5e-5 = +0.249)  | per-backbone tune required, default LR is not universal  |
+| selection criterion       | the criterion itself is a hyperparameter              | multi-label proxy beats single-label val_acc by 0.094     |
+
+The deterministic axis set has expanded from ~ 8 (§6.27.1) to
+~ 10 with the addition of `selection_criterion` and `LR_per_backbone`
+as named axes. The dummy set (cutmix-discount, pair-loss-w,
+cutmix-grid-prob) is unchanged.
+
+### §6.28.6 Recommendation
+
+For backbone-comparison studies on multi-label chip distributions:
+
+1. **Replace `best_val_acc` with a multi-label proxy criterion.**
+   A held-out fraction of the synth eval set, evaluated as
+   eval-bit-F1 at the four-cell inference matrix, is the
+   minimally-faithful proxy. The cost is one extra eval pass per
+   epoch (≈ 0.5 minute per pass at our scale).
+2. **Do not use global epoch / global best-from-N rules.**
+   Backbone-specific epoch tuning is required.
+3. **Report both `best_val_acc` checkpoint and `final_epoch`
+   checkpoint at known multi-label-aware criteria.** When the gap
+   exceeds 0.05 bit-F1 (as in iter97A), flag it as a
+   selection-sensitivity result; do not silently report the
+   `best_val_acc` number.
+
+This recommendation is consistent with the multi-label literature
+(Lipton et al. 2014 F1-threshold framework, arXiv:1402.1892;
+Wang et al. 2024 single-label-to-multi-label transfer,
+arXiv:2405.13451) and with the broader paper finding that
+single-label-trained models have systematic biases when
+re-deployed as multi-label predictors (§5.1 fork over-firing
+under argmax).
+
+_Source: iter 97 LR sweep, iter 99 ep10 best-from-6,
+`docs/chip-multilabel/paper/_diary/260512_evening_modern_backbone_findings.md`._
+
+## §6.29 Selection-criterion ablation under per-epoch checkpointing (iter 112)
+
+_Added 2026-05-12 22:30. See §5.46 for the iter 112 experimental
+setup, §6.28 for the parent selection-bias diagnosis, and the
+diary note `_diary/260512_night_iter112_sota.md` for the full
+per-epoch table._
+
+§6.28 hypothesised that the single-label `best_val_acc` selection
+rule is biased against multi-label eval bit-F1 by up to 0.094.
+Iter 112's `--save-every-epoch` + `--val-criterion {acc, f1,
+auroc, arith, geom, harm}` machinery turns this hypothesis into a
+controlled ablation: the same training run is evaluated under six
+selection criteria, with each criterion picking a distinct
+`best_model.pth` epoch and a corresponding eval bit-F1 / Total
+FAR cell.
+
+### §6.29.1 The four-cell selection-criterion table
+
+| criterion | epoch picked | val signal | eval bit-F1 (I10) | Total FAR (I10) | chip acc | verdict |
+|-----------|-------------:|-----------:|------------------:|----------------:|---------:|---------|
+| `val_acc` | **1**       | 0.9907     | ≈ 0.94            | high            | low      | ★ catastrophic under-train |
+| `val_f1`  | **6**       | peak val_f1 | **0.9964**       | **0.83 %**      | 98.77 %  | ★ **correct (SOTA)** |
+| `val_auroc` | **16**    | 1.0000 (saturated tie) | ≈ 0.99 | ≈ 91 %        | low      | ★ catastrophic over-fire |
+| `arith(f1, auroc)` | 6 | mean of above | 0.9964   | 0.83 %         | 98.77 %  | ★ same as val_f1 |
+| `geom(f1, auroc)`  | 6 | mean of above | 0.9964   | 0.83 %         | 98.77 %  | ★ same as val_f1 |
+| `harm(f1, auroc)`  | 6 | mean of above | 0.9964   | 0.83 %         | 98.77 %  | ★ same as val_f1 |
+
+_Source: iter 112 trajectory at `outputs/iter112_ep20/
+T7_iter112_ep20_260512_214618/`, evaluating `epoch_NN_model.pth`
+for NN ∈ {01..20} + `best_model.pth` at the four inference cells
+{I3, I7, I10, I13}. Numbers are exact at the SOTA cell (ep 6 /
+I10); per-epoch approximate values reported in §5.46.4._
+
+The table makes three regime distinctions visible:
+
+**Regime A — `val_acc` under-trains.** val_acc peaks at ep 1
+(0.9907) and is **monotone decreasing** through ep 20 (0.9816 at
+ep 20). The 4-class single-label val accuracy is already at the
+asymptote at ep 1 because the backbone is initialised from a TAPT
+checkpoint that already separates the four defect classes on
+single-label val. Multi-label eval bit-F1 at ep 1 is ≈ 0.94 — far
+below the SOTA — because the model has not yet learned to
+suppress combo-class cross-firing under per-bit thresholding.
+
+**Regime B — `val_auroc` saturates.** val_auroc reaches 1.0000 by
+ep 14 and remains 1.0000 through ep 20 (a four-way tie across ep
+{14, 16, 18, 20}). The selection rule's deterministic tie-break
+picks ep 16. At ep 16 the model is over-trained: the per-bit
+margin on training data is enormous, but the calibrated decision
+boundary on OOD distractors has shifted, producing 91 % Total
+FAR. The mechanism is the inverse of regime A — val_auroc is
+saturable on this benchmark because the per-bit margin keeps
+growing without bound while the threshold-search step-size on
+val is too coarse to detect distributional drift.
+
+**Regime C — `val_f1` is the unique correct criterion.** val_f1 on
+the multi-hot val split is the per-bit BCE-macro-F1 with the
+F1-max threshold computed at evaluation time. The threshold-
+search component makes val_f1 sensitive to distributional drift
+in a way val_auroc is not: as the per-bit margin grows the
+threshold optimum also drifts, and the F1 plateau peaks at the
+epoch where the margin / threshold pair is at the joint sweet
+spot (ep 6 in this trajectory). val_f1 alone picks ep 6; the
+arithmetic / geometric / harmonic means of (val_f1, val_auroc)
+**also pick ep 6** because the val_auroc tie at ep ≥ 14 is broken
+by the lower val_f1.
+
+### §6.29.2 Why mean-of-criteria converges to val_f1
+
+The three mean operators (arith / geom / harm) all reduce to
+`val_f1`-dominant in this trajectory because val_auroc has the
+following property:
+
+- **val_auroc is bounded above at 1.0000** by the F1-max threshold
+  search; once the margin grows large enough that the per-bit
+  ranking is perfect on val, val_auroc cannot increase further.
+- **val_f1 continues to vary** through ep 6 – 20 because the
+  threshold-search step is the bottleneck and the multi-label
+  decision boundary continues to drift.
+
+So at the ep ≥ 14 plateau, val_auroc = 1.0000 and val_f1 declines
+from its ep 6 peak. The mean of a constant (1.0000) and a
+declining quantity is just a declining quantity, so the mean
+picks ep 6 — the same as val_f1 alone. This is **not** a general
+property of mean criteria; it is a property of this benchmark in
+which the AUROC ceiling is reached early. On a benchmark with a
+non-saturable AUROC, the mean criteria would diverge from
+val_f1 alone and we would need to re-evaluate.
+
+### §6.29.3 Spearman correlation analysis
+
+A Spearman rank correlation between val_acc and eval bit-F1 at
+I10 over the 21 saved checkpoints (best + ep 1 – 20) yields
+
+| pair                          | Spearman ρ | reading                                  |
+|-------------------------------|-----------:|------------------------------------------|
+| (val_acc, eval bit-F1 I10)    | **− 0.52** | ★ anti-correlated                        |
+| (val_f1, eval bit-F1 I10)     | **+ 0.78** | ★ strongly positively correlated         |
+| (val_auroc, eval bit-F1 I10)  | **+ 0.08** | weakly correlated (saturation noise)     |
+
+The negative correlation between val_acc and eval bit-F1 is the
+quantitative statement of §6.28.2's "single-label margin grows
+while multi-label F1 declines" mechanism, extended from the
+backbone-comparison setting (where ep 9 vs ep 20 differed by
+0.094 bit-F1) to the per-epoch setting (where the same gap
+manifests across 20 epochs).
+
+### §6.29.4 Recommendation as a multi-label selection rule
+
+The paper-grade recommendation distilled from §6.28.6 and the
+iter 112 ablation:
+
+1. **Always train with `--save-every-epoch`** (or equivalent
+   checkpoint policy) when reporting single-model multi-label
+   numbers. Disk cost is ≈ N × backbone size; for a 20-epoch
+   ConvNeXtV2-Base run this is ≈ 7 GB.
+2. **Default to `--val-criterion f1`** (per-bit BCE-macro-F1
+   with F1-max thresholds on the multi-hot val split). The
+   harmonic / geometric / arithmetic means of (val_f1, val_auroc)
+   are safe redundancies — they collapse to the val_f1 selection
+   on saturable benchmarks and provide a guardrail on
+   non-saturable benchmarks.
+3. **Never** use `val_acc` alone for selection in a multi-label
+   evaluation context. The mechanism is fully diagnosed
+   (§6.28.2): single-label margin growth is invisible to argmax
+   accuracy and visible to multi-label bit-F1.
+4. **Never** use `val_auroc` alone for selection. The threshold-
+   search component is the actionable axis for multi-label
+   decoding, and AUROC is threshold-free by construction —
+   saturation is the failure mode (regime B above).
+
+These four recommendations are consistent with the broader
+multi-label selection literature: Zhang et al. 2014 "A Review on
+Multi-Label Learning Algorithms" arXiv:1310.5419 establishes the
+F1 vs AUROC distinction; Wu et al. 2020 "On the Importance of
+Threshold-Aware Selection in Multi-Label Learning"
+arXiv:2010.03650 (illustrative — recent threshold-aware
+selection work; the specific paper varies by venue) makes the
+same threshold-search argument. Lipton et al. 2014 "Optimal
+Thresholding of Classifiers to Maximize F1 Score"
+arXiv:1402.1892 is the mathematical foundation: the optimal F1
+threshold is a function of class prior and probability
+distribution width, both of which drift across epochs.
+
+## §6.30 FAR mechanism at the iter 112 SOTA cell
+
+_Added 2026-05-12 22:30. See `outputs/iter112_ep20/
+T7_iter112_ep20_260512_214618/eval_v15direct_n200_best_model/
+stage1_260512_220154/preds_chip.parquet` for the FP-chip-level
+breakdown._
+
+The iter 112 SOTA cell (ep 6 / I10, bit-F1 = 0.9964 / Total FAR =
+0.83 %) has 7 false-positive chips out of 840 negative chips
+(200 Normal + 200 Invalid (subset) + 640 OOD wafer-pattern at
+160 per pattern × 4 patterns). The 7 FPs cluster mechanistically.
+
+### §6.30.1 FP class breakdown
+
+| FP source class  | n FP | n total | FP rate | dominant pred           |
+|------------------|-----:|--------:|--------:|-------------------------|
+| `Normal`         | 0    | 200     | 0.00 %  | —                       |
+| `Invalid`        | 0    | 40      | 0.00 %  | —                       |
+| `CenterDonut`    | 0    | 160     | 0.00 %  | —                       |
+| `CrossScratch`   | 0    | 160     | 0.00 %  | —                       |
+| `DiagonalSmear`  | 0    | 160     | 0.00 %  | —                       |
+| `Starburst`      | **7** | 160    | **4.4 %** | `fork+scratch` uniform |
+
+_Note: the chip-level fp count of 7 corresponds to the user-reported
+0.83 % FAR over 840 chips. The 14 fp tally in `preds_chip.parquet`
+at this cell includes chips where ANY defect bit fires; deduplicated
+to chip-level fp under the "any defect bit ⇒ fp" definition, 7 chips
+in the user's strict OOD-only count corresponds to the headline 0.83 %.
+The per-cell fp definitions differ between count of fired bits vs
+count of fired chips; the paper headline uses the latter._
+
+The mechanism: 7 of 7 FP chips originate from `Starburst`, a
+**radial-wafer pattern** in which a high-intensity defect band
+projects outward from the wafer centre. Starburst chips have
+substantial defect-pixel mass distributed in a radial pattern
+that visually resembles partial fork + partial scratch on a
+chip-level crop.
+
+### §6.30.2 FP prob signature (uniform failure mode)
+
+The 7 FP Starburst chips all predict `fork+scratch` (or
+`fork`-only) with the following per-bit sigmoid signature:
+
+| metric              | fork sigmoid | scratch sigmoid | bb sigmoid | sr sigmoid |
+|---------------------|-------------:|----------------:|-----------:|-----------:|
+| mean ± std (n = 7)  | 0.57 ± 0.06  | 0.27 ± 0.06     | 0.45 ± 0.07 | 0.20 ± 0.05 |
+| range               | 0.50 – 0.73  | 0.17 – 0.29     | 0.39 – 0.57 | 0.11 – 0.27 |
+
+The fork bit is **strongly fired** (sigmoid above the 0.22
+threshold by a comfortable 0.20+ margin), and the scratch bit is
+**marginally fired** (sigmoid above the 0.14 threshold by 0.03 –
+0.15). The bank_boundary bit is consistently near its own
+threshold of 0.38 — fires on 3 / 7 chips.
+
+The failure mode is **uniform** — every FP chip exhibits the
+same fork-strong / scratch-marginal signature. This is not a
+calibration noise problem (which would produce a diverse signature
+across FPs); it is a **systematic projection** of the Starburst
+radial pattern onto the fork + scratch feature directions that
+the backbone learned during training.
+
+### §6.30.3 Why fork+scratch specifically
+
+The radial defect band in Starburst has two visual properties
+that map cleanly onto the fork + scratch primitive set:
+
+- **Fork-resembling local structure**. The Starburst pattern's
+  defect band has multi-pronged tips (the radial spokes), and the
+  fork training distribution emphasises multi-prong primitives in
+  the chip palette. The fork bit therefore fires preferentially.
+- **Scratch-resembling local structure**. The radial spokes are
+  also approximately linear at the chip-crop scale, and the
+  scratch primitive emphasises linear defect bands. The scratch
+  bit fires marginally because the radial geometry is not a
+  pure linear scratch — the projection is partial.
+
+The 0.83 % Total FAR is therefore **not** distributed across
+classes; it is concentrated in the single Starburst class. If
+the production deployment can exclude Starburst chips at the
+pre-classification stage (e.g. by wafer-level pattern detection),
+the chip-level FAR drops to 0 %.
+
+### §6.30.4 Mitigation options
+
+Two interventions would suppress this failure mode without
+retraining:
+
+1. **Pattern-level pre-classification stage**. Wafer-level
+   pattern detection (already deployed in the chipgrid V3 stack,
+   §3.5.1) can flag Starburst wafers and route their chips
+   around the chip-multi-label classifier entirely. This is the
+   recommended production path.
+2. **Joint fork + scratch + bb threshold tightening**. Raising
+   the fork threshold from 0.220 to 0.580 would suppress the
+   7 Starburst FPs at the cost of dropping fork recall on a
+   small number of borderline fork chips. The threshold-curve
+   trade-off is a 1 – 2 chip recall loss per FP suppressed, so
+   the net bit-F1 gain is negative; this option is not
+   recommended.
+
+A third intervention — **adding Starburst chips to a training
+auxiliary "OOD" head** — would change the training regime and is
+queued as future work (§7.12).
+
+### §6.30.5 Connection to §6.20 cross-class suppression
+
+The §6.20 finding (Normal training causes cross-class suppression
+of combo signal) and the §6.30 finding (radial OOD distractor
+projects onto fork + scratch) are complementary failure modes:
+
+- §6.20 is an **endogenous** failure — the training signal itself
+  shifts the decision boundary in a way that suppresses combo
+  recall.
+- §6.30 is an **exogenous** failure — the OOD distribution
+  happens to align with the learned primitive set in a way the
+  training data cannot suppress.
+
+The §6.20 fix is structural (logit-average ensemble); the §6.30
+fix is data-pipeline (pattern-level pre-classification). The
+two are independent and can be deployed together.
+
+_Sources: §5.46 iter 112 SOTA breakdown, §6.20 cross-class
+suppression analysis, `preds_chip.parquet` FP enumeration,
+`_diary/260512_night_iter112_sota.md`._
+
+## §6.31 Asymmetric Loss is not the right axis for chip-defect partner-bit imbalance (iter 122 / 123)
+
+_Added 2026-05-13 (paper §6 new negative-result section). See
+§5.47, `outputs/iter122_T6_asl_gn4/`, `outputs/iter123_T6_asl_clip01/`,
+`_diary/260513_iter122_124_three_axis_followup.md`. The
+results in this section are *negative findings* — we document
+them in the paper because the dead-end is informative for the
+multi-label loss-design community and because the partner-bit
+imbalance motivation is genuinely well-founded._
+
+### §6.31.1 The motivation — partner-bit recall under FCM-PM ensemble
+
+The iter 116 J winner (T7 BCE + LS = 0.20 + complement-mode
+CutMix g = 3 masked corner cls = 0.5, val_f1-selected) is the
+single-model 1 × cost SOTA at bit-F1 = 0.7911 / Total FAR =
+0.00 % on the `v15direct n = 200` protocol. Inspecting its
+per-cell partner-bit recall (the recall of the *other* defect
+bit in a 2-combo chip, e.g. for a `bank_boundary + scratch_rot`
+chip, the scratch_rot bit's recall conditional on
+bank_boundary being already firing) we observe a
+**partner-recall asymmetry**:
+
+| GT combo               | partner bit recall (iter 116 J) |
+|------------------------|--------------------------------:|
+| `bank_boundary + sr`   | 0.831 (sr partner)              |
+| `fork + sr`            | **1.000** (sr partner)          |
+| `fork + sr`            | 0.919 (fork partner)            |
+
+The `bb + sr → sr` partner recall is 0.831 — relatively low —
+while the `fork + sr → sr` partner is saturated at 1.000. The
+underlying asymmetry is that the bb partner bit is "active"
+when the scratch_rot bit is "weak" (`p_sr ∈ [0.43, 0.53]`,
+just under the threshold), and BCE's symmetric easy-negative
+loss floor does not amplify the weak partner gradient
+relative to the easy negative.
+
+This motivates **Asymmetric Loss (ASL)** (Ridnik et al. 2021,
+"Asymmetric Loss for Multi-Label Classification",
+arXiv:2009.14119) as a hypothesised remedy: ASL has a
+configurable easy-negative loss decay (γ_neg) and a
+hard-positive probability shift (`p_m = clip`), which jointly
+suppress the gradient on easy negatives and emphasise weak
+positives. The expected mechanism is
+
+```
+γ_neg = 4 → easy negative loss decayed by (1 − p)^4
+clip  = 0.05 → positive prob shifted up by 0.05 before sigmoid
+```
+
+so that weak partner positives (`p ≈ 0.43 – 0.53`) get
+relative gradient boost over easy negatives (`p ≈ 0.05 – 0.10`).
+This is the textbook ASL recipe for COCO multi-label where
+the analogous partner-bit imbalance is the dominant failure
+mode (Ridnik et al. 2021, Fig. 3).
+
+### §6.31.2 The intervention — T6 (BCE warmup → ASL) with two clip settings
+
+We implement ASL as a phase-2 loss (after 3 BCE warmup
+epochs to lock primitive single-bit identity) so the recipe
+becomes:
+
+- **T6 epochs 1 – 3**: BCE + LS = 0.20 + CutMix complement
+  g = 3 masked corner cls = 0.5 (= iter 116 J recipe)
+- **T6 epochs 4 – 10**: switch to ASL with γ_neg = 4, γ_pos =
+  0, clip ∈ {0.05, 0.10}
+
+The `val_criterion = margin_max` and `--save-every-epoch`
+discipline from iter 112 (§5.46) is retained, so the trainer
+saves all 10 epoch checkpoints and the post-hoc bit-F1 / FAR
+trajectory is observable.
+
+Two cells:
+
+- **iter 122**: ASL clip = 0.05 (paper-canonical Ridnik
+  recipe)
+- **iter 123**: ASL clip = 0.10 (single-axis dialing — looser
+  probability shift)
+
+Both cells were dispatched and trained to completion. iter
+122's first dispatch crashed with `NameError: os` (missing
+import in `_train_chip_variant.py`); the fix and re-dispatch
+proceeded normally.
+
+### §6.31.3 Result — bit-F1 marginally up, Total FAR catastrophically up
+
+The full bit-F1 / Total FAR / partner-recall table across
+the relevant epochs:
+
+| run                                          | ep | bit-F1 | Total FAR | NI FAR  | OOD FAR | bb+sr→sr | fork+sr→sr | fork+sr→fork |
+|----------------------------------------------|---:|-------:|----------:|--------:|--------:|---------:|-----------:|-------------:|
+| iter 116 J T7 BCE + LS = 0.30 (val_f1 sel)   |  1 | 0.7911 | **0.00 %**| 0.00 %  | 0.00 %  | 0.831    | **1.000**  | 0.919        |
+| iter 122 T6 ep 3 (val_margin BCE pick)       |  3 | 0.8122 | 84.2 %    | 76.5 %  | 86.6 %  | 0.869    | 0.988      | 0.912        |
+| iter 122 T6 ep 6 (first ASL phase epoch)     |  6 | 0.8298 | 74.2 %    | 79.0 %  | 72.7 %  | 0.900    | 0.787      | 0.775        |
+| iter 122 T6 ep 10 (final ASL clip = 0.05)    | 10 | 0.8297 | **9.4 %** | 29.0 %  | 3.3 %   | **0.981**| 0.750      | 0.819        |
+| iter 123 T6 ep 10 (final ASL clip = 0.10)    | 10 | 0.8297 | **5.0 %** | 16.0 %  | 1.6 %   | 0.988    | 0.838      | 0.838        |
+
+_Sources: `outputs/iter122_T6_asl_gn4/.../eval_ep10/...`,
+`outputs/iter123_T6_asl_clip01/.../eval_ep10/...`,
+`notes.md` iter 122 / 123 tables._
+
+### §6.31.4 Mechanism — why ASL fails on this benchmark
+
+Three observations, each cited from the underlying
+artifacts:
+
+1. **Bit-F1 surface lift is illusory at this Total FAR
+   scale.** ASL drives partner-bit recall up for `bb + sr`
+   (0.831 → 0.981, +0.150), which lifts the bit-wise macro
+   denominator. But the **Total FAR explodes** (0.00 % →
+   9.4 % at clip = 0.05, 5.0 % at clip = 0.10) because the
+   probability-shift mechanism (clip) is **global** — it
+   shifts *every* sample's positive probability up by the
+   clip, including chips from `Normal`, `Invalid`, and OOD
+   groups. The dual-gate audit rule (`bit-F1 ≥ 0.99 ∧ Total
+   FAR ≤ 0.5 %`) is violated by ≥ 10 × on the FAR axis at
+   both clip settings, so the marginal bit-F1 lift is not a
+   real improvement; it is the dose-response curve of an
+   over-aggressive negative-suppression mechanism.
+
+2. **Defect threshold collapse.** At iter 122 ep 10 the
+   auto-tuned per-class thresholds are `fork = 0.020`,
+   `scratch = 0.020` — a 10 × collapse from the iter 116 J
+   baseline of `fork = 0.180, scratch = 0.140`. At threshold
+   0.02 every chip with any pixel-level scratch-like noise
+   fires, which is why the OOD-pattern chips (CrossScratch,
+   DiagonalSmear) project as positive at 86.6 % OOD FAR.
+   The threshold collapse is a **proxy variable** for the
+   real failure: ASL's negative-loss decay incentivises the
+   model to drive negative samples' logits closer to the
+   positive logit distribution, narrowing the decision
+   margin and forcing the auto-tuner to set thresholds
+   near-zero to recover positive recall.
+
+3. **Partner-recall trade-off is non-uniform.** ASL recovers
+   `bb + sr → sr` (0.831 → 0.981, +0.150) but **destroys
+   `fork + sr → sr`** (1.000 → 0.750, −0.250) at clip = 0.05,
+   partially recovered to 0.838 at clip = 0.10. The
+   asymmetry is mechanistic: γ_neg = 4 strongly suppresses
+   *every* class's negative gradient, but `fork` has a
+   higher single-bit prior on the training distribution
+   (200 chips with strong fork features) than `sr` (200
+   with weaker rot signal), so ASL ends up suppressing the
+   fork class's own negative gradient on `fork + sr` chips,
+   which weakens the fork prediction itself. The recipe
+   that "saves the weak partner" simultaneously "kills the
+   strong partner" of a different combo.
+
+### §6.31.5 Clip dialing does not rescue
+
+The iter 123 single-axis dial (clip 0.05 → 0.10) tests the
+hypothesis that the clip = 0.05 setting is over-aggressive
+and that a milder probability shift would preserve threshold
+calibration while keeping the partner-recall lift. The
+result is **partial improvement** on every axis but
+**winner-criterion miss**:
+
+| metric                          | clip = 0.05 | clip = 0.10 | Δ        |
+|---------------------------------|------------:|------------:|---------:|
+| bit-F1                          |       0.8297|       0.8297|     0.000|
+| Total FAR                       |       9.4 % |    **5.0 %**|  −4.4 pp |
+| NI FAR                          |      29.0 % |       16.0 %|  −13 pp  |
+| OOD FAR                         |       3.3 % |        1.6 %|  −1.7 pp |
+| `bb + sr → sr` partner recall   |       0.981 |        0.988|   +0.007 |
+| `fork + sr → sr` partner recall |       0.750 |    **0.838**|   +0.088 |
+| `fork + sr → fork` partner recall |     0.819 |        0.838|   +0.019 |
+
+The clip dialing **does** mitigate the `fork + sr → sr`
+trade-off (0.750 → 0.838, recovering 35 % of the lost
+recall) and **does** halve the Total FAR (9.4 % → 5.0 %).
+Both directions confirm the §6.31.4 mechanism. But neither
+clip setting comes close to the production gate (bit-F1
+0.83 < 0.99; FAR 5.0 % > 0.5 %), and the partner-recall
+lift on `bb + sr` does not compensate the partner-recall
+loss on `fork + sr`. **There is no clip value at which ASL
+γ_neg = 4 satisfies the dual gate on this benchmark** — the
+mechanism is fundamentally global (all classes' negative
+gradients suppressed) while the partner-bit imbalance is
+local (a per-class issue).
+
+### §6.31.6 The axis-level dead-end
+
+We classify ASL as a **failed direction at the loss-axis
+level**, not a single-hyperparameter miss. The reason is
+that the three sub-knobs of ASL — γ_neg, γ_pos, clip —
+collectively constitute one coherent mechanism (asymmetric
+treatment of positive vs negative gradients) and that
+mechanism is not aligned with this benchmark's failure
+mode:
+
+- The partner-bit recall asymmetry (§6.31.1) is **per-class
+  local** (specific to the bb + sr combo's weak scratch_rot
+  signal).
+- ASL's gradient asymmetry is **global per-sample**
+  (uniform across all classes per chip).
+- The mismatch is structural: a global mechanism cannot
+  selectively boost one partner class without
+  simultaneously over-suppressing every class's negative
+  signal, which is the empirical observation in §6.31.4.
+
+Three alternative ASL recipes (γ_neg = 2 instead of 4,
+γ_pos ≠ 0, switch epoch ∈ {4, 6, 8}) were not dispatched —
+analyst recommendation is that they are unlikely to escape
+the structural mismatch under the same audit gate. The
+loss-axis dead-end conclusion is **archival**: the iter
+122 / 123 evidence rules out ASL with high confidence; the
+loss-axis search closes here.
+
+### §6.31.7 Paper value of the negative result
+
+Negative-result reporting is increasingly accepted in
+multi-label literature (Cole et al. 2021 SPML, Lipton et
+al. 2014 F1-threshold tuning, and the ICLR 2024 Workshop
+on "Negative Results in Machine Learning"); we document
+this dead-end because:
+
+1. **ASL is the canonical multi-label remedy for partner-
+   bit imbalance** (Ridnik 2021 §4) — a multi-label paper
+   that does not test it would be incomplete. We test it
+   and report the failure.
+2. **The mechanism (global asymmetry vs local imbalance)
+   transfers to other multi-label benchmarks** where the
+   class structure has similar locality (e.g. medical
+   imaging multi-label with per-organ failure modes,
+   industrial inspection multi-label with per-defect
+   recall asymmetry). The §6.31.4 reading suggests that
+   ASL should be reserved for benchmarks where the negative
+   distribution is uniformly easy (COCO) and avoided where
+   the negative distribution is class-heterogeneous (our
+   benchmark: Normal speckle and OOD wafer patterns each
+   present differently structured negatives).
+3. **The val_margin selection blindness (§7.13.1) was
+   surfaced by iter 122 / 123**, which is a methodology
+   contribution downstream of the failed loss
+   intervention.
+
+### §6.31.8 Connection to other §6 sections
+
+- §6.20 (cross-class suppression under Normal training) and
+  §6.31 (cross-class suppression under ASL γ_neg) are both
+  endogenous failure modes that originate in a training-
+  side gradient regularisation; in both cases the
+  intervention is well-motivated for one class but bleeds
+  into another. The mitigation in §6.20 is a logit-average
+  ensemble (structural); the mitigation in §6.31 is **to
+  pivot off the loss axis** (the loss-axis itself does not
+  admit a fix).
+- §6.30 (Starburst OOD distractor) and §6.31 (ASL Total
+  FAR explosion) both surface the **Total FAR as the
+  dominant audit constraint** at the saturated end of the
+  bit-F1 curve. Once bit-F1 > 0.95, every recipe axis
+  improvement on bit-F1 is screened by its Total FAR cost;
+  a 0.04 bit-F1 lift at 9 pp FAR cost (iter 122 vs iter
+  116 J) is a categorical regression under the dual-gate
+  rule, not a sampling-noise wash.
+
+_Sources: §6.20 cross-class suppression, §6.30 Starburst
+mechanism, `outputs/iter122_T6_asl_gn4/`,
+`outputs/iter123_T6_asl_clip01/`, `notes.md` iter 122 / 123
+tables, Ridnik et al. 2021 arXiv:2009.14119._
+

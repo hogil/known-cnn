@@ -253,6 +253,35 @@ classes:
 이 규칙 위반 = 사용자가 매번 "어디 만들었어?" 다시 묻게 됨 → 시간 낭비 + 사용자 분노.
 특히 같은 폴더 여러 메시지 걸쳐 다룰 때 매번 마지막에 다시 적기.
 
+## ★★★ 절대 규칙: chip multi-label train/eval composition (260512)
+
+**학습 (train) — 4 single defect 만**:
+- `TRAIN_CLASSES = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']`
+- Normal / Invalid / OOD 학습 금지 (모든 trainer script 에 `--no-normal` flag 명시)
+- 5번째 class 추가 금지
+
+**평가 (eval) — 5 group**:
+- (a) **single defect** (4): bank_boundary, fork, scratch, scratch_rot — positive
+- (b) **2-combo** (현재 5; scratch+scratch_rot 은 same-family 제외): bb+fork, bb+scratch, bb+scratch_rot, fork+scratch, fork+scratch_rot — positive
+- (c) **Normal** (1) — negative
+- (d) **Invalid** (1) — negative
+- (e) **OOD** (wafer-level pattern: CenterDonut / CrossScratch / DiagonalSmear / Starburst 등 N개) — negative
+
+**Metric 정의 (절대)**:
+- **bit F1** = (a) + (b) positive cells 의 macro-F1 (= 9 cells, scratch+scratch_rot 추가 시 10).
+  `macro_f1` (모든 11+ cell 평균) 와 **혼동 금지** — bit F1 가 진짜 defect 탐지 성능.
+- **FAR** = `(Normal_fp + Invalid_fp + OOD_fp) / (N_Normal + N_Invalid + N_OOD)`. 3 group 분리 (NI_far / OOD_far / Total_far) + Total 통일. **NI-only FAR 만 reporting 금지** (Phase 87 lesson, OOD 빠지면 under-estimate).
+
+위반 패턴 (절대 금지):
+- 학습에 Normal/Invalid/OOD 포함
+- `ni_far_pct` 만 reporting (OOD 빠진 FAR)
+- bit F1 에 Normal/Invalid/OOD 합산 (macro_f1 와 혼동)
+
+상세 + lesson: `memory/feedback_chip_multilabel_train_eval_composition.md`.
+이전 conflicting rule (260506 `feedback_normal_training_open_set` 의 "Normal 학습 필수",
+`feedback_no_ood_class_performance` 의 "OOD 측정 X") 는 superseded —
+inference-side max-prob + dist-band gate + ensemble 로 Normal 처리, OOD 는 FAR 계산에 포함 (per-class F1 진단표는 여전히 금지).
+
 ## 절대 금기
 
 - 데이터 폴더 (`D:/project/data/wm-811k/unknown`, `D:/project/data/positions/unknown`)

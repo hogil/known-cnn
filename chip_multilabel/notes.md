@@ -1520,3 +1520,104 @@ T7 + cutmix-p 0.25 mode=complement pair=masked fill=corner, --ls 0.20 --epochs 8
 
 **Status (260509)**: trainer patched (≈12 lines including CLI), import OK, argparse usage shows flag. `_run_iter35_areaprop.sh` written +x mode 100755. **Chained on `grep [iter33] DONE`** (iter33 currently waiting on iter32 → iter32 not yet done). bash bg launched.
 
+
+## iter 122 — T6 (BCE warmup 3 → ASL γ_neg=4 clip=0.05) on iter116J val_margin recipe (260513)
+
+**Hypothesis (analyst opus)**: ASL γ_neg=4 + clip=0.05 가 easy-negative loss floor 를 깎아 partner bit (target=1, prob 0.43-0.53 weak) 의 gradient 상대적 증폭 → bb+sr / fork+sr partner recall ↑. T7 → T6 atomic 1-line loss swap, iter116J recipe (cutmix complement masked corner p=0.25 g=3 cls=0.5, val_margin, save_every_epoch) 동결.
+
+**Bugfix**: `_train_chip_variant.py` 에 `import os` 누락 → 이전 iter122 dispatch 4 cell 모두 NameError 로 즉시 종료. fix 후 재실행.
+
+**Run**: `outputs/iter122_T6_asl_gn4/T6_iter122_T6_asl_gn4_260513_085714/`. epochs=10, BCE→ASL switchover ep6, val_criterion=margin_max, save_every_epoch 켜짐. 학습 518.8s. best (val_margin pick) ep3 v_margin=0.9707 (still BCE phase).
+
+**bit_F1 / Total FAR / partner-recall (T0__I10 cell, n=200/class, seed=42, eval=chip_multilabel_v15direct)**:
+
+| run | ep | bit_F1 | Total FAR | NI FAR | OOD FAR | bb+sr_sr | fork+sr_sr | fork+sr_fork |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter116J T7 BCE+LS0.3 (best, val_f1 sel) | 1 | 0.7911 | 0.0% | 0.0% | 0.0% | 0.831 | **1.000** | 0.919 |
+| iter122 T6 ep3 (val_margin pick, BCE) | 3 | 0.8122 | **84.2%** | 76.5% | 86.6% | 0.869 | 0.988 | 0.912 |
+| iter122 T6 ep6 (first ASL) | 6 | 0.8298 | 74.2% | 79.0% | 72.7% | 0.900 | 0.787 | 0.775 |
+| iter122 T6 ep10 (final ASL) | 10 | 0.8297 | **9.4%** | 29.0% | 3.3% | **0.981** | 0.750 | 0.819 |
+
+**판정 — REGRESSION (partial)**:
+- bit_F1: 0.7911 → 0.8297 (ep10) (+0.039) — surface 개선 보이나
+- **Total FAR**: 0% → 9.4% (ep10) — Normal/Invalid/OOD 가 train-class 로 새는 비율 큰 증가
+- bb+sr partner-recall (sr bit): 0.831 → 0.981 (+0.150) — 가설 부분 입증
+- fork+sr partner-recall (sr bit): 1.000 → 0.750 (-0.250) — partner recall 의 **trade-off**: sr-on-bb 살리면 sr-on-fork 죽음
+- val_margin selection 이 ep3 (BCE warmup phase) 를 골랐는데 그 시점은 BCE-only 학습이라 가설 검증 불가능. ASL 단계 ep6/10 가 진짜 T6 효과인데 selection 으로 못 뽑힘.
+
+**Winner**: iter116J T7 (clean 0% FAR + 가장 안정한 fork+sr partner) 유지. iter122 T6 은 paper-grade ablation evidence 로만 가치.
+
+**왜 실패**:
+1. ASL clip=0.05 이 over-aggressive — fork/scratch threshold 0.02 까지 떨어져 (iter116J 0.180/0.140 대비) negative 도 train-class 로 흡수 → FAR 폭증
+2. val_margin criterion 이 BCE warmup phase 의 saturated margin (>0.97) 을 ASL phase margin (~0.96) 보다 선호. ASL phase 가 partner-bit gradient 증폭 시작하는 구간인데 selection 이 못 뽑음
+3. partner-recall trade-off: ASL 이 bb+sr 살리면서 fork+sr 죽임. γ_neg=4 가 fork-class 의 negative 도 강하게 누름 → fork+sr 의 sr 신호 약해질 때 fork 까지 같이 죽음
+
+**후속 1 atomic 제안 (실행하지 않음, 사용자 승인 대기)**:
+- (a) **clip=0.1** 또는 clip 제거 (γ_neg=4 만 유지) — FAR over-shoot fix 1 후보
+- (b) **val_criterion=f1** + ASL phase 만 selection — phase-aware best 선택
+- (c) **γ_neg=2** (mild) — partner recall trade-off mitigate
+- (d) **bce-asl switch ep=8** (현재 ep6) — BCE 더 길게 + ASL 마지막 2 ep 만
+
+raw artifacts:
+- `outputs/iter122_T6_asl_gn4/T6_iter122_T6_asl_gn4_260513_085714/best_model.pth` (ep3 val_margin pick)
+- `.../epoch_{01..10}_model.pth` (save_every_epoch)
+- `.../eval_v15direct_n200/stage1_260513_090615/` (best ep3 eval)
+- `.../eval_ep06/stage1_260513_090739/` (first ASL eval)
+- `.../eval_ep10/stage1_260513_090849/` (final ASL eval)
+- `outputs/_iter122_T6_train.log`, `_iter122_T6_eval_best.log`
+
+---
+
+## iter 123 — T6 (BCE warmup 3 → ASL γ_neg=4 **clip=0.10**) — iter122 clip 0.05→0.10 atomic swap (260513)
+
+**Hypothesis (이전 iter122 root-cause 후속)**: iter122 ep10 의 9.4% Total FAR + scratch threshold 0.02 붕괴는 ASL clip=0.05 가 over-aggressive (probability-shift 너무 큼) 한 탓. clip=0.10 (덜 aggressive) → defect threshold 보존 + FAR 회복 가설.
+
+**Run**: `outputs/iter123_T6_asl_clip01/T6_iter123_T6_asl_clip01_260513_091520/`. epochs=10, BCE→ASL switchover ep4, val_criterion=margin_max, save_every_epoch. 학습 750.9s (iter122 518.8s 대비 +45% — clip 0.10 이 backward 더 무거움). best (val_margin) ep3 v_margin=0.9707 (BCE phase, iter122 와 완전 동일 — clip 무관). final_epoch ep10 val_acc 0.9816.
+
+**bit_F1 / Total FAR / partner-recall (T0__I10 cell, n=200/class, seed=42, eval=chip_multilabel_v15direct, same eval set 재합성 X)**:
+
+| run | ep | bit_F1 | Total FAR | NI FAR | OOD FAR | bb+sr→sr | fork+sr→sr | fork+sr→fork |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter116J T7 BCE+LS0.3 (val_f1 sel) | 1 | 0.7911 | 0.0% | 0.0% | 0.0% | 0.831 | **1.000** | 0.919 |
+| iter122 T6 ep3 (val_margin BCE) | 3 | 0.8122 | 84.2% | 76.5% | 86.6% | 0.869 | 0.988 | 0.912 |
+| iter122 T6 ep10 (final ASL clip=0.05) | 10 | 0.8297 | **9.4%** | 29.0% | 3.3% | 0.981 | 0.750 | 0.819 |
+| **iter123 T6 ep3 (val_margin BCE)** | 3 | 0.7132 | (BCE — 동일) | — | — | 0.869 | 0.988 | 0.912 |
+| **iter123 T6 ep10 (final ASL clip=0.10)** | 10 | 0.8297 | **5.0%** | 16.0% | 1.6% | **0.988** | **0.838** | **0.838** |
+
+★ **iter123 ep10 vs iter122 ep10 (clip 0.05 → 0.10, single-atomic)**:
+- bit_F1: 0.8297 → 0.8297 (Δ=0 — macro F1 자체는 clip 변경 영향 없음)
+- Total FAR: 9.4% → **5.0%** (-4.4pp)
+- NI FAR: 29.0% → **16.0%** (-13pp)
+- OOD FAR: 3.3% → **1.6%** (-1.7pp)
+- bb+sr partner recall: 0.981 → 0.988 (+0.007)
+- fork+sr partner recall: 0.750 → **0.838** (+0.088 회복 — iter122 의 trade-off mitigate)
+- fork+sr fork recall: 0.819 → 0.838 (+0.019)
+
+★ **best (ep3 val_margin pick) → iter122 와 완전 동일**: val_margin criterion 이 BCE warmup ep3 를 selection 한 결과는 clip 무관 (ASL 진입 ep4). 이전 iter122 의 셋업 약점 (selection 이 ASL phase 못 잡음) 재현.
+
+**판정 — DRAW (partial improvement, winner 미달)**:
+- Criterion: bit_F1 ≥ 0.99 AND Total FAR ≤ 0.5% → **미달** (bit_F1 0.83 < 0.99, FAR 5.0% > 0.5%)
+- vs iter122: partial improvement (FAR -4.4pp, partner recall trade-off 회복)
+- vs iter116J baseline: 여전히 regression (bit_F1 0.79→0.83 surface 개선이나 FAR 0%→5% trade-off)
+- clip=0.10 이 over-aggressive 가설 입증 — clip=0.05 의 fork+sr → sr 깎임 (0.750) 이 0.838 로 부분 회복
+- 그러나 FAR 5% 는 production 으로 가기엔 여전히 너무 큼 (NI 16% = Normal/Invalid 중 1/6 가 defect 잘못 분류)
+
+**왜 winner 못 됨**:
+1. ASL γ_neg=4 의 본질적 trade-off: easy-negative loss 깎으면 fork/scratch threshold 자동 조정 (auto-tuned p* 0.78/0.06) → 0.06 인 scratch threshold 가 OOD chip 의 scratch-like noise 잡음
+2. clip 0.10 → 0.05 로 더 풀어도 ASL 의 probability-shift 본질이 NI/OOD chip 으로 새는 걸 막지 못함
+3. val_margin selection (ep3 BCE pick) 이 ASL 효과 비교를 또 방해 — 이건 iter122 와 같은 약점
+
+**후속 1-atomic 제안 (실행 X, 사용자 결정 대기)**:
+- (a) **γ_neg=2** (clip=0.10 고정) — γ 자체를 milder. iter116J 0% FAR 회복 + bit_F1 개선 동시 가능성. ASL 의 강도 다이얼링.
+- (b) **bce-asl switch ep=8** (clip=0.10 고정) — BCE 더 길게 + ASL 마지막 2 ep 만 → BCE 의 conservative threshold (iter116J 처럼 0.18 fork / 0.14 scratch) 보존하면서 ASL 의 partner-recall 효과만 살짝
+- (c) **val_criterion=f1 + warm_min_ep=4** — ASL phase (ep4+) selection 가능. 그러면 ep10 이 best 로 뽑힐 가능성 (현재 ep3 BCE 가 selection 으로 가려져 ASL 효과 직접 측정 불가)
+- (d) **ASL 폐기 + BCE+LS 0.30 (iter116J 변종) 만 다시** — clip=0.10 으로도 ASL 약점 (FAR cost) 못 푼 결론 그대로 받아 다른 axis 로 pivot
+
+raw artifacts:
+- `outputs/iter123_T6_asl_clip01/T6_iter123_T6_asl_clip01_260513_091520/best_model.pth` (ep3 val_margin pick)
+- `.../epoch_{01..10}_model.pth` (save_every_epoch)
+- `.../eval_v15direct_n200/stage1_260513_092827/` (best ep3 eval)
+- `.../eval_ep10/stage1_260513_092951/` (final ASL clip=0.10 eval)
+- `outputs/_iter123_T6_train.log`, `_iter123_T6_eval_best.log`, `_iter123_T6_eval_ep10.log`
+- analysis scripts: `_iter123_metrics.py`, `_iter123_partner.py`
+

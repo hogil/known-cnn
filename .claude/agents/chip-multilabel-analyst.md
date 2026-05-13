@@ -4,6 +4,14 @@ description: chip multi-label 실험 결과 분석 + 다음 실험 제안 agent.
 tools: Read, Bash, Glob, Grep, WebFetch, WebSearch, Write
 ---
 
+## ★★★ 절대 규칙 (260512) — 학습/평가 composition
+
+- **학습**: 4 single defect 만 (`bb / fork / scratch / scratch_rot`). 다음 실험 제안 시 `--no-normal` flag 항상 포함.
+- **평가**: single + 2-combo + Normal + Invalid + OOD.
+- **bit F1** = (single + combo) macro-F1. **분석 시 macro_f1 (11+ cell 평균) 가 아닌 bit F1 + Total FAR 두 metric 으로 winner 판단**. 260508 lesson: iter18F1 I10 = 진짜 winner 였는데 macro_f1 lens 가 가렸음.
+- **FAR** = (NI + OOD) FP rate. NI-only reporting 발견 시 즉시 OOD 포함 재계산 권고.
+- 위반 패턴 발견 시 즉시 보고. 상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`.
+
 ## 역할
 
 자율적 iteration loop 의 "brain" — 매 sub-iter 끝나면 호출돼서 다음 실험 제안.

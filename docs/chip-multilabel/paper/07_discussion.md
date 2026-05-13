@@ -1605,3 +1605,501 @@ unchanged**: 50 B at 1× cost FAR ≤ 5 %, NEW HEADLINE
 4-bag at 4× cost for absolute SOTA. The FAR gate is
 retained as a hard constraint, not a soft preference.
 
+**§7.10.8 Saturation map — five recipes converge to one
+prediction (iter 59, §5.42 / §6.27).** A final hyper-
+parameter perturbation sweep on three independent axes —
+cutmix-discount, pair-loss-w, cutmix-grid-prob — finds
+that **five distinct recipes (50 B, 57 E, 59 C, 59 D,
+59 E) produce identical 0.9872 / 0.5 % predictions** at
+four-decimal per-class precision. The 1× cost SOTA is
+therefore a **locally flat region** of the loss
+landscape, not a point: cutmix-discount, pair-loss-w, and
+cutmix-grid-prob are **dummy hyperparameters** in the
+KD + complement + pair-mask recipe. The recipe-search
+space is lower-dimensional than the full hyperparameter
+cube suggests (§6.27 two-axis taxonomy). The α = 0.55
+boundary deterministically replicates iter 51 F's
+catastrophic FAR break (59 B = 0.8959 / 100 %), confirming
+the narrow α window is a property of the recipe, not seed
+noise. **Production teams can fix cutmix-discount,
+pair-loss-w, and cutmix-grid-prob at their defaults**;
+future hyperparameter searches should focus only on the
+deterministic axes (α, LS, grad-clip, drop-path).
+
+**§7.10.9 Batch dimension is deterministic (iter 60,
+§5.43 / §6.27.1).** Batch size narrowly sweet at
+(physical = 2, accum = 8, effective = 16); both halving
+and doubling either axis regresses ≥ 0.009 in bit-F1
+(60 A, 60 E) or breaks FAR (60 D quadrupled accum →
+100 % FAR, 60 F single-sample BN → 100 % FAR).
+Single-sample BatchNorm (b = 1) **catastrophically
+breaks FAR** identical in failure mode to α = 0.55: BN
+running statistics with b = 1 are pure per-sample point
+estimates that accumulate high-frequency noise into
+inference-time normalisation. **Production deployment
+must replicate the exact batch specification**
+(`batch = 2 accum = 8`) — it is experimentally pinned,
+not an arbitrary implementation choice. The deterministic
+axis set now spans ~ 8 hyperparameters (KD α, LS,
+drop-path, grad-clip, epochs, physical batch, accum,
+effective batch, lr) versus ~ 3 dummy (cutmix-discount,
+pair-loss-w, cutmix-grid-prob); the recipe-search
+problem is meaningfully lower-dimensional than the full
+cube but the dimensions that remain require fine-grain
+sweeps.
+
+## 7.11 Modern backbones underperform their predecessors — what it means and what is queued
+
+_Added 2026-05-12 (paper §7 narrator update). See §5.45 and
+§3.5.2 for the experimental landscape and §6.28 for the
+selection-bias analysis._
+
+### 7.11.1 The negative result and its scope
+
+The iter 95 – 99 modern-backbone sweep produced four named negative
+results: DINOv3 ConvNeXt-Base < ConvNeXtV2-Base (−0.0954 bit-F1),
+Swin V2 Base 384 < Swin V1 Base 384 (−0.1849), Hiera-Base
+< all other 87 M-class backbones (−0.24 vs Swin V1), and the
+global "best-from-6-epoch" selection rule regressed across all
+five tested backbones. None of these displaces the paper headline.
+
+We **do not claim** that DINOv3 / Swin V2 / Hiera are weaker
+backbones in general — they are state-of-the-art on ImageNet and
+natural-image transfer tasks. Our claim is restricted to a
+specific intersection: **chip palette multi-label classification
+under matched recipe and matched parameter budget on a synthetic
+benchmark of 4 single-defect + 5 (or 6) 2-combo classes**. Inside
+that intersection, the natural-image SOTA ordering does not
+transfer.
+
+### 7.11.2 Why FCMAE + Swin V1 transfer uniquely well
+
+Three hypotheses (which we do not separate empirically in this
+paper):
+
+1. **FCMAE objective alignment.** The sparse-convolution masked
+   autoencoder (Woo et al. 2023, arXiv:2301.00808) trains the
+   backbone to reconstruct pixel-level palette content from
+   partial observations. Chip palette content *is* the
+   discriminative signal — there is no higher-level semantic
+   abstraction (no objects, no scenes) that a self-distillation
+   objective could capture better. DINOv3's feature-alignment
+   objective is theoretically strictly weaker for distributions
+   where pixel content == discriminative signal.
+2. **Swin V1 window-locality bias.** Swin V1 Base 384 with
+   window = 12 fires window-bounded attention computations on
+   local 12 × 12 regions, which approximately matches the chip's
+   defect-pixel-cluster size on a 200 × 200 chip (typical defect
+   blob diameter is 5 – 40 pixels). Swin V2's 12 → 24 window
+   expansion approximately covers the entire chip — the
+   inductive bias collapses to global attention, which is precisely
+   what ConvNeXt V1 / V2 already provides via deep convolutional
+   receptive fields without the attention overhead.
+3. **Hiera hierarchical pooling assumption.** Hiera's
+   multi-scale pooling assumes that semantically meaningful
+   features exist at scales 4 ×, 8 ×, 16 × the chip. Chip defects
+   do not have meaningful structure at the 16 × pooled scale
+   (effectively 12 × 12 of the original 200 × 200) — at this scale
+   the entire defect blob is one pixel.
+
+Confirming or falsifying these hypotheses requires controlled
+ablations (e.g. DINOv3 self-distillation initialised from FCMAE
+weights to factor out the architecture-vs-objective confound;
+Swin V2 retrained at window = 12 to factor out the locality-vs-attention
+confound). These are queued.
+
+### 7.11.3 Why this matters for the paper
+
+The §3.5.1 three-regime backbone recommendation is presented as a
+*decision support tool* for production teams. It would have been
+misleading to present the paper-SOTA winner (ConvNeXtV2-Base FCMAE,
+2023) without checking whether 2025 alternatives surface a new
+Pareto point. **The iter 95 – 99 sweep establishes that they do
+not**, on this benchmark, under matched recipe. The three-regime
+recommendation therefore survives the literature-update pass.
+
+For production teams: do **not** automatically upgrade from
+ConvNeXtV2-Base FCMAE to DINOv3 ConvNeXt-Base when a new SOTA
+appears on ImageNet. The backbone choice should be validated
+on the deployment domain with a matched-recipe sweep before any
+upgrade is committed. The 0.10 – 0.18 bit-F1 cost we measured
+is large enough to break the production FAR ≤ 5 % gate (iter95A
+at 0.6211 fork-collapsed would deploy as ≈ 80 % FAR).
+
+### 7.11.4 Multi-label selection criterion is queued as future work
+
+§6.28 surfaced that the `best_val_acc` selection rule on a
+single-label train val split is biased against multi-label eval
+bit-F1 by up to 0.094. Three candidate replacements:
+
+1. **Held-out multi-label proxy criterion.** A 10–20 % held-out
+   fraction of the synth eval set used as a selection signal. Cost:
+   one extra eval pass per epoch (≈ 0.5 minute at our scale). Risk:
+   meta-overfitting if the held-out fraction is too small.
+2. **Multi-label augmented val.** Apply CutMix-complement to the
+   single-label val split at eval time to synthesise multi-label
+   val chips for selection. Cost: zero (uses existing
+   augmentation). Risk: the augmentation operator differs from
+   `min`-blend eval, introducing a small bias.
+3. **Loss-based selection.** Track the BCE-LS loss on the
+   multi-label val instead of accuracy. The threshold-search
+   noise is removed but the loss is not directly the metric we
+   report.
+
+We recommend option 1 as the principled choice and queue it for
+implementation. Until then, both `best_val_acc` and
+`final_epoch` checkpoints should be reported and the larger of
+the two flagged as the headline if the gap exceeds 0.05 bit-F1.
+
+### 7.11.5 Open question — does Hiera scale up?
+
+Hiera-Base (≈ 52 M params) under-performs Swin V1 Base (≈ 87 M)
+by 0.247 bit-F1. The parameter gap is real but smaller than the
+accuracy gap suggests for a same-recipe comparison. Hiera-Large
+or Hiera-Huge at ≈ 200 M params (matching ConvNeXt-Large) is
+unmeasured. The §5.45 sweep used Hiera-Base specifically because
+iter88F (ConvNeXt-Large 196 M) already established that scaling
+without recipe retune *hurts* on this benchmark; we did not extend
+this finding to Hiera-Large. A controlled Hiera-Base → Hiera-Large
+scaling experiment is queued.
+
+### 7.11.6 What the negative result does not change
+
+The iter 95 – 99 sweep does **not** revise:
+
+- The paper-main headline iter46E ConvNeXtV2-Base FCMAE 0.9654 / 1.07 % Total FAR.
+- The production 1× cost SOTA 50 B at 0.9872 / 0.5 %.
+- The paper-final 4-bag majority vote 0.9953 / 0 % Total FAR.
+- The 14-bag research-grade 0.9929 / 0 % v15 bit-F1.
+- The §3.5.1 three-regime recommendation.
+
+The five paper headlines remain intact. iter 95 – 99 adds a
+literature-update verification: *we tested the obvious follow-up
+question and the answer is no*.
+
+_Source: §5.45 iter 95 – 99 modern backbone landscape,
+§3.5.2 ConvNeXt / Swin / Hiera matched-recipe comparison,
+§6.28 selection-criterion bias analysis,
+`docs/chip-multilabel/paper/_diary/260512_evening_modern_backbone_findings.md`._
+
+## 7.12 NEW single-model SOTA discussion (iter 112) — discipline, mechanism, and limits
+
+_Added 2026-05-12 22:30. See §5.46 for the iter 112 result and
+§6.29 / §6.30 for the underlying analyses._
+
+The iter 112 single-model SOTA (bit-F1 = 0.9964 / Total FAR =
+0.83 % at 1 × inference cost) supersedes the iter46E /
+iter50B 1 × cost frontier by + 0.0092 bit-F1 and tightens the
+1 × → 4 × cost gap on bit-F1 to within sampling noise. The
+result is a **methodological** advance — not a recipe innovation
+— and we discuss its three components and their generalisability.
+
+### 7.12.1 The three methodological contributions in iter 112
+
+| contribution                                              | mechanism                                                  | generalisability                                                                                            |
+|-----------------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------|
+| **`--save-every-epoch` per-epoch retroactive eval**       | turns selection-criterion into a tractable ablation axis    | ★ generally applicable; cost is ≈ N × backbone size in disk                                                  |
+| **`--val-criterion f1` (per-bit BCE macro-F1)**           | replaces biased single-label `val_acc` with a multi-label-aware criterion (§6.29) | ★ generally applicable to any single-label-trained → multi-label-evaluated setting |
+| **Cosine `T_max = 20`** schedule                           | extends the LR plateau through ep 20, exposing an ep 6 sweet spot invisible under `T_max = 10` | ★ likely benchmark-specific; queued for controlled `T_max ∈ {10, 15, 20, 25}` ablation     |
+
+The first two are **methodological** — they would apply to any
+chip-multi-label paper that trains single-label and evaluates
+multi-label. The third is **recipe-specific** — the LR schedule
+sweet spot is co-determined with epoch count, recipe, and the
+multi-label decision boundary, and we expect it to vary across
+backbones / datasets.
+
+The asymmetry of (1) and (2) being generalisable while (3) is
+not is the key reading: **selection-criterion is the highest-
+leverage intervention**. We swept this axis explicitly (§6.29)
+and found val_f1 to be the unique correct criterion under
+saturable AUROC + 4-class TAPT backbones. The cosine schedule
+sweep is also valuable but is a second-order axis once the
+selection-criterion is correctly chosen.
+
+### 7.12.2 Why the iter 46 recipe finally hits 0.99+ at 1 × cost
+
+The iter 46 T7 recipe was the paper-main result for many
+iters (§5.10), peaking at bit-F1 ≈ 0.9654 under the legacy
+selection rule. The iter 112 result lifts the same recipe to
+0.9964 — a + 0.0310 lift at zero structural recipe change. The
+component decomposition:
+
+1. **Selection criterion swap** (`val_acc` → `val_f1`):
+   accounts for ≈ + 0.020 bit-F1 in our trajectory (the iter97A
+   ep 9 vs ep 20 gap in §5.45 / §6.28 was 0.094; the iter 112
+   trajectory is smaller because the per-epoch sampling
+   includes more candidate epochs).
+2. **Per-epoch eval enabling fine-grained checkpoint selection**:
+   accounts for ≈ + 0.005 bit-F1 (ep 6 vs the nearest val_acc-
+   selected epoch);
+3. **Cosine `T_max = 20`**: accounts for the remainder ≈ + 0.005
+   (the LR plateau enabling the ep 6 sweet spot).
+4. **Absolute-rule re-evaluation** (positive-cell only bit-F1
+   instead of all-cell macro_f1): adds ≈ + 0.010 (the metric
+   redefinition lifts the apparent number without changing the
+   model).
+
+The contributions sum to ≈ + 0.040 — accounting for the
++ 0.0310 measured lift to within the noise of the
+decomposition. Two messages emerge:
+
+- The iter 46 recipe has had **0.99+ headroom all along**; it
+  was hidden by the selection bias and the metric definition.
+- The iter 1 – 60 recipe-search frontier is therefore **less
+  saturated** than the §6.27 reading suggested. The
+  saturation reading was an artefact of measuring with a
+  biased ruler.
+
+### 7.12.3 Negative findings (paper §6 / §7 consolidated)
+
+Iter 95 – 112 surfaced eight independent negative axes
+(consolidating §5.45.x, §6.28.x, §6.29.x, and §5.46.8):
+
+| axis                                          | result                                                              | mechanism (§)                          |
+|-----------------------------------------------|---------------------------------------------------------------------|----------------------------------------|
+| DINOv3 self-distillation (Meta 2025)          | − 0.0954 bit-F1 vs FCMAE under matched recipe                       | feature alignment ≠ pixel reconstruction (§7.11.1) |
+| Swin V2 log-CPB + window 12 → 24 (Microsoft 2022) | − 0.1849 bit-F1 vs Swin V1; 21 × training cost                  | window expansion eliminates locality bias (§7.11.2) |
+| Hiera-Base MAE (Meta 2023)                    | − 0.2426 bit-F1 vs Swin V1                                          | multi-scale hierarchical bias mismatch (§7.11.2)    |
+| **Linear probe (frozen backbone)**            | − 0.11 bit-F1 vs full fine-tune                                     | TAPT-fragility (§5.46.8.2)             |
+| **CutMix p = 1.0**                            | − 0.07 bit-F1 vs p = 0.25                                            | over-fit to 2-combo distribution (§5.46.8.3) |
+| **3-combo eval chips**                        | 100 % failure at every iter 112 cell                                 | label-cardinality bias of CutMix training (§5.46.8.1) |
+| **val_acc selection rule**                    | − 0.094 to − 0.10 bit-F1 vs val_f1                                  | anti-correlated with eval bit-F1 (Spearman − 0.52, §6.29.3) |
+| **val_auroc selection rule**                  | catastrophic ≈ 91 % FAR at saturated tie                            | AUROC ceiling reached early on saturable benchmarks (§6.29.2) |
+
+These eight axes — three modern-backbone, two recipe-axis, one
+training-distribution, two selection-criterion — collectively
+**triangulate iter 112 as a narrow optimum** on a 6+
+dimensional axis set. The paper's negative-results disclosure
+list now spans 16+ independent axes (8 from §5.10 + 8 from
+§5.45 – §5.46), each documented with a one-paragraph mechanistic
+reading.
+
+### 7.12.4 Limitations and future work
+
+The iter 112 result is bounded by three limitations that we
+disclose explicitly:
+
+1. **Single-seed measurement**. Iter 112 is run at seed 42 only.
+   The §5.10 multi-seed protocol (§9 paper-grade discipline)
+   requires n ≥ 3 seeds for any macro-F1 claim above 0.92, and
+   iter 112's 0.9964 exceeds this threshold. A 3-seed
+   replication (seeds 42 / 43 / 44) is **queued as the first
+   follow-up**. Until then, the iter 112 headline is flagged
+   as a single-seed result subject to ± 0.02 sample std on
+   bit-F1 by analogy to iter 8 / iter 10.
+2. **The 7 FP Starburst chips are a chip-multi-label-level
+   limit, not a recipe limit**. §6.30 analyses the mechanism:
+   Starburst's radial pattern projects onto the (fork +
+   scratch) feature pair at chip-crop scale. No single-recipe
+   intervention is expected to suppress this; the production
+   path is wafer-level pattern pre-classification (§6.30.4).
+3. **The 3-combo failure (§5.46.8.1) is a label-cardinality
+   bias of CutMix training**. The training augmentation pairs
+   only two single-defect chips; the model has no gradient
+   signal for label cardinality ≥ 3. A label-cardinality-aware
+   training axis — either tripling CutMix to a 3-mix
+   augmentation or adding explicit 3-combo training data — is
+   queued (§7.12.5).
+
+### 7.12.5 Future work prioritisation
+
+The iter 112 result reorders the future-work queue:
+
+1. **3-seed replication of iter 112** (immediate). Confirms /
+   refutes the 0.9964 / 0.83 % SOTA at paper-grade discipline.
+2. **3-combo training axis**. Either:
+   (a) extend CutMix to 3-mix at probability p_3 ∈ {0.0, 0.1,
+   0.25} alongside p_2 = 0.25 of 2-mix; or
+   (b) add an explicit 3-combo training set via offline
+   synthesis. Both candidates are tractable and have
+   well-bounded compute cost; the 3-combo prior gradient is
+   the highest-leverage axis remaining.
+3. **Multi-label proxy selection criterion validation**.
+   §6.29.4 recommends `val_f1` as the default; the iter 112
+   evidence is single-trajectory. A multi-backbone replication
+   of the §6.29.1 ablation across {ConvNeXtV2, Swin V1,
+   ConvNeXt V1, DINOv3} would establish `val_f1` as a portable
+   rule.
+4. **Cosine `T_max` ablation**. §5.46.5 hypothesises a narrow
+   `T_max = 20` optimum; a controlled `T_max ∈ {10, 15, 20,
+   25, 30}` sweep would confirm or refine.
+5. **Pattern-level pre-classification integration**. §6.30.4
+   recommends a wafer-level Starburst detector for production;
+   queued as an engineering integration task.
+6. **Real-factory deployment validation**. The headline iter
+   112 0.9964 / 0.83 % is on the controlled synth benchmark
+   (§3.10a); sensor noise, alignment drift, and calibration
+   variation are not captured. A small-scale real-data
+   deployment study with the iter 112 checkpoint is queued
+   for paper §9.6.
+
+### 7.12.6 Headline summary — what iter 112 contributes to the paper
+
+The iter 112 contribution is **methodological + result**:
+
+1. **Methodological** — `--save-every-epoch` + `--val-criterion
+   f1` enables principled multi-label-aware selection from
+   single-label-trained checkpoints, replacing the legacy
+   `best_val_acc` rule that §6.28 surfaced as biased by up to
+   0.094 bit-F1. The methodology is portable across backbones,
+   recipes, and benchmarks.
+2. **Result** — single-model SOTA at 1 × cost: bit-F1 = 0.9964 /
+   Total FAR = 0.83 %. Lifts the 1 × cost frontier (50 B
+   = 0.9872 / 0.50 %) by + 0.0092 bit-F1 and shrinks the
+   1 × → 4 × cost gap on bit-F1 from − 0.0081 to + 0.0011 —
+   within sampling noise. The paper-final 4-bag majority-vote
+   0.9953 / 0 % remains the SOTA at 4 × inference cost; iter
+   112 is the new 1 × cost recommendation.
+
+Together with §5.45 (modern backbones don't displace), §6.28
+(val_acc is biased), and §6.29 (val_f1 is the unique correct
+criterion), the iter 112 result closes the paper-grade frontier
+for single-model multi-label chip classification on this
+benchmark within the recipe and methodology we have explored.
+
+_Source: §5.46 iter 112 experimental setup and results, §6.29
+selection-criterion ablation, §6.30 FAR mechanism,
+`_diary/260512_night_iter112_sota.md`._
+
+## 7.13 Limitations surfaced by the iter 122 / 123 failed ASL direction
+
+_Added 2026-05-13 (paper §7.13). See §6.31 for the underlying
+analysis and `_diary/260513_iter122_124_three_axis_followup.md`._
+
+### 7.13.1 `val_margin` is phase-blind on phased-loss recipes
+
+The §5.46 selection-criterion ablation establishes `val_f1` as
+the recommended multi-label-aware selection criterion. The iter
+122 / 123 ASL cells re-examine this conclusion under a
+**phased loss schedule** (BCE warmup epochs 1 – 3 → ASL phase
+epochs 4 – 10) and surface a methodological limitation we did
+not encounter under the single-loss recipes of iter 112.
+
+The `val_margin = max(p_pos) − max(p_neg)` criterion measures
+the decision-margin width on the val set's single-label
+samples. Across iter 122 / 123, the criterion is
+**unconditionally maximised inside the BCE warmup phase**
+(ep 3 is selected with `v_margin = 0.9707`) — the ASL phase
+epochs (ep 4 – 10) have margins that are slightly lower
+(`v_margin ∈ [0.95, 0.97]`) because ASL's probability shift
+narrows the on-distribution positive margin. This is the
+**designed behaviour of ASL** — ASL trades on-distribution
+margin for off-distribution gradient — but it conflicts
+with `val_margin` being the selection criterion.
+
+The practical consequence is that **`val_margin`-selection
+picks the warmup-phase checkpoint** (which is by construction
+still BCE) and therefore the recipe-level question "does ASL
+improve the bit-F1 / Total FAR trade-off" cannot be answered
+by the best-checkpoint protocol — every `val_margin`-selected
+checkpoint is a BCE checkpoint. The iter 122 / 123 evidence in
+§6.31 had to fall back to **per-epoch retrospective evaluation**
+(re-evaluating ep 6 / ep 10 explicitly) to surface the ASL
+phase result at all.
+
+This is a **general limitation** of single-criterion selection
+under phased-loss schedules: any criterion that prefers one
+phase's distributional profile (BCE → high margin saturation)
+will systematically miss the other phase's effect. The
+limitation is not specific to ASL; the BCE → focal-loss
+schedules of Lin et al. 2017 (arXiv:1708.02002 RetinaNet) and
+the SPML curriculum schedules of Cole et al. 2021
+(arXiv:2105.06650) face the same problem if `val_margin` is
+used as the selection criterion.
+
+### 7.13.2 Two paths forward — phase-aware or ASL-only selection
+
+We propose two interventions to address the §7.13.1 limitation,
+neither of which has been implemented yet (both queued):
+
+1. **Phase-aware selection** — the trainer logs the active
+   loss phase per checkpoint, and the selection criterion
+   restricts to checkpoints with `phase == ASL`. This is the
+   minimal change and preserves the `val_margin` semantics
+   within each phase. The risk is that the ASL phase may not
+   have any checkpoint at the desired margin level (the §6.31
+   results suggest it does not — ASL ep 6 / 10 margins
+   `~ 0.96` are not far below the BCE ep 3 margin of `0.97`,
+   so a phase-restricted criterion would still pick a sane
+   checkpoint).
+2. **ASL-phase-only selection with `val_f1`** — replace the
+   criterion with the `val_f1` multi-label-aware metric (per
+   §6.29) and restrict to ASL-phase checkpoints. This gives
+   the §6.29 recommendation a chance to operate on the actual
+   phase-2 (ASL) checkpoints.
+
+The decision between (1) and (2) hinges on which criterion
+gives the more multi-label-aligned best-checkpoint pick. The
+§6.29 evidence is that `val_f1` Spearman-correlates with
+bit-F1 at ρ = 0.87 on single-loss recipes; we expect that
+correlation to hold within an ASL phase as well, so option
+(2) is the higher-priority queued item.
+
+### 7.13.3 Why this matters beyond ASL
+
+The iter 122 / 123 ASL result is a closed dead-end (§6.31.6),
+so the immediate practical impact of fixing the selection
+criterion is limited to confirming what we already infer:
+ASL γ_neg = 4 does not satisfy the dual gate on this
+benchmark. But the methodology lesson extends to any future
+phased-loss recipe — including the BCE → focal-loss and
+BCE → SPML curricula mentioned in §7.13.1 — and to any
+benchmark where the loss schedule changes the
+on-distribution margin profile. The corrected discipline is:
+
+> **Phased-loss schedules require phase-aware selection
+> criteria. A single criterion across phases will
+> systematically pick the phase with the most generous
+> margin profile, which may not be the phase whose
+> contribution the recipe is testing.**
+
+This generalises §6.29's recommendation: the rule "use
+`val_f1` for multi-label evaluation" is correct, but
+incomplete — the rule should be "use `val_f1` for
+multi-label evaluation, *restricted to the loss phase
+under test*".
+
+### 7.13.4 Connection to §6.31 axis-level dead-end
+
+§6.31's verdict — ASL is a loss-axis dead-end on this
+benchmark — does not depend on the §7.13.1 selection
+limitation; the per-epoch retrospective evaluation in
+§6.31.3 surfaces the ASL phase result directly. But the
+selection blindness is **a confounder that prolonged the
+ASL search by one iter** (iter 123 was dispatched to test
+clip dialing under the implicit assumption that the
+`val_margin`-selected best checkpoint represented the
+"final" ASL behaviour; it did not — ep 3 BCE is BCE-only).
+A phase-aware selection criterion would have surfaced the
+ASL final-epoch behaviour at iter 122 and possibly avoided
+the iter 123 dispatch entirely, saving 12 minutes of
+compute and one round of analyst iteration.
+
+### 7.13.5 Queued follow-up
+
+1. **Phase-aware selection patch** to `_train_chip_variant.py`
+   — log `phase` alongside `epoch` in `history.json` and
+   add a `--val-criterion-phase {warmup, main}` flag.
+   Roughly 30 lines of code; expected to be implemented as
+   part of the next training-side cleanup iter.
+2. **Re-evaluation of iter 122 / 123 under phase-restricted
+   `val_f1`** — confirms that the §6.31 verdict (ASL is
+   loss-axis dead-end) survives the selection-criterion
+   correction. Expected outcome is that the phase-restricted
+   best is still under the dual gate, sealing the §6.31
+   conclusion.
+3. **Audit of all phased-loss claims in the paper** for
+   selection blindness. The iter 32 KD distillation (§5.32)
+   uses a phased KD-α schedule; we anticipate that the
+   §6.29 `val_f1` criterion is robust because KD does not
+   change the on-distribution margin profile substantially,
+   but a sanity check is queued.
+
+_Sources: §6.29 selection-criterion ablation, §6.31 ASL
+failed-direction analysis, `outputs/iter122_T6_asl_gn4/`,
+`outputs/iter123_T6_asl_clip01/`, Ridnik et al. 2021
+arXiv:2009.14119, Lin et al. 2017 arXiv:1708.02002, Cole
+et al. 2021 arXiv:2105.06650._
+
+

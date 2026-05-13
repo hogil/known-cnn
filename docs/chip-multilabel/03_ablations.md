@@ -3,6 +3,172 @@
 All deltas measured on the same 2200-chip 11-class eval set. Pull
 quotes use 4-decimal numbers from the canonical sources.
 
+## ★★★ 2026-05-12 ablation update — Backbone scaling (iter 88-89, 12 backbones)
+
+Companion to the iter21 throughput axis (Phase 87 v2): the iter88 batch
+explored **8 candidate backbones across 4 families** + iter89 retuned
+Swin-Base hyperparameters. Full per-cell numbers in `05_backbone_landscape.md`;
+the ablation-relevant deltas here are:
+
+### What did NOT work — scaling up Swin V1 from Base → Large
+
+| change                                  | before (iter77C Swin-Base 86.9 M) | after (iter88E Swin-Large 195.2 M) | finding                                                                       |
+|-----------------------------------------|-----------------------------------|------------------------------------|-------------------------------------------------------------------------------|
+| Swin-Base 86.9 M → Swin-Large 195.2 M   | bF1 0.9692 / **Total FAR 0.00%** | bF1 **0.9192** / Total FAR 0.12%   | **−0.0500 bF1 at 2.25× params** under unchanged recipe — pure capacity scaling loses |
+
+The same recipe (T7 / g=3 / LS=0.20 / 8 ep / LR=1e-4) on the larger backbone
+underperforms. Likely deeper-net pathology — needs longer warmup + smaller LR;
+re-tune queued for iter95.
+
+### What did NOT work — scaling up ConvNeXt V1 from Base → Large
+
+| change                                                  | before (iter77A ConvNeXt-Base V1 87.6 M)   | after (iter88F ConvNeXt-Large V1 196.2 M) | finding                                                                       |
+|---------------------------------------------------------|--------------------------------------------|--------------------------------------------|-------------------------------------------------------------------------------|
+| ConvNeXt-Base V1 → ConvNeXt-Large V1                     | bF1 0.9830 / Total FAR 2.62%               | bF1 **0.8720 (safe I13 only)** / Total FAR 10.60% | **−0.1110 bF1 + +7.98 pp FAR** — Large variant's I3/I7 cells score bF1 0.9919-0.9931 but at **100% Total FAR** (unusable); only I13 is safely under 11% FAR |
+
+ConvNeXt V1's "everything is foreground" prior gets stronger with depth.
+**Smaller is better** on this 4-class small-data multi-label task for ConvNeXt V1.
+
+### What did NOT work — recipe transfer to non-ConvNeXt families
+
+| backbone                          | best safe cell bF1_4def         | best Total FAR | notes                                                                          |
+|-----------------------------------|--------------------------------:|---------------:|--------------------------------------------------------------------------------|
+| iter88D EfficientNetV2-L 117.75 M | 0.7695 (no safe cell ≤ 5% FAR)  | 79.05%         | All four cells unsafe; predicts defect on every input                          |
+| iter88B TinyViT-21M-384 20.67 M   | 0.6906 (I10 safe)                | 0.00%          | Smallest backbone tested — low accuracy ceiling                                |
+| iter88G ResNet-50 23.57 M         | 0.6861 (I7 unsafe @ 95.24% FAR) | —              | I10/I13 degenerate to empty-set predictions (bF1=0)                            |
+| iter88A EfficientFormerV2-L 25.75 M | EVAL_FAIL (NaN logits)        | —              | Train converged val_acc=0.9877 but eval forward produces NaN                   |
+| iter88C MobileNetV4-Conv-L          | (no checkpoint written)        | —              | Process died early; re-train queued                                            |
+| iter88H ResNet-152 58.30 M          | TRAIN_ONLY (no eval yet)       | —              | Train done, eval pending                                                       |
+
+**Verdict**: the ConvNeXtV2-tuned T7 recipe transfers **only within the Swin V1
+family** at small data scale. Every other family (EfficientNet, ResNet,
+EfficientFormer, TinyViT, MobileNet) needs per-family recipe re-tuning — single
+LR=1e-4 + 8 epoch + CutMix-complement does not generalise. Per-family recipe
+sweeps queued for iter95.
+
+### What worked — Swin-Base CutMix-group + label-smoothing co-tune
+
+Within the Swin-Base recipe, iter89 isolates two ablation knobs:
+
+| change                                   | before                         | after                          | delta bF1_4def | Total FAR |
+|------------------------------------------|--------------------------------|--------------------------------|---------------:|----------:|
+| LS=0.50 g=3 (iter77C) → LS=0.30 g=3 (iter89_LR14_LS3_g3) | 0.9692 (I10)         | 0.9434 (I10)                  | **−0.0258**    | 0.00%     |
+| LS=0.30 g=3 (iter89_LR14_LS3_g3) → LS=0.30 g=2 (iter89_LR14_LS3_g2) | 0.9434 (I10) | 0.9278 (I10)                  | **−0.0156**    | 0.00%     |
+| LS=0.30 g=2 → LS=0.50 g=2 (iter89_LR14_LS5_g2) | 0.9278 (I10)           | TRAIN_ONLY (eval pending)      | —              | —         |
+
+Both knobs are **monotonic** — higher LS and higher group count help — re-confirming
+the Phase A1 finding (iter05) that **LS=0.50 is the sweet spot** for the CutMix-complement
+recipe. The combination iter77C (LS=0.50 g=3) is **+0.0414 bF1 vs iter89_LR14_LS3_g2
+(LS=0.30 g=2)** at identical Total FAR=0.00% — a clear single-iter co-tune win.
+
+## ★★★ 2026-05-12 ablation update — Backbone throughput axis (iter 21, Phase 87 v2)
+
+Fourth axis added to the paper ablation table (alongside loss / matching / decision-rule): **backbone choice** has both an accuracy and a cost dimension, and these dimensions **do not co-rank**.
+
+### What worked — ConvNeXt V1 vs ConvNeXtV2 at same param count
+
+| change                                              | before                          | after                                | finding                                                                                            |
+|-----------------------------------------------------|---------------------------------|--------------------------------------|----------------------------------------------------------------------------------------------------|
+| ConvNeXtV2 (87.7 M, GRN) → ConvNeXt V1 (87.6 M, no GRN) | b=1 27 ms / 37 chip/s + bF1 0.9654 + FAR 1.07% | b=64 **13.21 ms / 76 chip/s + bF1 0.9830** + FAR 2.62% | **2.05× throughput + +0.0176 bF1** at the same parameter count; **GRN absence enables normal batching scaling** |
+| ConvNeXtV2 → Swin-Base 384 (86.9 M)                  | b=1 27 ms / 37 chip/s + FAR 1.07% | **b=1 21.08 ms / 47 chip/s + FAR 0.00%** | best single-chip latency **AND** strict-zero Total FAR (only backbone in sweep with FAR=0) |
+
+**Verdict**: GRN is an accuracy-regularising architectural prior (ConvNeXtV2 wins on small-data smaller-bF1-gap evaluation against same-recipe peers in earlier iters), but it **costs throughput**. The right call depends on operational regime, not a single-axis "best".
+
+### What did not work — EfficientV2-M at iter46E recipe
+
+| change                          | before (ConvNeXtV2 iter46E)     | after (EfficientV2-M iter46E)  | finding                                                                          |
+|---------------------------------|---------------------------------|---------------------------------|----------------------------------------------------------------------------------|
+| ConvNeXtV2 → EfficientV2-M      | bF1 0.9654 / 37 chip/s          | **bF1 FAIL / 158 chip/s**       | **3.77× peak GPU throughput** but recipe transfer fails — EffV2 needs longer schedule + warmup, not single-LR 1e-4 8 ep |
+
+**Verdict**: hardware speed alone doesn't make a backbone deployable; **recipe-backbone coupling is real**. EfficientV2-M is queued for a separate recipe-tuning iter before re-evaluation as production candidate.
+
+### Negative scaling — ConvNeXtV2 GRN batching quirk
+
+| batch | ms/chip | chip/s | scaling vs b=1 |
+|------:|--------:|-------:|---------------:|
+| 1     | 26.92   | **37** | 1.00           |
+| 4     | 32.83   | 30     | **0.82** ⛔     |
+| 8     | 35.20   | 28     | **0.76** ⛔     |
+| 32    | 28.95   | 35     | 0.93           |
+| 64    | 38.18   | 26     | **0.70** ⛔     |
+
+ConvNeXtV2 is the **only backbone in the sweep** where batching makes things slower. Mechanism: GRN's per-channel mean of L2-norms broadcasts a batch-wise reduction at every block (Woo et al. 2023 arXiv:2301.00808), which cuDNN does not vectorise across batch elements as cleanly as a plain channel-wise norm. **ConvNeXt V1 (same param count, no GRN) shows healthy 1.85× scaling b=1 → b=64**, confirming the regression is GRN-specific.
+
+**Paper claim**: When citing inference cost, ConvNeXtV2 must be reported at b=1 only; b=64 numbers exist but are dominated by every other tested backbone.
+
+Source: `iters/iter_21_backbone_throughput_paper3.md` + `tables/backbone_throughput.csv` (24 rows). Raw measurement `_phase87_precise_speed.py` torch.cuda.Event with 20 warm-up + 100 iter on isolated A6000.
+
+## ★★★ 2026-05-12 ablation update — Total FAR re-score, rect-flag no-op, seed-fragility
+
+Three findings from Phase 83 / 85 (iter18) + iter79 / iter80 (iter19) +
+260512 trainer patch (iter20):
+
+### Total FAR vs ni_FAR (Phase 83 / 85)
+
+| change vs baseline                            | from cell / metric            | to metric             | finding                                                                                  |
+|-----------------------------------------------|-------------------------------|-----------------------|------------------------------------------------------------------------------------------|
+| ni_FAR (4 Normal sources) → Total FAR (+ OOD) | every "ni_FAR=0%" SOTA        | Total FAR             | **most prior SOTA cells silently held Total FAR 12–48%** on OOD wafer-patterns           |
+| iter69 ep=12 KD                               | bF1=0.9941 / ni_FAR=0%        | Total FAR=36.67%      | masked OOD blow-up — paper revocation                                                    |
+| iter50B paper KD                              | bF1=0.9872 / ni_FAR=0%        | Total FAR=12.86%      | KD trades NI-safety for OOD over-fire — paper revocation                                  |
+| iter46E vanilla ★                             | bF1=0.9654                    | **Total FAR=1.07%**  | only single model with bF1≥0.96 AND Total FAR≤5% — **new single-model paper headline**    |
+| 4-bag ensemble quorum k=2 → k=3              | bF1=0.9962 / Total FAR=2.86%  | bF1=**0.9909 / 0.00%** | stricter quorum buys true zero for −0.0053 bF1 — **new ensemble paper headline**          |
+
+**Verdict**: `Total FAR = (NI + OOD) / total` is the only honest FAR metric for
+a v15direct eval that intentionally includes OOD wafer-patterns. All paper
+tables must move to `(bit_F1, Total FAR)` pairs.
+
+### `--cutmix-rect` is a no-op under `cutmix_mode=complement`
+
+| change                          | observation                                                              | source                              |
+|---------------------------------|--------------------------------------------------------------------------|-------------------------------------|
+| iter46E (`rect=0.3`)            | bit-identical macro_f1 to iter42F at seeds 7/13/21                       | iter80 log, 12 cells (iter19)        |
+| iter42F (`rect=0.5`)            | bit-identical macro_f1 to iter46E at all 3 shared seeds                  | iter80 log                          |
+| Δ(42F vs 46E) at all 3 seeds    | **0.0** (0.8142 / 0.7998 / 0.7750 each)                                  | iter80                               |
+
+**Verdict**: the rect-region logic only fires under `cutmix_mode=single`. Folder
+names like `iter46E_g3LS050_rect03` should not be cited as "rect=0.3 variant" —
+they are the **same model family** as their rect=0.5 sibling. iter46E's real
+recipe axes are `n-groups=3 / complete-label-scale=0.5 / pair=masked /
+pair-fill=corner / LS=0.20 / mode=complement / p=0.25`.
+
+### iter26H recipe is seed-fragile but ensemble-rescuable
+
+| seed | bit_F1 (v14) | ni_FAR pass     |
+|-----:|-------------:|:----------------|
+|    1 | (in pass set)| ✓ (5/8 pass)    |
+|    7 | **0.9961** (peak) | ✓          |
+|   13 | (in pass set)| ✓               |
+|   19 | (in pass set)| ✓               |
+|   21 | (in pass set)| ✓               |
+|   22 | (in pass set)| ✓               |
+|   42 | (catastrophic)| **FAIL — ni_FAR=100%** ⛔ |
+|  100 | (in pass set)| ✓               |
+
+| ensemble                  | composition                       | bit_F1 | ni_FAR  |
+|---------------------------|-----------------------------------|-------:|--------:|
+| same-recipe 3-bag (vanilla) | iter79 `{s7 + s13 + s21}` I10 k=2 | 0.9955 | **0.00%** |
+
+**Verdict**: vanilla single-seed iter26H mean 0.9695 ± 0.033 with 1 catastrophic
+seed in 8 → 3-bag majority restores 0.9955 / 0% (NI-only; Total FAR pending
+iter83). Same-recipe seed-diversity is sufficient — no need for cross-recipe.
+Note Total FAR not measured for any iter79 cell yet; iter83 deferred.
+
+### 260512 trainer patch — `--cutmix-other-label`
+
+| flag                       | default | effect when default                | effect when > 0                                                                                       |
+|----------------------------|--------:|------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `--cutmix-other-label`     |     0.0 | identical to pre-patch behavior    | off-class bits on mix chip get value `other_label` (e.g., 0.1 = soft uncertain) instead of hard zero |
+
+Motivation: Phase 84b iter46E prob-dist diagnostic shows TRAIN defect own-prob
+= 0.84–0.92 but EVAL OOD max-prob = ~0.55 (right at threshold). Hypothesis:
+hard-zero off-class labels on mix chips teach an over-confident absent-class
+prior that fails to generalize to OOD with mid-range max-prob.
+
+**Verdict**: hypothesis-driven patch, **no result yet**. iter83 5-cell sweep
+∈ {0, 0.05, 0.10, 0.15, 0.20} at iter46E base recipe is the planned next
+ablation, gated by `bit_F1 within −0.005 of 83A AND Total FAR ≤ 5%`. If even
+0.05 violates, the patch is paper-negative.
+
 ## Inference-side ablations (fixed model = T0)
 
 | change vs baseline               | from cell        | to cell          | Δ macro_f1 | Δ top1_11 | verdict        |
@@ -594,3 +760,380 @@ matrix (other 3 cells covered by iter21C/21D/21E).
 
 _Source: outputs/iter29A_box_hard, iter29B_compl_g2_softLS05,
 iter29C_grid_hard_LS10/{eval_v14class,eval_v15direct}/._
+
+---
+
+## Best-from-epoch policy ablation (iter99, 260512)
+
+iter99 (5 cells × 4 inference points = 20 cells, all `v15direct n_per_class=200`,
+T7 recipe, BCE+LS=0.20 / CutMix complement p=0.25 / g=3 / rect=0.5) tests
+whether **forcing `--best-from-epoch=6` on a 10-epoch budget improves model
+selection** relative to the iter88/95-97 free policy (any-epoch val_acc winner).
+
+### Setup
+
+| variable | iter95-97 | iter99 |
+|----------|-----------|--------|
+| epoch budget | 8 (iter95-96) / 20 (iter97) | **10** |
+| best_from_epoch | free (typically picks ep 1-3) | **>= 6** |
+| LR | 1e-4 (iter95-96) / {5e-5, 2e-5, 1e-5} (iter97) | 1e-4 (A,B,C,D) / 5e-5 (E) |
+| backbones | 1 per iter | **5 simultaneously** (ConvNeXtV2 / Swin V1 / DINOv3 / Hiera / ConvNeXtV2 LR-rescue) |
+
+### Per-backbone best-epoch result
+
+| backbone (iter99 tag) | free-policy best ep (iter88/95-97) | forced ep >= 6 (iter99) | I10 macro_f1 free | I10 macro_f1 forced | I10 Total FAR free | I10 Total FAR forced | verdict |
+|------------------------|----------------------------------:|-----------------------:|------------------:|--------------------:|--------------------:|---------------------:|---------|
+| ConvNeXtV2-B-384 (99A)  | iter46E recipe ~ep3 ~0.9654 / 1.07% | ep 6, 0.8367 | 0.9654 (ref) | 0.8367 | 1.07% | 12.14% | **mild loss** (ep>=6 not optimal) |
+| Swin-V1-B-384 (99B)     | iter89 ep=1, 0.9278 / 0.00% | ep 6, **0.8030 / 100% FAR** | 0.9278 | 0.8030 | 0.00% | **100%** | **★ breaks**: peak is ep 1, ep>=6 over-trains |
+| DINOv3-ConvNeXt-B (99C) | iter95A ep=3, 0.6211 / 34% | ep 6, **0.7423 / 86.8% FAR** | 0.6211 | 0.7423 (+0.12) | 34.05% | 86.79% | mild rescue but still **below iter97A LR=5e-5 ep=9 ceiling 0.87 / 1.4%** |
+| Hiera-B (99D)           | iter96A ep=1, **0.0000 / 0.0%** (degenerate) | ep 6, **0.7039 / 4.76%** | 0.0000 | 0.7039 (+0.70) | 0.0% (reject all) | **4.76%** | **★ full rescue** — degenerate -> useful |
+| ConvNeXtV2-B-384 LR=5e-5 (99E) | (no free baseline at LR=5e-5) | ep 8, 0.8282 | — | 0.8282 | — | 10.83% | LR=5e-5 vs LR=1e-4 99A: -0.0085 bF1 (default LR wins) |
+
+### Findings
+
+32. **Best-from-epoch=6 is NOT a global improvement.** Of 5 backbones tested
+    at iter99, **2 break** (Swin V1 loses 0.13 bF1 + 100% FAR; ConvNeXtV2
+    loses 0.13 bF1 + 11% FAR), **1 is unchanged** (ConvNeXtV2 LR=5e-5 ep~=8
+    by chance), **1 is partially rescued** (DINOv3 +0.12 but still -0.13
+    vs iter97A LR=5e-5 ceiling), **1 is fully rescued** (Hiera +0.70 from
+    a degenerate baseline). Net effect across the 5 backbones is mildly
+    negative on bF1 and strongly negative on Total FAR.
+
+33. **The per-backbone best-epoch surface is bimodal**: FCMAE / Swin V1
+    backbones peak at **ep 1-3** (matched by 8-epoch budget iter88/95);
+    SSL-pretrained backbones (DINOv3) and ViT-with-MAE backbones (Hiera)
+    peak at **ep 6-9**. The bimodality is consistent with the
+    pretraining-objective hypothesis: backbones whose pretrained features
+    already cover most of the chip-palette manifold (FCMAE was supervised
+    on a curated 22k-class image set with channel statistics close to the
+    chip palette) need only a head-warmup phase, while backbones whose
+    pretraining features are far from the chip palette (DINOv3 SSL on
+    natural images, Hiera MAE on natural images) need additional
+    feature-adaptation epochs.
+
+34. **The cleanest case is Swin V1 base**: iter89 reaches 0.9278 bF1 at
+    ep=1, iter99B at the same recipe but forced ep>=6 reaches only
+    0.8030 with 100% Total FAR. The 1-epoch checkpoint is **structurally
+    better** for this domain — adding 5 more epochs strictly hurts.
+
+35. **The cleanest counter-case is Hiera-B**: iter96A's ep=1 checkpoint
+    produces 0.7228 bF1 at I3 (100% FAR) and 0.0000 at I10 (degenerate
+    all-reject); iter99D ep=6 produces 0.7039 at I10 with 4.76% FAR
+    (deployable). The free policy gives Hiera no useful inference cell;
+    forced ep>=6 gives one. **Without iter99, Hiera-B would be ranked as
+    fully unusable in `backbone_landscape.csv`; with iter99, it is ranked
+    as competitive-but-recipe-mismatched.**
+
+36. **DINOv3 needs both LR rescue AND late-epoch.** iter97A LR=5e-5 ep=9
+    free-policy reaches 0.8700 / 1.43%. iter99C LR=1e-4 (iter88 default)
+    forced ep=6 reaches 0.7423 / 86.79%. **Reducing LR by 2x has more
+    leverage on DINOv3 than forcing late-epoch selection.** The two
+    knobs do not combine cleanly — the iter99 budget cannot replicate the
+    iter97A ceiling without also dropping LR.
+
+37. **Operational recommendation (paper section 5)**: replace global
+    `--best-from-epoch` floor with **per-backbone early-stop with
+    backbone-aware patience**:
+    | backbone family | patience | rationale |
+    |------------------|---------:|-----------|
+    | FCMAE supervised (ConvNeXtV2, Swin V1) | 2 epochs | peak at ep 1-3 |
+    | SSL (DINOv3) | 5 epochs | peak at ep 8-9 |
+    | MAE-pretrained ViT (Hiera) | 5 epochs + LR warmup >= 3 | needs feature adaptation phase |
+    Implement as `--early-stop-patience` arg with per-backbone defaults
+    pulled from a small mapping in `_train_chip_variant.py`. The current
+    floor-based mechanism is the wrong abstraction.
+
+_Source: `outputs/iter99{A,B,C,D,E}_*/T7_*/eval_v15direct_n200/stage1_*/`,
+training history `outputs/iter99*/T7_*/history.json`,
+log `outputs/_iter99_backbone_ep10_bestfrom6.log`,
+delta vs free policy via `outputs/iter89_LR14_LS3_g{2,3}/`,
+`outputs/iter95A_*/`, `outputs/iter96A_hiera_base/`,
+`outputs/iter97A_lr5e5/`._
+
+## Cosine T_max sweep (ep=10 vs ep=20) — iter111 vs iter112 (260512 night)
+
+**Question**: holding the recipe and seed fixed (ConvNeXtV2-B FCMAE 384
++ T7 BCE+LS=0.20 + FCM-PM CutMix p=0.25 n_groups=3 + `--no-normal`,
+seed=1, lr=1e-4 / batch=2 / accum=8), does doubling the cosine LR period
+(T_max 10 → 20, also doubling epochs 10 → 20) move the bF1 / Total-FAR
+Pareto front?
+
+**Method**: train both with `--save-every-epoch`, dump every epoch
+checkpoint (12 ckpts for iter111, 22 ckpts for iter112), then run
+`chip_multilabel.run_stage1` against the v15direct n=200 eval set on
+every checkpoint × 4 inference cells (I3, I7, I10, I13). Compute the
+**absolute-rule bF1** (positive group = single + 2-combo, **3-combo
+excluded**) and **Total FAR** (FP rate on Normal + Invalid + OOD
+wafer-pattern chips). 12 × 4 + 22 × 4 = 136 (ckpt × cell) measurements,
+joined with `outputs/_reeval_absolute_rule.csv` and history.json
+val metrics.
+
+**Outcome**:
+
+| run | epochs | T_max | val_f1-selected ckpt | bF1 (best) | Total FAR (best) | Δ vs iter111 |
+|-----|------:|------:|---------------------:|-----------:|-----------------:|-------------:|
+| iter111 | 10 | 10 | ep08 (val_f1=0.9907 tie) | 0.9963 | 1.31% | — |
+| **iter112** | **20** | **20** | **ep06 (val_f1=0.9907 first)** | **0.9964** | **0.83%** | **+0.0001 bF1, −0.48pp FAR** |
+
+**Interpretation**: the dominant gain is on the **FAR axis** (1.31% → 0.83%,
+a 37% relative drop in false-alarm rate) not on bF1 (already near
+ceiling). The mechanism is that with T_max=10, LR(ep08) = 0.0000095 (1%
+of peak) — the model has effectively stopped learning. With T_max=20,
+LR(ep06) = 0.0000794 (79% of peak), so the FCM-PM CutMix compositional
+signal is still actively shaping the decision boundary at ep06.
+
+**Negative observations**:
+- **Total FAR is non-monotone with epoch** under T_max=20 (iter112): ep02
+  0.95%, ep05 1.79%, ep06 0.83%, ep08 6.07%, ep10 4.40%, ep16 91.7%, ep20
+  0.95%. The volatility argues against any "longer is always better"
+  rule — checkpoint selection by val_f1 is essential.
+- **val_f1 plateau is multi-modal** in iter112: ep04 (0.9878), ep06/08/10
+  (0.9907) are all near-ties on val. Eval-time bF1/FAR varies widely
+  across these (ep06 = 0.83% FAR; ep08 = 6.07% FAR). Even within the
+  val_f1 plateau, the **first-hit epoch** (ep06) is empirically the
+  best — possibly because later plateaus are sampling from the
+  decision-boundary collapse phase visible at ep16.
+- **iter111 final_epoch and iter101A final_epoch tie at bF1 = 0.9964**
+  (the ceiling on this metric), but at 4.52% FAR — **higher bF1 alone
+  cannot pick the SOTA cell on the FAR-constrained operating point.**
+
+**Carry-forward**: T_max=20 + `--val-criterion f1` becomes the trainer
+default for chip-multilabel paper-replication runs. T_max=ep is no
+longer recommended.
+
+_Source: `outputs/iter111_seed1_reproduce_now/T7_*/{history.json,
+eval_v15direct_n200_*}`,
+`outputs/iter112_ep20/T7_*/{history.json, eval_v15direct_n200_*}`,
+combined per-epoch reeval `outputs/_reeval_absolute_rule.csv` (492 rows),
+training logs `outputs/_iter111_now.log`, `outputs/_iter112_ep20.log`.
+Per-epoch table mirrored at
+`docs/chip-multilabel/tables/iter111_112_per_epoch_eval.csv`._
+
+## Validation-criterion ablation (`--val-criterion`: acc / f1 / auroc / aggregate) — iter111-112 (260512 night)
+
+**Question**: which validation-time metric — `val_acc`, `val_f1`,
+`val_auroc`, or aggregates of (val_f1, val_auroc) — should drive the
+`best_model.pth` selection rule that ships in the paper?
+
+**Method**: with iter101A, iter111, iter112 all training with
+`--save-every-epoch`, retroactively re-pick the "best" checkpoint by
+each candidate criterion on the stored history.json, then look up the
+absolute-rule bF1 / Total FAR for that checkpoint in
+`outputs/_reeval_absolute_rule.csv`. Compute Spearman ρ between each
+val-criterion and bF1 / Total FAR across all (epoch, run) tuples.
+
+**Outcome on iter112 (cleanest cosine T_max=20 run)**:
+
+| criterion | argmax epoch | bF1 (eval) | Total FAR (eval) | comment |
+|-----------|------------:|-----------:|-----------------:|---------|
+| val_acc max (=0.9877) | ep01, ep02, ep04, ep10 (tie) | 0.9875 | 1.90% (at ep01) | anti-correlated with bF1 (ρ ≈ −0.52); picks too-early ckpt |
+| **val_f1 max (=0.9907)** | **ep06 (first), ep08, ep10** | **0.9964** | **0.83% (at ep06)** | **★ optimal — picks the SOTA cell** |
+| val_auroc max (=1.0000) | ep16 (only) | 0.9965 | **91.7%** | saturate-vulnerable; ties at 1.0 push pick toward late epoch with catastrophic FAR |
+| arith-mean(vf1, vauroc) | ep06 (tied with ep10) | 0.9964 | 0.83% | matches val_f1 pick |
+| geo-mean(vf1, vauroc) | ep06 | 0.9964 | 0.83% | matches val_f1 pick |
+| harm-mean(vf1, vauroc) | ep06 | 0.9964 | 0.83% | matches val_f1 pick |
+
+**Interpretation**:
+- **val_acc anti-correlates** with the eval metric. On chip-multilabel,
+  val_acc measures single-label argmax correctness on a tiny in-distribution
+  val split (n=163, no Normal, no OOD). The eval metric probes 2-combo
+  compositional correctness + OOD false-alarm rate, which is a *different
+  surface*. ep01-02 have peak val_acc because the model has memorized the
+  4-class single-label decision boundary; eval-time bF1 + FAR continue
+  improving long after val_acc plateaus.
+- **val_auroc saturates to 1.0** several times in iter112 (ep03 and ep16
+  both hit 1.0000). The arg-max policy picks ep16 — which has 91.7%
+  Total FAR (a single-label decision boundary has collapsed onto the
+  positive side, scoring every chip as defect). **val_auroc is dangerous
+  as a stand-alone selection criterion.**
+- **val_f1** picks ep06 cleanly (first-hit of the 0.9907 plateau) and
+  recovers the eval SOTA. Aggregate criteria (arith / geo / harm mean of
+  val_f1 and val_auroc) all collapse to the val_f1 pick because val_auroc
+  ties at 1.0 don't tip the aggregate beyond val_f1's first-hit epoch.
+
+**Recommendation**: ship `--val-criterion f1` as the default and document
+val_auroc as **never use stand-alone** in the trainer help text.
+
+**Negative observation**: even val_f1 is not a perfect oracle. **At
+val_f1 = 0.9907 plateau (3 ties: ep06 / ep08 / ep10)**, the eval bF1
+and Total FAR vary substantially (FAR 0.83% / 6.07% / 4.40%). The
+first-hit policy (current implementation) lands on ep06 = SOTA, but
+this could be luck — iter113+ multi-seed sweep will check whether the
+first-hit-of-val_f1-plateau policy is robust across seeds, or whether a
+**val_f1 + low-Total-FAR-on-held-out-OOD** combined criterion is needed
+for full robustness.
+
+_Source: `outputs/iter101A_convnextv2_perep/T7_*/history.json`,
+`outputs/iter111_seed1_reproduce_now/T7_*/history.json`,
+`outputs/iter112_ep20/T7_*/history.json`,
+joined with `outputs/_reeval_absolute_rule.csv` per-epoch bF1/FAR rows._
+
+## ★★★ 2026-05-13 ablation update — iter122 + iter123: T6 (BCE → ASL) family, loss-axis dead-end
+
+**Hypothesis (analyst)**: hold iter116J recipe (T7 BCE+LS=0.30, FCM-PM CutMix
+complement g=3, val_margin, save-every-epoch) **frozen** and swap the loss to
+T6 (BCE warmup → ASL γ_neg=4 with clip), to test whether asymmetric focal
+gradient on negatives can amplify the relatively weak partner-bit signal in
+2-combos (`bb+sr` partner = sr, `fork+sr` partner = sr). Two clip values
+were tested as **a 1-atomic axis sweep on the same recipe**:
+
+| iter | switch ep (BCE → ASL) | ASL clip | val_pick | ep selected | best ckpt eval cell |
+|------|---------------------:|---------:|---------:|------------:|--------------------:|
+| iter122 | ep6  | 0.05 | val_margin | ep3 (BCE phase) | T0__I10 |
+| iter123 | ep4  | 0.10 | val_margin | ep3 (BCE phase) | T0__I10 |
+
+### Eval (T0__I10, n=200/class, seed=42, `chip_multilabel_v15direct`)
+
+| run | ep | bF1 (4 single + 5 combo) | Total FAR | NI FAR | OOD FAR | bb+sr→sr | fork+sr→sr | fork+sr→fork |
+|-----|---:|---:|---:|---:|---:|---:|---:|---:|
+| iter116J T7 BCE+LS0.30 (val_f1 sel, baseline) | 1 | 0.7911 | 0.00% | 0.00% | 0.00% | 0.831 | **1.000** | 0.919 |
+| iter122 T6 ep3 (val_margin BCE pick) | 3 | 0.8122 | **84.20%** | 76.50% | 86.60% | 0.869 | 0.988 | 0.912 |
+| iter122 T6 ep6 (first ASL ckpt, clip=0.05) | 6 | 0.8298 | 74.20% | 79.00% | 72.70% | 0.900 | 0.787 | 0.775 |
+| iter122 T6 ep10 (final ASL, clip=0.05) | 10 | 0.8297 | 9.40% | 29.00% | 3.30% | **0.981** | 0.750 | 0.819 |
+| **iter123 T6 ep3** (val_margin BCE pick) | 3 | 0.7132 | (BCE — same as iter122) | — | — | 0.869 | 0.988 | 0.912 |
+| **iter123 T6 ep10** (final ASL, clip=**0.10**) | 10 | 0.8297 | **5.00%** | 16.00% | 1.60% | **0.988** | 0.838 | 0.838 |
+
+### Findings
+
+**clip 0.05 → 0.10 single-atomic delta (iter122 ep10 → iter123 ep10)**:
+- bF1: 0.8297 → 0.8297 (Δ = 0.0000)
+- Total FAR: 9.40% → **5.00%** (−4.40pp)
+- NI FAR: 29.00% → **16.00%** (−13.00pp)
+- OOD FAR: 3.30% → **1.60%** (−1.70pp)
+- fork+sr partner recall: 0.750 → **0.838** (+0.088 — iter122 trade-off partially recovered)
+
+**vs iter112 paper SOTA (bF1 0.9964 / FAR 0.83%)**: iter122 / iter123 are
+regressions on **both axes**. ASL γ_neg=4 amplifies partner-bit gradient
+for `bb+sr → sr` (0.831 → 0.981, +0.150) but the same mechanism rebalances
+the per-class auto-tuned thresholds so low (e.g. fork=0.02, scratch=0.06)
+that Normal/Invalid/OOD chips with weak scratch-like or fork-like noise
+flip into the defect class. **Total FAR ≥ 5% under any clip value** — at
+least an order of magnitude above iter112's 0.83% FAR. The fork+sr partner
+recall (sr-bit on a fork-paired chip) is also fragile under clip=0.05
+(0.750), only partially recovered to 0.838 at clip=0.10.
+
+**Why val_margin selection blocks the ablation**: the BCE warmup phase
+(ep1-ep3 for iter122, ep1-ep3 for iter123) saturates val_margin > 0.97
+early. The ASL phase (ep4-10) produces slightly lower val_margin
+(~0.96) because ASL deliberately pushes negative logits below zero by
+the clip amount. The result: `--val-criterion margin_max` always
+selects an **early BCE ckpt** that has *no ASL signal at all* —
+identical between iter122 and iter123 (both pick ep3, both get
+`bF1=0.7132` from the unrelated full eval and `bF1=0.8122` from the
+preliminary eval). The val_margin criterion cannot distinguish loss
+ablations whose effect kicks in only after the switch epoch.
+
+**Verdict — DEAD-END for the T6 loss axis under current recipe**:
+1. clip=0.05 over-shifts the prob distribution; FAR catastrophic (9.4%)
+2. clip=0.10 less aggressive but still ≥5% FAR
+3. clip controls FAR severity but does **not** unlock a bF1 above 0.83
+4. partner-recall trade-off (sr-on-bb vs sr-on-fork) is intrinsic to
+   γ_neg=4 — increasing γ_neg helps weak-positive recall on one combo
+   but suppresses fork-class auto-threshold causing FN on the other
+5. val_margin selection cannot pick the ASL phase, so the *full* ASL
+   recipe is never compared against val_f1-selected iter112 SOTA at
+   the same selection criterion. Even with a hypothetical phase-aware
+   selector (`val_f1 + min_ep=switch_ep`), ep10 still yields FAR=5%,
+   so the axis is dead end.
+
+**Next axes to try** (1-atomic, retain iter112 recipe as base):
+- γ_neg=2 (mild ASL) instead of γ_neg=4 — milder probability shift
+- BCE → ASL switch at ep=8 (last 2 ep ASL) — preserves BCE-phase
+  conservative thresholds, only briefly applies ASL on near-converged
+  weights
+- abandon T6/ASL entirely and pivot to a different axis (e.g. spatial
+  granularity, see iter124 below)
+
+_Source: `outputs/iter122_T6_asl_gn4/T6_iter122_T6_asl_gn4_260513_085714/eval_v15direct_n200/`,
+`outputs/iter122_T6_asl_gn4/T6_iter122_T6_asl_gn4_260513_085714/eval_ep06/`,
+`outputs/iter122_T6_asl_gn4/T6_iter122_T6_asl_gn4_260513_085714/eval_ep10/`,
+`outputs/iter123_T6_asl_clip01/T6_iter123_T6_asl_clip01_260513_091520/eval_v15direct_n200/`,
+`outputs/iter123_T6_asl_clip01/T6_iter123_T6_asl_clip01_260513_091520/eval_ep10/`,
+`chip_multilabel/notes.md` (iter 122 / iter 123 entries)._
+
+## ★★★ 2026-05-13 ablation update — iter124: FCM-PM spatial granularity sweep
+
+**Hypothesis (analyst)**: hold iter116J recipe frozen (T7 BCE+LS=0.30,
+FCM-PM CutMix `mode=complement` `pair=masked` `label_scale=0.5`,
+`val_criterion=margin`, `save-every-epoch`, `--no-normal`), and sweep the
+**spatial granularity of the FCM-PM mask** along two axes:
+
+- **g** = `--cutmix-n-groups` (partition count of GRID×GRID cells across A and B)
+- **n** = grid multiplier such that `GRID = g · n` (so total cell count =
+  `(g·n)² = g²·n²` and `cells_per_group = (g·n)²/g = g·n²`)
+
+This parameterization yields **clean integer GRID values where each group
+gets exactly `n²` cells (square sub-blocks)** — the analyst's "clean GRID
+= g × n" formulation that avoids irregular partition shapes that earlier
+sweeps had hit.
+
+| iter sub | g | n | GRID | total cells | cells/group | cutmix_mode | best ep | total ep | elapsed s |
+|----------|--:|--:|-----:|------------:|------------:|-------------|--------:|---------:|----------:|
+| 124a | 2 | 1 | 2 | 4   | 2  | complement | 6  | 10 | 407 |
+| 124b | 2 | 2 | 4 | 16  | 8  | complement | 10 | 10 | 414 |
+| 124c | 2 | 3 | 6 | 36  | 18 | complement | 4  | 10 | 407 |
+| 124d | 2 | 4 | 8 | 64  | 32 | complement | 4  | 10 | 403 |
+| 124e | 3 | 1 | 3 | 9   | 3  | complement | 10 | 10 | 466 |
+| 124f | 3 | 2 | 6 | 36  | 12 | complement | 4  | 10 | 469 |
+| 124g | 3 | 3 | 9 | 81  | 27 | complement | 10 | 10 | 463 |
+| 124h | — | — | — | bisect_h | — | bisect_h | 6 | 10 | 339 |
+| 124i | — | — | — | bisect_v | — | bisect_v | 6 | 10 | 341 |
+
+### Eval status (as of recording)
+
+Only **iter124a** has a completed full-eval (`eval_v15direct/`, 11-class 200
+samples × 11 = 2200 chips). The other 8 sub-runs have **empty
+`eval_v15direct_n200/`** folders (analyst re-eval was dispatched via
+`_iter124_reeval.sh` and is in progress at the time of logging). The 124a
+full-eval results (T0__I10 best cell) are summarised here; the remaining
+sub-runs are scheduled with rows reserved in the CSV (`bit_F1 = PENDING`)
+and will be back-filled when the reeval completes.
+
+### iter124a best-cell eval (T0__I10, full 11-class 200/class)
+
+| metric | value |
+|---|---:|
+| macro_f1 (4-class, single-label sense) | 0.7699 |
+| **bF1 (4 single + 5 combo macro)** | **0.8705** |
+| Total FAR | **1.07%** |
+| NI FAR | 0.00% |
+| OOD FAR | 1.41% |
+| top1_11class | 0.5354 |
+
+Per positive-class F1 (T0__I10): bank_boundary=0.6926, fork=0.9496,
+scratch=0.9581, scratch_rot=0.9014, bb+fork=0.8626, bb+scratch=0.7619,
+bb+scratch_rot=0.8305, fork+scratch=0.9423, fork+scratch_rot=0.9354.
+
+### Findings (partial — single completed sub-run)
+
+- **vs iter112 paper SOTA** (bF1 0.9964 / FAR 0.83%, GRID=g=3 via
+  default): iter124a (GRID=2, total 4 cells) yields **bF1 0.8705 / FAR 1.07%**
+  — a large bF1 regression (−0.1259), small FAR delta (+0.24pp).
+- **bF1 is severely degraded at GRID=2** because at only 4 spatial cells
+  per chip image, the FCM-PM complement mask covers exactly half the
+  image per "group" — too coarse to learn fine-grained spatial
+  composition between the 4 defect bits.
+- bank_boundary F1 = 0.6926 (vs iter112's ~0.998) is the dominant
+  failure mode — at coarse granularity, the BB perimeter signal gets
+  mixed with the paired chip's central defect signal, causing
+  position-confused FN. This validates that **the FCM-PM mechanism
+  requires GRID ≥ 6** (i.e. cell size ≤ 64 px at 384 input).
+
+### Outstanding cells (analyst re-eval in progress)
+
+The remaining 8 sub-runs (b-i) will reveal:
+1. **GRID monotonicity**: does bF1 increase monotonically with GRID
+   (2 → 4 → 6 → 8 → 9)? Or is there an intermediate optimum?
+2. **g=2 vs g=3 at matched GRID=6** (124c vs 124f): does partition
+   count matter when total spatial resolution is held constant?
+3. **bisect_h vs bisect_v** (124h vs 124i): horizontal vs vertical
+   half-mask — does scratch_rot (top-tilted scratch) benefit from
+   horizontal slicing more than vertical?
+4. Whether **any granularity beats iter112 paper SOTA** (bF1 0.9964,
+   GRID=g=3 via current default).
+
+_Source: `outputs/iter124_a_g2_n1/T7_*/eval_v15direct/stage1_260513_104129/`,
+`outputs/iter124_{b,c,d,e,f,g,h,i}_*/T7_*/` (train_summary.json,
+history.json — eval pending),
+`outputs/_iter124_grid_size_sweep_summary.log` (sub-run mapping),
+`_iter124_reeval.sh` (reeval dispatch script)._

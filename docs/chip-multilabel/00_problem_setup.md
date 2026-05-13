@@ -1,15 +1,41 @@
 # 00 — Problem setup
 
+## ★★★ 절대 규칙 (260512) — train / eval composition
+
+**학습**: 4 single defect class 만 (`bank_boundary`, `fork`, `scratch`, `scratch_rot`).
+Normal / Invalid / OOD-wafer-pattern chip 은 학습 데이터에 포함 안 함. 모든
+train script 에 `--no-normal` flag 명시.
+
+**평가**: 5 group composition —
+- (a) 4 single defect (positive)
+- (b) 2-combo (현재 5: bb+fork, bb+scratch, bb+scratch_rot, fork+scratch, fork+scratch_rot; scratch+scratch_rot 은 same-family 제외) (positive)
+- (c) Normal (negative)
+- (d) Invalid (negative)
+- (e) OOD wafer-pattern: CenterDonut, CrossScratch, DiagonalSmear, Starburst 등 (negative)
+
+**Metric**:
+- **bit F1** = positive cells (single + combo) macro-F1. `macro_f1` (전체 평균) 과 혼동 금지.
+- **FAR** = `(Normal_fp + Invalid_fp + OOD_fp) / (N_Normal + N_Invalid + N_OOD)`. 3 group 분리 (NI_far / OOD_far / Total_far) + Total 통일.
+- **NI-only FAR (OOD 빼고)** single-report 금지. Phase 87 lesson — paper "ni_far=0%" claim 이 OOD 포함 시 1.07% 로 정정된 사고.
+
+상세 + lesson: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`,
+`D:/project/known-cnn/CLAUDE.md` "★★★ 절대 규칙: chip multi-label train/eval composition".
+
 ## Task statement
 
 A wafer chip image (200×200 grayscale) may contain **zero, one, or more
-defects** simultaneously. We have a chip-level CNN that was trained
-**single-label, 5-way cross-entropy** (4 defect classes + `invalid_main`),
-and we wish to repurpose it as a **multi-label** predictor over the
-real evaluation distribution: 4 single defects, 5 plausible defect
-**combinations**, plus `Normal` and `Invalid` — eleven classes total.
+defects** simultaneously. We train a chip-level CNN on the **4 single defect
+classes only** (single-label 4-way cross-entropy / BCE-LS) and use it as a
+**multi-label** predictor over the real evaluation distribution: 4 single
+defects + 5 two-defect combos + Normal + Invalid + OOD wafer patterns.
 
-Single-label train, multi-label predict.
+Single-label train (4 defects only), multi-label predict (positive + negative
+groups).
+
+Normal handling: inference-side max-prob threshold + dist-band gate + ensemble
+(not a training class). Invalid handling: 5th-head heuristic at inference.
+OOD handling: enters FAR denominator only — never trained on, never predicted
+as class.
 
 ## Class set (11)
 

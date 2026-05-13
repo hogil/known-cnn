@@ -3,6 +3,247 @@
 All numbers reported to 4 decimal places. Eval set: 2200 chips, 11-class
 multi-label.
 
+## 2026-05-13 update — iter122 + iter123 + iter124 (SOTA unchanged, iter112 still winner)
+
+Three follow-up iters tested **off-recipe axes** against the iter116J/iter112
+recipe baseline. **All three regressed** — iter112 paper SOTA
+(bF1 0.9964 / Total FAR 0.83%) is still the winner. Summary:
+
+| iter | axis tested | atomic delta vs iter116J/iter112 | best cell | bF1 | Total FAR | Δ bF1 vs iter112 | Δ FAR vs iter112 |
+|------|-------------|----------------------------------|----------:|----:|----------:|-----------------:|-----------------:|
+| iter112 (SOTA, kept) | — | — | I13 | 0.9964 | 0.83% | — | — |
+| iter122 (ep10) | loss → T6 BCE→ASL γ_neg=4 **clip=0.05** | swap T7→T6 | I10 | 0.8297 | 9.40% | −0.1667 | +8.57pp |
+| iter123 (ep10) | loss → T6 BCE→ASL γ_neg=4 **clip=0.10** | iter122 clip 0.05→0.10 | I10 | 0.8297 | 5.00% | −0.1667 | +4.17pp |
+| iter124a | spatial g=2 n=1 (GRID=2, 4 cells) | FCM-PM granularity sweep | I10 | 0.8705 | 1.07% | −0.1259 | +0.24pp |
+| iter124b-i | spatial sweep g={2,3} × n={1..4} + bisect | (re-eval pending) | — | PENDING | PENDING | — | — |
+
+**Verdict**: iter112 paper SOTA holds. The T6 loss axis (iter122 / iter123)
+is a **dead end** — clip 0.05/0.10 both regress with Total FAR ≥ 5%. iter124a
+(GRID=2, coarsest possible spatial granularity) regresses bF1 by 0.126 and
+the remaining 8 iter124 sub-runs (b-i) are re-evaluating to map the full
+GRID curve. Details in `03_ablations.md` "2026-05-13 ablation updates".
+
+## ★★★★ 2026-05-12 NIGHT update (22:30) — iter111 + iter112 paper SOTA
+
+**New single-model SOTA** under the **absolute rule** metric
+(training: 4 single defect only / `--no-normal`; eval bF1: positive group
+= single + 2-combo only; **3-combo excluded** from bF1; Total FAR =
+combined FP-rate on Normal + Invalid + OOD-wafer-pattern chips). Single
+seed=1, ConvNeXtV2-Base FCMAE 384, T7 (BCE+LS=0.20) + FCM-PM CutMix.
+
+| iter | recipe spec (delta) | ckpt sel | epoch | bF1 (4 single +2-combo) | Total FAR | I-cell |
+|------|--------------------|---------:|------:|------------------------:|----------:|-------:|
+| iter46E (paper main, legacy) | with Normal training | best/val_acc | n/a | 0.9755 | 1.07% | I7 |
+| iter101A (per-epoch eval baseline) | ep=10 cosine T_max=10 | epoch_10 | 10 | 0.9964 | 4.52% | I13 |
+| iter111 (T_max=10, seed=1 reproduce) | ep=10 cosine T_max=10 | **epoch_08** | 8 | **0.9963** | **1.31%** | I13 |
+| **iter112 (T_max=20, ep=20)** | ep=20 cosine T_max=20 | **best/val_f1** | **6** | **0.9964** | **0.83%** | **I13** |
+
+**★ iter112 best_model (selected by val_f1 = 0.9907 at ep06) = paper SOTA.**
+**bF1 = 0.9964 / Total FAR = 0.83% (7 FP / 840 negative chips), I-cell = I13.**
+
+Per-class F1 (iter112 best / I13): bank_boundary 0.9984, fork 0.9881,
+scratch 0.9992, scratch_rot 1.0000.
+
+### FAR breakdown — iter112 best_model (ep06) at I13
+
+| FP source | FP count | FAR rate | predicted class |
+|-----------|---------:|---------:|-----------------|
+| Starburst (OOD wafer-pattern) | 5 | — | fork+scratch (all 5) |
+| Normal | 2 | — | fork+scratch (both 2) |
+| CrossScratch (OOD wafer-pattern) | 0 | 0.00% | — |
+| Invalid | 0 | 0.00% | — |
+| **Total** | **7 / 840** | **0.83%** | — |
+
+All 7 false-positives predict the same composite label **`fork+scratch`**,
+suggesting a single coherent model failure mode (low-frequency vertical
+line + diffuse blob signature being mis-fired as `fork+scratch`) rather
+than a scattered population of FAR sources.
+
+### Checkpoint selection criterion — iter111 + iter112 + iter101A combined
+
+Across **404 + 88 = 492 (run × cell)** rows in
+`outputs/_reeval_absolute_rule.csv` (per-epoch eval for iter101A 12 ckpts,
+iter111 12 ckpts, iter112 22 ckpts), the empirical correlation between
+validation-time metrics and eval-time bF1 / Total FAR is:
+
+| val criterion | best ckpt picked (iter112) | bF1 | Total FAR | comment |
+|---------------|---------------------------|----:|----------:|---------|
+| **val_acc** | ep03 (val_acc max = 0.9877) | 0.9941 | 0.12% | anti-correlated (ρ ≈ −0.52); picks an EARLIER ckpt than optimal |
+| **val_f1** ★ | **ep06 (val_f1 max = 0.9907)** | **0.9964** | **0.83%** | best — picks the SOTA ckpt |
+| val_auroc | ep16 (val_auroc max = 1.0000) | 0.9965 | 91.7% | saturate-vulnerable; ties at 1.0 push pick toward late epoch with catastrophic FAR |
+| (vf1+vauroc)/2 | ep06 | 0.9964 | 0.83% | matches val_f1 pick |
+| geo-mean(vf1, vauroc) | ep06 | 0.9964 | 0.83% | matches val_f1 pick |
+| harm-mean(vf1, vauroc) | ep06 | 0.9964 | 0.83% | matches val_f1 pick |
+
+**Paper Methods §X must declare `--val-criterion f1` as the default
+selection rule.** `val_acc` mis-picks earlier and `val_auroc` mis-picks
+later (catastrophic). The 3-way arith/geom/harm aggregates of (val_f1,
+val_auroc) all coincide with the val_f1 pick — val_f1 alone is sufficient.
+
+### Cosine T_max sweep — ep=10 vs ep=20
+
+Same recipe (ConvNeXtV2-B FCMAE 384, T7 BCE+LS=0.20, FCM-PM CutMix
+`cutmix_mode=complement`, `cutmix_pair=masked`, `cutmix_pair_fill=corner`,
+`cutmix_p=0.25`, `cutmix_n_groups=3`, `cutmix_complete_label_scale=0.5`,
+batch=2, accum=8, lr=1e-4, `--no-normal`, seed=1):
+
+| run | epochs | cosine T_max | best epoch (val_f1) | bF1 (best) | Total FAR (best) | bF1 (final) | Total FAR (final) |
+|-----|------:|------------:|--------------------:|-----------:|-----------------:|------------:|------------------:|
+| iter111 | 10 | 10 | 3 (also picked at 8 by val_f1 tie-break) | 0.9891 | 1.90% | 0.9964 | 4.52% |
+| **iter112** | **20** | **20** | **6** | **0.9964** | **0.83%** | 0.9818 | 100% |
+
+**Doubling cosine T_max (10 → 20) shifts the best-by-val_f1 checkpoint
+from ep3 → ep6 and lifts bF1 by +0.0073 / drops Total FAR by 1.07pp.**
+The val_f1 plateau at 0.9907 is reached three times in iter112 (ep06,
+ep08, ep10) all with comparable eval-time bF1, while the iter111 val_f1
+plateau at 0.9907 is reached six times — but only the late-epoch
+plateaus give the SOTA cell. Slower LR decay (longer cosine period)
+**lets the FCM-PM CutMix signal accumulate for an extra ~3 epochs at
+near-peak LR** before annealing, which is the proximate mechanism for
+the +0.0073 bF1.
+
+### Recipe spec (paper Methods §X — verbatim CLI)
+
+```
+python -m chip_multilabel._train_chip_variant \
+  --variant T7 --ls 0.20 \
+  --backbone convnextv2_base.fcmae_ft_in22k_in1k_384 --img-size 384 \
+  --epochs 20 --batch 2 --accum 8 --lr 1e-4 --seed 1 \
+  --no-normal --val-criterion f1 --save-every-epoch \
+  --cutmix-mode complement --cutmix-p 0.25 --cutmix-n-groups 3 \
+  --cutmix-pair masked --cutmix-pair-fill corner \
+  --cutmix-complete-label-scale 0.5
+```
+
+### Trainer patches (260512) — new flags in `_train_chip_variant.py`
+
+| flag | semantics | default |
+|------|-----------|---------|
+| `--val-criterion {acc,f1,auroc}` | which val metric drives `best_model.pth` | `acc` (legacy) — paper recommends `f1` |
+| `--save-every-epoch` | also dump `epoch_NN_model.pth` for per-epoch retroactive eval | off |
+| `--best-from-epoch N` | (deprecated; replaced by `--val-criterion`) floor on which epoch can be "best" | — |
+| `--freeze-backbone` | linear-probe mode (head-only trainable) | off |
+
+`--save-every-epoch` is the enabling mechanism for the val_criterion
+empirical study above (without per-epoch dumps, the val_f1 vs val_acc vs
+val_auroc comparison cannot be done retroactively).
+
+**Source**: `outputs/iter111_seed1_reproduce_now/T7_iter111_seed1_now_260512_212411/`,
+`outputs/iter112_ep20/T7_iter112_ep20_260512_214618/`,
+`outputs/iter101A_convnextv2_perep/T7_iter101A_convnextv2_perep_260512_200902/`,
+combined per-epoch reeval `outputs/_reeval_absolute_rule.csv` (492 rows),
+training logs `outputs/_iter111_now.log`, `outputs/_iter112_ep20.log`,
+`outputs/_iter101_per_epoch_eval.log`. Per-iter detail logged below in
+`05_backbone_landscape.md` (iter101 + iter111 + iter112 paragraphs) and
+ablation in `03_ablations.md` (cosine T_max sweep + val_criterion study).
+
+## ★★★ 2026-05-12 update — iter88-94 backbone landscape sweep (12 backbones, 4 families)
+
+See **`05_backbone_landscape.md`** for the full per-cell breakdown
+and Pareto-frontier reading. **Headline takeaways** from iter88-89 (12 backbone
+runs, 7 with full eval, 28 inference cells):
+
+1. **Single-seed Swin-Base 86.9M still dominates the 80-90M param region for
+   strict Total FAR**. Three Swin-Base variants (iter77C g=3 LS=0.50,
+   iter89_LR14_LS3_g3, iter89_LR14_LS3_g2) all land at **Total FAR = 0.00%**;
+   `bF1_4def` is monotone in CutMix-group count and LS value
+   (0.9692 / 0.9434 / 0.9278 respectively).
+2. **Scaling up Swin V1 (Base 86.9M → Large 195.20M) HURTS bF1_4def by 0.050**
+   under the same iter88 recipe. iter88E Swin-Large lands at 0.9192 bF1 /
+   0.12% Total FAR, vs iter77C Swin-Base 0.9692 / 0.00%.
+3. **ConvNeXt V1 Large 196M exhibits a worse OOD-FAR pathology** than ConvNeXt
+   V1 Base 87M. iter88F's I3/I7 cells score bF1 0.9919/0.9931 but at
+   **100.00% Total FAR**; the best safe cell (I13) drops to 0.8720 at 10.60%
+   FAR. ConvNeXt V1 Base (iter77A) remains the throughput-production winner.
+4. **EfficientNetV2-L, EfficientFormerV2-L, TinyViT-21M, ResNet-50/152,
+   MobileNetV4-Conv-L all fail to produce a Total-FAR-safe + competitive-bF1
+   cell** under the ConvNeXtV2-tuned T7 recipe. Per-family recipe re-tuning
+   is queued for iter95.
+5. iter46E ConvNeXtV2-Base 0.9654 / 1.07% (paper-main winner) and iter77C
+   Swin-Base 0.9692 / 0.00% (strict-zero / latency winner) **remain the
+   Pareto-frontier operating points** after this expansion. No iter88/89 cell
+   beats either on a strict (Total FAR ≤ 5%) basis.
+
+Source: `iters/iter88-94` outputs + `tables/backbone_landscape.csv` (37 rows).
+Pending iter95: per-family recipe sweep + throughput measurement for the 7 new
+backbones (GPU at 100% during this logger pass blocked throughput probe).
+
+## ★★★ 2026-05-12 update — Phase 87 v2 backbone throughput + paper §3 backbone-choice correction (iter 21)
+
+**Critical paper finding (see `iters/iter_21_backbone_throughput_paper3.md`)**: previous paper §3.5 narrative claimed "ConvNeXtV2-Base = best balanced production backbone" on accuracy grounds alone. Phase 87 v2 isolated-GPU precise measurement (torch.cuda.Event, 20 warmup + 100 iter, 4 backbones × 6 batch sizes) reveals **ConvNeXtV2 is the only backbone where batching makes throughput worse** (peak 37 chip/s at b=1, drops to 26 chip/s at b=64) due to **GRN (Global Response Normalization) per-channel reduction at every block**. The corrected §3 narrative splits backbone selection into **three operational regimes**:
+
+| regime | metric | winner | spec |
+|--------|--------|--------|------|
+| Latency-critical (inline, b=1) | ms/chip @ b=1 | **Swin-Base 384** | 21.08 ms + bF1 0.9692 + **Total FAR 0.00%** (only strict-zero in sweep) |
+| Throughput-critical (batched, b=64) | chip/s peak | **ConvNeXt V1** | 76 chip/s @ b=64 + bF1 **0.9830** + Total FAR 2.62% |
+| Paper-main (inline + coupled) | bF1 + paper-main legacy | **ConvNeXtV2-Base** | 37 chip/s @ b=1 only + bF1 0.9654 + Total FAR 1.07% (iter46E) |
+
+**4 backbones × 6 batch sizes scaling table (chips/sec)**:
+
+| backbone        | params | b=1    | b=4    | b=8 | b=32 | b=64 | peak       | scaling     | bF1     | Total FAR |
+|-----------------|-------:|-------:|-------:|----:|-----:|-----:|-----------:|------------:|--------:|----------:|
+| ConvNeXtV2-Base | 87.7M  | **37** | 30     | 28  | 35   | 26   | **37 @ b=1** | **0.70–0.93×** ⛔ | 0.9654 | 1.07% |
+| ConvNeXt-V1     | 87.6M  | 40     | 60     | 64  | 74   | **76** | **76 @ b=64** | **1.85×** ✓ | **0.9830** | 2.62% |
+| Swin-Base 384   | 86.9M  | 47     | **54** | 53  | 48   | 47   | **54 @ b=4** | **1.13×**   | 0.9692 | **0.00%** |
+| EfficientV2-M   | 52.9M  | 42     | **158**| 158 | 130  | 113  | **158 @ b=4** | **3.77×** ✓ | FAIL (small-data not converged) | — |
+
+**10,000-chip processing time** (paper §3 quantitative): EffV2-M 63s (FAIL) → ConvNeXt V1 132s (production winner) → Swin 185s (FAR=0) → ConvNeXtV2 270s (slowest production). **ConvNeXt V1 is 2.05× faster than ConvNeXtV2 at the same param count (87.6M ≈ 87.7M), with +0.0176 bF1.**
+
+**Implications**:
+- Paper §3.5 must be rewritten — the "ConvNeXtV2 = best" claim was an accuracy-only call that ignored GRN's batching pathology.
+- The 4-bag ensemble cost (§5.19.5) of 4× single-model assumes ConvNeXtV2; a 4-bag ConvNeXt V1 ensemble would run at **4 / 2.05 = 1.95×** the cost of a 1× ConvNeXtV2 single, while gaining +0.0176 bF1 per bag.
+- Single-model accuracy ranking does **not** change (iter46E ConvNeXtV2 remains paper-main single-model winner by accuracy + Total FAR pairing).
+- ConvNeXtV2 GRN finding is **measurement-grade architectural evidence**, not a bug — Woo et al. 2023 (arXiv:2301.00808) introduced GRN as channel-mean response normalization; the per-batch mean broadcast serialises under cuDNN at high batch sizes.
+
+Source: `iters/iter_21_backbone_throughput_paper3.md` + `tables/backbone_throughput.csv` (24 rows). Raw script `_phase87_precise_speed.py`. Accuracy from `outputs/iter46E_g3LS050_rect03/` + `outputs/iter77{A,C,E}_*/T*/eval_v15direct_n200/`.
+
+## ★★★ 2026-05-12 update — Total FAR correction (Phase 83 / 85) invalidates prior FAR rankings
+
+**Critical paper finding (see `iters/iter_18_total_far_correction.md`)**: every
+prior "SOTA" cell that claimed `ni_FAR = 0%` was hiding **19–48% OOD
+wafer-pattern false-fires** (CenterDonut / CrossScratch / DiagonalSmear /
+Starburst). The legacy `ni_FAR` metric pooled only the 4 Normal sources and
+excluded the OOD wafer-pattern chips that v15direct deliberately includes as
+distractors. Re-scoring with **Total FAR = (NI + OOD) / total** flips the
+production rankings:
+
+| cell                                  | recipe                          | bit_F1   | ni_FAR  | **Total FAR** | verdict                              |
+|---------------------------------------|---------------------------------|---------:|--------:|--------------:|--------------------------------------|
+| iter69 ep=12 (prev "SOTA" KD)         | α=0.5 T=4 ep=12                 |  0.9941 |   0.00% |   **36.67%** ⛔ | masked OOD blow-up                   |
+| iter50B paper KD                      | paper §5 main KD                |  0.9872 |   ~0%   |   **12.86%** ⛔ | KD trades NI-safety for OOD over-fire|
+| iter67D KD ep=10                      | KD α=0.5 T=4 ep=10              |  0.9917 |   ~0%   |   **11.79%** ⛔ | same family as iter69                |
+| iter41E "vanilla best"                | g=3 vanilla                     |  0.9961 |   ~0%   |   **15.24%** ⛔ | also hiding OOD                      |
+| **iter46E vanilla** ★                 | g=3 LS=0.50 compl pair=masked   |  0.9654 |   ~0%   |   **1.07%** ✓ | **true production single-model**     |
+| iter72A no-Normal bare                | no-Normal vanilla               |  0.8908 |   0.00% |   **0.00%**   | over-conservative                    |
+| **prev "0.9966 ensemble" k=2/4**      | `{26D + 65s13 + 65s21 + 69ep9}` |  0.9962 |    ~0%  |   **2.86%** ⛔ | prior ensemble SOTA — revoked        |
+| **★★★ same 4-bag k=3/4**              | (stricter quorum)               | **0.9909** |  0.00% | **0.00%**     | **NEW ensemble SOTA**                |
+
+**Implications**:
+- Single-model paper headline moves from `iter50B 0.9872 / FAR 0.5%` to
+  `iter46E 0.9654 / Total FAR 1.07%`. The 0.0218 bit_F1 drop buys 11.79
+  percentage-point Total-FAR reduction.
+- 4-bag ensemble headline moves from `0.9966 / "0%"` (k=2, actually 2.86%
+  Total FAR) to `0.9909 / 0.00%` (k=3, true zero). The −0.0053 bit_F1 cost
+  for the stricter quorum is paid in exchange for zero OOD false-fire.
+- The `--cutmix-rect` flag is a **no-op under `cutmix_mode=complement`** —
+  iter46E (`rect=0.3`) and iter42F (`rect=0.5`) produce bit-identical
+  predictions across 3 different seeds (see `iters/iter_19_vanilla_multi_seed_robust.md`).
+  Future tables should treat them as the same model family.
+- iter46E recipe should be cited by `g=3 / cutmix-complete-label-scale=0.5 /
+  cutmix-pair=masked / cutmix-pair-fill=corner / LS=0.20`, not by rect.
+- Multi-seed sweep of iter26H recipe (8 seeds, `iter_19_*`) shows
+  **seed=42 catastrophic** (`ni_FAR=100%`) while 5/8 seeds pass `ni_FAR ≤ 0.5%`.
+  Same-recipe 3-bag `{s7+s13+s21}` restores `0.9955 / ni_FAR=0%`.
+- Trainer patched (260512) with `--cutmix-other-label` flag (default 0.0 =
+  no behavior change); planned iter83 sweep ∈ {0, 0.05, 0.10, 0.15, 0.20}
+  tests whether soft off-class labeling reduces Total FAR further. See
+  `iters/iter_20_other_label_patch.md`.
+
+The prior headline rows below this section pre-date the Total FAR correction
+and are preserved verbatim for paper rebuttal / narrative use. **All "ni_FAR=0%"
+claims in those rows should be interpreted as ni-only and may carry OOD
+over-fire**. Re-scoring with Total FAR is on the iter83 queue.
+
 **★★★ FINAL PAPER MAIN WINNER (Phase 28 n=500 confirmation, iter 43) → pure-hard 4-bag**
 `{24_LS030_seed42 + 26B + 26D + 26H}` thr ≥ 2/4 simple-majority on **v15direct_n1000
 n=500 (5250-chip per-class eval, 7080 intersection chips, most reliable
@@ -45,6 +286,10 @@ single-model seed-luck is canceled by the ensemble. (Now superseded by iter39 pu
 
 | iter | best_cell           | macro_f1   | top1_11    | Δ macro_f1 | Δ top1_11  | source                                                                |
 |-----:|---------------------|-----------:|-----------:|-----------:|-----------:|-----------------------------------------------------------------------|
+|   21 | **★ Phase 87 v2 backbone throughput — paper §3.5 narrative correction** (3 regimes) | ConvNeXt V1 b=64 = **76 chip/s + bF1 0.9830 + Total FAR 2.62%** (throughput winner); ConvNeXtV2 b=1 = 37 chip/s + bF1 0.9654 + Total FAR 1.07% (latency-only, **GRN batching quirk**); Swin-Base b=4 = 54 chip/s + bF1 0.9692 + **Total FAR 0.00%** (strict-zero) | — | (no accuracy headline change — adds cost axis) | — | iter 21 isolated-GPU precise measurement (torch.cuda.Event, 20 warmup + 100 iter, 4 backbones × 6 batch). **ConvNeXtV2-Base is the only backbone where batching makes throughput worse**: b=1 peak 37 chip/s → b=64 drops to 26 chip/s (**0.70× scaling, NEGATIVE**) due to **GRN (Global Response Normalization) per-channel mean reduction at every block** (Woo et al. 2023 arXiv:2301.00808). All other backbones scale normally: EfficientV2-M **3.77×** (peak 158 chip/s b=4, but bF1 FAIL at iter46E recipe), ConvNeXt V1 **1.85×** (peak 76 chip/s b=64, bF1 0.9830 PASS), Swin-Base **1.13×** flat (peak 54 chip/s b=4, **strict-zero FAR**). **Paper §3.5 correction**: PREVIOUS "ConvNeXtV2 = best balanced" claim was accuracy-only and ignored GRN. NEW 3-regime selection: Latency-critical inline → Swin-Base 21.08 ms/chip b=1; Throughput-critical batched → ConvNeXt V1 76 chip/s b=64; ConvNeXtV2 reserved for inline + paper-main legacy. **10k-chip processing time**: ConvNeXt V1 132 s vs ConvNeXtV2 270 s = **2.05× speedup at same param count + +0.0176 bF1**. Single-model accuracy ranking unchanged (iter46E ConvNeXtV2 remains paper-main winner by bF1 + Total FAR). New CSV `tables/backbone_throughput.csv` (24 rows). See `iters/iter_21_backbone_throughput_paper3.md`. |
+|   20 | **★ trainer patch — `--cutmix-other-label`** (no run yet) | (planned iter83 sweep) | — | — | — | iter 20 trainer change: `chip_multilabel/_train_chip_variant.py` gains `--cutmix-other-label` (default 0.0, non-breaking). Motivated by Phase 84b prob-distribution diagnostic on iter46E (TRAIN defect own-prob 0.84-0.92 vs EVAL OOD max-prob ~0.55 vs EVAL NI max-prob ~0.46). Hypothesis: hard-zero off-class bit labeling on mix chips → over-confident "absent class" prior that fails on OOD. Soft off-class label (e.g., 0.1) preserves calibration uncertainty. Planned iter83 sweep `{0.0, 0.05, 0.10, 0.15, 0.20}` at iter46E base recipe + 3-seed expansion on winner. See `iters/iter_20_other_label_patch.md`. |
+|   19 | **★ iter79 iter26H multi-seed + iter80 cross-recipe (12/16 cells)** | seed=7 macro_f1 **0.8769** (iter79 best), seed=42 catastrophic | 0.5526 | — | — | iter 19 vanilla multi-seed robustness. **iter79** (iter26H recipe × 8 seeds): bit_F1 0.9695 ± 0.033, 5/8 pass `ni_FAR ≤ 0.5%`, **seed=7 peak 0.9961**, **seed=42 ni_FAR=100% catastrophic**. Same-recipe 3-bag `{s7+s13+s21}` restores **0.9955 / ni_FAR=0%**. **iter80** (4 recipes × 3 seeds = 12 cells done): best mean = 40F (0.8365 stage1 macro_f1). **Critical**: iter42F (rect=0.5) and iter46E (rect=0.3) produce **bit-identical macro_f1 across all 3 shared seeds** (0.8142 / 0.7998 / 0.7750) — proves `--cutmix-rect` is no-op under `cutmix_mode=complement`. Total FAR not yet measured for iter79/iter80 cells (iter83 deferred). See `iters/iter_19_vanilla_multi_seed_robust.md`. |
+|   18 | **★★★ Phase 83 / 85 Total FAR correction — invalidates prior "SOTA" rankings** | iter46E vanilla single = bit_F1 **0.9654 / Total FAR 1.07%** ★ true production winner; NEW ensemble SOTA 4-bag k=3 = **0.9909 / Total FAR 0.00%** | — | — | — | iter 18 critical paper correction. Legacy `ni_FAR` pooled only 4 Normal sources, excluded 4 OOD wafer-patterns (CenterDonut/CrossScratch/DiagonalSmear/Starburst). Phase 83 re-scored all "SOTA" cells with **Total FAR = (NI + OOD) / total**: iter69 ep=12 "SOTA" KD bF1=0.9941 but **Total FAR=36.67%** (masked OOD blow-up); iter50B paper KD 0.9872 / 12.86%; iter67D 0.9917 / 11.79%; iter41E 0.9961 / 15.24%; **iter46E vanilla = 0.9654 / 1.07%** ★ (only single model with bF1≥0.96 AND Total FAR≤5%); iter72A no-Normal 0.8908 / 0.00% (over-conservative). Phase 85 ensemble: prior "0.9966 SOTA" k=2 actually Total FAR=2.86% — **same 4-bag k=3 (stricter quorum) → 0.9909 / 0.00% NEW ensemble SOTA** (−0.0053 bF1 trade for true zero). iter46E recipe clarification: `--cutmix-rect 0.3` is no-op under `cutmix_mode=complement`; real axes are `n-groups=3 / complete-label-scale=0.5 / pair=masked / pair-fill=corner / LS=0.20`. Phase 84b prob-distribution diagnostic: iter46E TRAIN defect own-prob 0.84-0.92 vs EVAL OOD max-prob ~0.55 vs EVAL NI max-prob ~0.46 — motivates iter20 patch. **Paper §5 main rewrite required**: lead with `(bit_F1, Total FAR)` pairs, not bit_F1 alone. Narrator agent handles `manager_report/REPORT.md` separately. See `iters/iter_18_total_far_correction.md`. |
 |   52 | **★★★ iter52 teacher bag-size curve (paper §6.21) — 4-bag UNIQUE sweet spot at α=0.5; 5-bag highest bF1 0.9913 BUT FAR 99.5% catastrophic; 14-bag collapses (needs α=0.3)** | bit_F1 0.9872 (FULL n=200, 3080 chips, iter52C ≡ iter50B; non-monotonic curve 0.9198→0.9768→0.9872→[0.9913 FAIL]→0.9862→0.9053) | — | (no headline change — duplicates iter50B 0.9872/0.5%; curve is added narrative) | — | **iter 52 teacher bag-size sweep at fixed (α=0.5, T=4)** — 6-cell sweep mapping bag size ∈ {2, 3, 4, 5, 6, 14} into single-model students; **iter52C (4-bag) = unique PASS sweet spot** at bit_F1=**0.9872** / FAR=**0.5%** (per-class bb=0.9866 / fk=0.9825 / sc=0.9795 / sr=1.0000). **Curve is non-monotonic**: 2-bag 0.9198 → 3-bag 0.9768 → 4-bag **0.9872** → 5-bag 0.9913 (**FAR=99.5%, FAIL**) → 6-bag 0.9862 → 14-bag 0.9053 (collapse). **5-bag FAR collapse paradox**: highest raw bit_F1 but ni_FAR=99.5% — adding 26B at α=0.5 over-fits the bb/fk pair-mask boundary, fires on virtually all Normal chips (0.0041 bit_F1 gain irrelevant). **6-bag (52E) recovery**: 26D KD-student diversity cancels the over-firing, FAR snaps back to 0.0% — viable PASS but indistinguishable from 4-bag at higher cost. **14-bag collapse at α=0.5**: paper main 33A used 14-bag at **α=0.3**, the correct α for that bag size; 14-bag with α=0.5 under-recovers ground-truth signal (−0.0819 vs 4-bag). **Paper §6.21 main claim — teacher bag-size ↔ optimal α anti-correlation**: smaller bag → sharper teacher (higher avg max prob) → student needs higher α; larger bag → softer teacher → lower α. The (α, T) recipe is **not transferable** across bag sizes. **No paper main change** — iter52C ≡ iter50B headline; curve is added narrative material. New rows `iter52{A,B,C,D,E,F}_FULL` + `iter52{A,B,C,D,E,F}_HARD050` (= 12) in `all_runs_macro_f1.csv`. See `iters/iter_52_teacher_bagsize_curve.md`. |
 |   50 | **★★★ iter50 4-bag teacher KD distillation — α=0.5 T=4 single SOTA 0.9872/0.5% (vs 33A paper main 0.9840/0%, +0.0032)** | bit_F1 0.9872 (FULL n=200, 3080 chips) | — | +0.0032 bit_F1 vs iter33A (14-bag teacher α=0.3 T=4); +0.005 FAR trade | — | **iter 50 4-bag teacher KD α/T sweep** — 5-cell sweep distilling NEW MAIN 4-bag teacher (24_LS030_seed42 + 26H + 33A + 37E, ensemble 0.9964/0%) into single students at α ∈ {0.3, 0.5, 0.7} × T ∈ {2, 4, 8}. **iter50B (α=0.5, T=4) = NEW SINGLE-SOTA**: bit_F1 = **0.9872**, ni_FAR = **0.5%**, per-class bb=0.9866 / fk=0.9825 / sc=0.9795 / sr=1.0000 (all PASS dual-gate). Beats prior single-best iter33A (14-bag-teacher α=0.3) at 0.9840 / 0% by **+0.0032 bit_F1** (with a small 0.5% FAR trade). **α sweet spot shifts 0.3 → 0.5** when teacher bag shrinks from 14 → 4: smaller teacher concentrates probability mass (avg max prob 0.91 in 4-bag vs softer 14-bag), so the student needs higher α to absorb that signal. T-axis at α=0.3 is secondary (T=2 → 0.9384, T=4 → 0.8921, T=8 → 0.9323 — all dominated by α=0.5 T=4). **Production cost frontier**: 1× single-model gap to 4× ensemble closes from 0.0124 → 0.0092 (−26%). New row `iter50B_4bag_teacher_KD_singleSOTA` in `paper_main_headline.csv` + 10 detail rows in `all_runs_macro_f1.csv` (5 FULL + 5 HARD050 pending). See `iters/iter_50_4bag_teacher_KD.md`. |
 |   46 | **★★★ iter46 5-axis FCM-PM ablation — pair-mask = method-essential (removing causes −0.18 catastrophic FAR collapse 2.5%→100%); other axes tunable** | (ablation; not a new winner — paper §5 ablation table material) | — | pair=none Δ bF1=−0.18 / Δ FAR=+97.5% (ESSENTIAL); mode=single Δ bF1=−0.035 (HELPFUL); fill/p/rect Δ bF1=−0.013 to −0.166 (tunable) | — | **iter 46 FCM-PM 5-axis ablation** — 6 cells flipping one axis (or one combo) vs 26B baseline (g=3 LS=0.50 mode=complement fill=corner p=0.25 rect=0.5 pair-mask=on). Cell A (pair=none) and F (pair=none + p=0.40 + g=2 LS=0.30) **FAIL dual-gate** with FAR=100% — pair-mask is method-essential safety-critical. Cells B (mode=single), C (fill=noise), D (p=0.40 g=4 LS=0.40), E (rect=0.3) PASS with smaller bF1 drops (−0.013 to −0.166). HARD050 cross-eval: 46E within 0.005 of 26B; 46D drops most (LS=0.40 lacks calibration). Paper §5 ablation table + §6 mechanism story material — cleanly separates method-essential (pair-mask, complement) from tunable (fill/p/rect/g/LS) axes. New CSV row `iter46_FCM_PM_ablation_summary` in `paper_main_headline.csv` + 12 detail rows in `all_runs_macro_f1.csv`. See `iters/iter_46_FCM_PM_ablation.md`. |
@@ -458,3 +703,90 @@ See `iters/iter_30_31_g_extension_regularization.md`.
 `tables/all_runs_macro_f1.csv` contains every iter-1-through-30 cell (484 rows
 as of 260509 iter30 partial) with columns: `iter, cell_id, train_id,
 inference_id, macro_f1, micro_f1, mAP, top1_11class, temperature, ece_post, source`.
+
+---
+
+## 260512 update — iter95-99 modern-backbone sweep + best-from-epoch ablation
+
+**Summary**: 14 single-model trains (iter95A/B, iter96A, iter97A/B/C, iter99A-E)
+across 5 backbone families (DINOv3-ConvNeXt-B, SwinV2-B-384, Hiera-B, Swin
+V1-B-384, ConvNeXtV2-B-384). All cells use the iter88 T7 recipe (BCE+LS=0.20
++ CutMix complement p=0.25 g=3 rect=0.5) with optional LR rescue and
+optional `--best-from-epoch=6`. **56 new cells appended** to both
+`tables/all_runs_macro_f1.csv` (iter=95/96/97/99) and
+`tables/backbone_landscape.csv` (rows 39-94).
+
+### Cross-iter best-cell timeline (new rows only)
+
+Per run_tag, the best inference cell (max `macro_f1`) and its Total FAR:
+
+| iter / run | backbone | ckpt | epoch | best cell | macro_f1 | bF1_4def | Total FAR | wall-time |
+|------------|----------|------|------:|-----------|---------:|---------:|----------:|----------:|
+| iter95A | DINOv3-ConvNeXt-B | best | 3 | T0__I10 | 0.6211 | 0.6211 | 34.05% | 2.5 min |
+| iter95B | SwinV2-B-384 | best | 1 | T0__I10 | 0.7843 | 0.7843 | **0.12%** | 145.0 min |
+| iter96A | Hiera-B | best | 1 | T0__I3 | 0.7228 | 0.7228 | 100% | 2.5 min |
+| **iter97A ★** | **DINOv3-ConvNeXt-B (LR=5e-5)** | **best** | **9** | **T0__I10** | **0.8700** | **0.8700** | **1.43%** | **5.6 min** |
+| iter97A (FINAL) | DINOv3-ConvNeXt-B (LR=5e-5) | final | 20 | T0__I3 | 0.7765 | 0.7765 | 100% | 5.6 min |
+| iter97B | DINOv3-ConvNeXt-B (LR=2e-5) | best | 1 | T0__I7 | 0.7037 | 0.7037 | 100% | 5.5 min |
+| iter97C | DINOv3-ConvNeXt-B (LR=1e-5) | best | 8 | T0__I10 | 0.8129 | 0.8129 | 44.29% | 5.5 min |
+| iter99A | ConvNeXtV2-B-384 (ep>=6) | best | 6 | T0__I10 | 0.8367 | 0.8367 | 12.14% | 7.6 min |
+| iter99B | Swin-V1-B-384 (ep>=6) | best | 6 | T0__I3 | 0.8030 | 0.8030 | 100% | 6.3 min |
+| iter99C | DINOv3-ConvNeXt-B (ep>=6) | best | 6 | T0__I10 | 0.7423 | 0.7423 | 86.79% | 2.8 min |
+| iter99D | Hiera-B (ep>=6) | best | 6 | T0__I10 | 0.7039 | 0.7039 | **4.76%** | 2.9 min |
+| iter99E | ConvNeXtV2-B-384 (LR=5e-5, ep>=6) | best | 8 | T0__I10 | 0.8282 | 0.8282 | 10.83% | 7.6 min |
+
+★ **iter97A is the iter95-99 single-best cell** (DINOv3 macro_f1 0.8700 /
+Total FAR 1.43% at ep=9 with LR=5e-5), but **still −0.06 below the iter89
+Swin V1 reference 0.9278** and **−0.10 below the iter46E ConvNeXtV2-B
+production reference 0.9654**. The iter95-99 sweep did not produce a new
+overall winner; it produced a strong negative result about modern backbones.
+
+### Comparison vs prior single-model headlines
+
+| reference cell | bF1_4def | Total FAR | iter95-99 challenger | challenger bF1 | challenger Total FAR | Δ bF1 | Δ FAR |
+|----------------|---------:|----------:|----------------------|---------------:|---------------------:|------:|------:|
+| iter46E ConvNeXtV2-B-384 (paper main) | 0.9654 | 1.07% | iter99A ConvNeXtV2 same recipe ep>=6 | 0.8367 | 12.14% | **−0.13** | +11.1pp |
+| iter77C Swin-B-384 (strict FAR) | 0.9692 | 0.00% | iter99B Swin-B-384 ep>=6 | 0.8030 | 100% | **−0.17** | +100pp |
+| iter89 Swin-B-384 LR1e-4 LS0.3 g2 | 0.9278 | 0.00% | iter97A DINOv3-B LR5e-5 ep9 | 0.8700 | 1.43% | **−0.06** | +1.4pp |
+
+**Every iter95-99 cell is worse than the corresponding pre-iter95 reference
+on bF1, Total FAR, or both.** The iter95-99 sweep is a confirmation that
+the existing ConvNeXtV2 / Swin V1 + FCMAE recipe combination is **not a
+local optimum that the next-generation backbones surpass** — at this
+4-class chip-multilabel + 4-OOD-pattern eval, modern backbones (DINOv3 SSL,
+SwinV2 scaled cosine, Hiera MAE-ViT) need significant per-family
+recipe redesign before they can challenge the production reference.
+
+### Headline lessons (paper §5 / §7)
+
+1. **Modern backbones do not transfer the FCMAE / Swin V1 recipe**
+   (Lesson 1, see `05_backbone_landscape.md` §5.10). DINOv3 default LR
+   loses 0.31 bF1; rescue at 2× lower LR recovers 0.25 but still trails by
+   0.06. SwinV2 trails 0.18 at 21× wall-time.
+2. **best-from-epoch is backbone-specific, not global** (Lesson 2, see
+   `03_ablations.md` "Best-from-epoch policy ablation"). FCMAE / Swin V1
+   peak at ep 1-3; DINOv3 / Hiera need ep 6-9. Global floor breaks 2 / 5
+   backbones.
+3. **val_acc plateau is NOT an eval F1 proxy** (Lesson 3). iter97A: val_acc
+   sits at 0.9816 for 20 epochs; eval F1 drifts 0.87 (ep9) → 0.77 (ep20),
+   Total FAR explodes 1.43% → 90.5%. **Paper §5 must show eval-F1 curves,
+   not val_acc curves.**
+4. **FCM-PM cutmix_p=0.25 is not strong enough to prevent single-label
+   overfit on DINOv3 by ep20** (Lesson 4). iter100 (cutmix_p=1.0)
+   running at logger time 19:50 — results pending in iter100 update.
+
+### Open items for iter100+
+
+- **iter100** (running): ConvNeXtV2-B-384 + cutmix_p=1.0. Tests Lesson 4
+  hypothesis that increased CutMix coverage closes the iter97A best→final
+  regression gap (0.87 → 0.77).
+- **iter101+**: per-backbone early-stop patience implementation in
+  `_train_chip_variant.py` (replace global `--best-from-epoch` floor).
+- **DINOv3 ensemble**: iter97A LR=5e-5 ep9 has a unique error
+  distribution vs Swin V1 / ConvNeXtV2; potential ensemble diversity
+  candidate. Deferred to post-iter100.
+
+_Source: `tables/backbone_landscape.csv` rows 39-94 (56 new cells, single-seed
+seed=42, v15direct n_per_class=200, 4 inference cells per train run).
+Per-iter detail in `05_backbone_landscape.md` §§ 5.7-5.11 and
+`03_ablations.md` "Best-from-epoch policy ablation (iter99)"._

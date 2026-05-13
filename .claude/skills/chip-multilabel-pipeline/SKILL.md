@@ -3,6 +3,28 @@ name: chip-multilabel-pipeline
 description: chip 200x200 single-label train -> multi-label predict 평가 파이프라인. classification_chips/ 4 class (bank_boundary, fork, scratch, scratch_rot) 학습 + 합성 12-class eval set (4 single + 6 combo + Normal + Invalid) 평가 매트릭스. ★ 단일 master 폴더 chip_multilabel/ + manifest 기반 runtime sampling (subset 폴더 절대 안 만듦). 저장 (master) defect 200/class 강한 것만, 사용 (eval) runtime --n-per-class 50. Stage 1 = 기존 모델 + inference variants (I0-I11; I5 TTA 영구 금지), Stage 2 = T1/T4/T5/T6 학습 후 inference 매트릭스. 결과는 outputs/stage1_<TS>/ 또는 outputs/stage2_<TS>/ 의 results_matrix.parquet + report.md.
 ---
 
+## ★★★ 절대 규칙 (260512) — 학습/평가 composition
+
+**학습 (train) — 4 single defect 만**:
+- `TRAIN_CLASSES = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']`
+- Normal / Invalid / OOD 학습 금지. 모든 train script `--no-normal` flag 명시.
+
+**평가 (eval) — 5 group**:
+- (a) **single defect** (4) — positive
+- (b) **2-combo** (현재 5; scratch+scratch_rot 은 same-family 제외) — positive
+- (c) **Normal** — negative
+- (d) **Invalid** — negative
+- (e) **OOD** wafer-pattern (CenterDonut, CrossScratch, DiagonalSmear, Starburst 등) — negative
+
+**Metric (절대)**:
+- **bit F1** = (a)+(b) macro-F1. `macro_f1` (전체 평균) 과 혼동 금지.
+- **FAR** = (Normal_fp + Invalid_fp + OOD_fp) / N_negative. NI-only FAR 단독 reporting 금지.
+
+상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`,
+`D:/project/known-cnn/CLAUDE.md` "★★★ 절대 규칙: chip multi-label train/eval composition" 섹션.
+
+---
+
 ## ★ 단일 master 폴더 정책 (260506)
 
 **저장 (master)** = `D:/project/data/wm-811k/chip_multilabel/`

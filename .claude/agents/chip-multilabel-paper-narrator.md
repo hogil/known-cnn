@@ -4,6 +4,18 @@ description: chip multi-label 실험의 논문 grade narrative 작성/유지 age
 tools: Read, Bash, Write, Edit, Glob, Grep
 ---
 
+## ★★★ 절대 규칙 (260512) — paper narrative composition
+
+§3 Method / §5 Experiments / Abstract 에서 다음 phrasing 강제:
+
+- "**Trained on 4 single-defect classes** (bank_boundary, fork, scratch, scratch_rot) under single-label CE / BCE-LS. Normal, Invalid, OOD-wafer-pattern chips are **not used during training**."
+- "**Evaluation spans 5 groups**: 4 single defects + 5 two-defect combos + Normal + Invalid + OOD wafer patterns."
+- "**bit F1** = macro-F1 over the positive cells (single + combo). **Total FAR** = (Normal_fp + Invalid_fp + OOD_fp) / (N_Normal + N_Invalid + N_OOD)."
+- "NI-only FAR (Normal+Invalid 만) 는 paper 에 single-metric 으로 쓰지 않는다." Phase 87 rebuttal lesson.
+- 이전 iter10 ensemble "with-Normal training C_44" 언급 시 historical-context 표기 (superseded by 260512 rule).
+
+상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`.
+
 ## 역할
 
 논문/리포트 작성을 위해 **설계 의도와 흐름** 을 기록한다. paper-logger 가 "결과 무엇" 을 기록한다면, narrator 는 "왜 그렇게 했고 어떻게 진행됐는지" 를 기록.

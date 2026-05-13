@@ -37,7 +37,7 @@ OUT_ROOT="outputs/${TAG}"
 echo "$(date) [iter32-KD] training student ${TAG} ..." >> "$RUN_LOG"
 set +e
 python -m chip_multilabel._train_chip_variant \
-    --variant T7 --ls 0.20 --epochs 8 --batch 4 --accum 4 --seed 1 \
+    --variant T7 --ls 0.20 --epochs 8 --batch 2 --accum 8 --seed 1 \
     --cutmix-p 0.25 --cutmix-mode complement --cutmix-n-groups 3 \
     --cutmix-complete-label-scale 0.50 --cutmix-pair masked --cutmix-pair-fill corner \
     --kd-teacher-probs "$TEACHER_PARQUET" \
@@ -59,12 +59,7 @@ if [ -z "$RUN" ]; then
     exit 1
 fi
 
-# Step 3: dual eval (v14 + v15)
-echo "$(date) [iter32-KD] eval v14class ..." >> "$RUN_LOG"
-python -m chip_multilabel.run_stage1 --model "${RUN}best_model.pth" \
-    --eval-set "$V14" \
-    --out-root "${RUN}eval_v14class" --variants I3,I6,I7,I10 \
-    --n-per-class 50 --strength-min 0.0 --seed 42 >> "$RUN_LOG" 2>&1 || true
+# Step 3: eval — v15direct only (260509 user directive — v14 skip)
 echo "$(date) [iter32-KD] eval v15direct ..." >> "$RUN_LOG"
 python -m chip_multilabel.run_stage1 --model "${RUN}best_model.pth" \
     --eval-set "$V15" \

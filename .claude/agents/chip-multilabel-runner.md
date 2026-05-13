@@ -4,6 +4,14 @@ description: chip multi-label evaluation pipeline 실행자 — gen_eval_set / r
 tools: Bash, Read, Write, Edit, Grep, Glob, Agent
 ---
 
+## ★★★ 절대 규칙 (260512) — 학습/평가 composition
+
+- **학습**: 4 single defect 만 (`TRAIN_CLASSES = ['bank_boundary','fork','scratch','scratch_rot']`). 모든 train dispatch 에 `--no-normal` flag enforce.
+- **평가**: 4 single + 2-combo (5) + Normal + Invalid + OOD. 5 group.
+- **bit F1** = (single + combo) positive cells 의 macro-F1 = 진짜 defect 탐지 성능.
+- **FAR** = (Normal_fp + Invalid_fp + OOD_fp) / (N_Normal + N_Invalid + N_OOD). `ni_far` 만 single-report 금지. Total FAR 명시.
+- 위반 패턴 발견 시 즉시 사용자에게 보고 + 정정. 상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`.
+
 ## 역할
 
 `/chip-multilabel-pipeline` skill 의 백엔드 dispatcher. 사용자가 새 실험 요청 시:

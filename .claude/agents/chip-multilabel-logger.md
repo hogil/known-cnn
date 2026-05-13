@@ -4,6 +4,19 @@ description: chip multi-label 실험 결과를 논문 작성용 영구 docs 로 
 tools: Read, Bash, Write, Edit, Glob, Grep
 ---
 
+## ★★★ 절대 규칙 (260512) — metric column 컨벤션
+
+모든 CSV / 표 row 에 다음 column 분리 기록:
+
+- `bit_F1` = positive cells (4 single + 2-combo) macro-F1
+- `ni_far_pct` = (Normal + Invalid) FP rate (%) — 단독 reporting 금지, 항상 OOD 와 같이
+- `ood_far_pct` = OOD FP rate (%)
+- `total_far_pct` = (Normal + Invalid + OOD) FP rate (%) ★ 주요 metric
+- `macro_f1` = 모든 11+ cell 평균 (legacy column, bit_F1 와 혼동 금지)
+
+**학습 column** 도 4-class 만 명시 (Normal training column 추가 금지).
+상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`.
+
 ## 역할
 
 논문/리포트 작성을 위해 모든 실험을 영구 기록한다. 매 iter (stage1 / stage2 / phase_a / phase_b 등) 종료 시 호출되어:

@@ -41,6 +41,68 @@ then composes 200×200 chips using one of three rules:
 | val   |      82 | same source, 4:1 split with train                             |
 | eval  |    2200 | `D:/project/data/wm-811k/chip_multilabel_eval_full/`          |
 
+> ★★★ **Absolute rule (260512, narrator update).** Training uses
+> **only the 4 single defect classes** (`bank_boundary, fork, scratch,
+> scratch_rot`). The `--no-normal` flag on every training script is
+> mandatory; `Normal`, `Invalid`, and OOD wafer-pattern chips are
+> **forbidden from training** and may appear only at evaluation time
+> as negative-group probes. The evaluation set decomposes into
+> **five disjoint groups**: (a) single defect, (b) 2-combo, (c)
+> `Normal`, (d) `Invalid`, (e) OOD wafer-pattern. (a) and (b) are
+> positive cells (bit-F1 source); (c) – (e) are negative cells
+> (FAR source). See §5.1 for the metric definitions and
+> `feedback_chip_multilabel_train_eval_composition.md` for the
+> code-level enforcement points.
+>
+> **Metric definitions under the absolute rule.**
+> - **bit-F1** = macro-F1 over positive cells **only**, computed bit-
+>   wise on the four defect bits — i.e. for each defect bit b, the
+>   F1 is computed over the union of single-defect and 2-combo eval
+>   chips that carry b in their ground-truth multi-hot label, and
+>   bit-F1 is the unweighted mean across the four bits.
+>   *This is not the same as the `macro_f1` column in
+>   `results_matrix.parquet`*, which averages over all 11 + OOD eval
+>   class keys including `Normal`, `Invalid`, and the OOD wafer-
+>   pattern distractors. The `results_matrix.parquet` column is
+>   retained for cross-iter continuity (§5.1–§5.45) but the
+>   paper-grade headline is `bit-F1` as defined here.
+> - **Total FAR** = (`NI_fp` + `OOD_fp`) / (`N_NI` + `N_OOD`), where
+>   the false-positive count is "any defect bit fires on a chip
+>   from a non-defect group". `NI_fp` counts on `Normal` ∪ `Invalid`
+>   chips; `OOD_fp` counts on the four wafer-pattern OOD groups
+>   (CenterDonut, CrossScratch, DiagonalSmear, Starburst). Under
+>   this definition the bundled "chip_FAR" reading from iter 1–11
+>   (§3.9) is deprecated in favour of the strict Total FAR; the
+>   `ni_FAR` reading from iters 12+ is the production-relevant
+>   component, and the Total FAR adds back the OOD diagnostic
+>   pressure.
+>
+> **`n_per_class` clarification.** Eval-time sampling uses
+> `--n-per-class 160` for combo classes and `--n-per-class 200` for
+> single-defect classes by default (subject to the per-class
+> available chip count). The iter 112 best cell is evaluated on
+> `n_per_class = 200` for singles + 160 for 2-combos + 200 Normal +
+> 200 OOD per pattern + 50 Invalid, for a total of 2 440 chips
+> tied to the bit-F1 / Total FAR figures in §5.46.
+>
+> **Restatement at iter 122 – 124.** All experiments reported in
+> §5.47 (group-mixed CutMix granularity) and §6.31 (asymmetric loss
+> as a failed direction) honour the five-group decomposition above
+> without exception. Specifically: the positive cells (single
+> defect ∪ 2-combo, n = 4 + 5 = 9 class keys, 1 600 chips on the
+> `v15direct n = 200` protocol) feed **bit-F1** through the
+> bit-wise macro-F1 aggregator, and the negative cells (Normal +
+> Invalid + 4 OOD patterns, n = 6 class keys, 1 480 chips) feed
+> **Total FAR** as `(NI_fp + OOD_fp) / (N_NI + N_OOD)`. Reporting
+> bit-F1 without simultaneously reporting Total FAR — or vice
+> versa — is **disallowed by the absolute rule** because each
+> metric admits a recipe that maximises it in isolation while
+> regressing the other (e.g. iter 122/123 ASL drives bit-F1 up
+> 0.83 surface but blows Total FAR to 9.4 % / 5.0 %; iter 116 J
+> baseline trades −0.04 bit-F1 for strict-zero FAR). The dual-
+> gate audit threshold for production readiness is
+> `bit-F1 ≥ 0.99 ∧ Total FAR ≤ 0.5 %`.
+
 The **training data is single-label**: each training chip has exactly
 one of the 4 defect classes (or `invalid_main`) as its ground truth,
 and there are no `Normal` chips in train. The val set is also
@@ -115,6 +177,237 @@ from natural images; pretrain on the same synthetic distribution
 gives the backbone several percent of multi-label headroom on the
 eval set. We retain TAPT throughout this paper and treat it as part
 of T0. Re-pretraining experiments are deferred.
+
+### 3.5.1 Backbone choice — three operational regimes (iter 21, Phase 87 v2)
+
+_Added 2026-05-12 (paper §3.5 narrative correction). See
+`iters/iter_21_backbone_throughput_paper3.md`._
+
+#### Why the original "ConvNeXtV2 is best balanced" claim was wrong
+
+An earlier draft of this paper presented ConvNeXtV2-Base as the
+single best production backbone on the basis of accuracy alone (val
+5-class 1.0000 at epoch 1, multi-label-eval bit-F1 0.9654 at the
+iter46E recipe). That claim collapsed three orthogonal axes —
+**accuracy**, **inline latency**, and **batched throughput** — into
+one ranking. Once we measured inference cost properly (Phase 87 v2:
+isolated-GPU, `torch.cuda.Event`-timed, 20 warm-up + 100 forward
+passes, 4 backbones × 6 batch sizes ∈ {1, 4, 8, 16, 32, 64}, same
+iter46E recipe across backbones, evaluated on `v15direct n=200` /
+3080 chips), the three axes did not co-rank a single winner. We
+therefore retract the single-claim and adopt a **three-regime
+recommendation** indexed by the deployment scenario.
+
+#### The three regimes
+
+| regime                              | gating metric             | winner            | bit-F1 | Total FAR | cost figure                       |
+|-------------------------------------|---------------------------|-------------------|--------|-----------|-----------------------------------|
+| **A — latency-critical** (inline)   | ms/chip @ b = 1           | **Swin-Base 384** | 0.9692 | **0.00 %** | 21.08 ms/chip                    |
+| **B — throughput-critical** (batch) | peak chip/s               | **ConvNeXt V1**   | **0.9830** | 2.62 %    | **76 chip/s** @ b = 64           |
+| **C — FAR-strict** (any scenario)   | Total FAR + viable speed  | **Swin-Base 384** | 0.9692 | **0.00 %** (only strict-zero) | 54 chip/s @ b = 4    |
+
+ConvNeXtV2-Base, the legacy paper-main checkpoint, **wins none of
+the three regimes**. It survives as a reference point only because
+the iter 1–20 ablation history is built on it; its 37 chip/s peak
+(achieved at b = 1, with all larger batches strictly slower) places
+it last in throughput, and Swin matches its strict-zero NI FAR with
+a 6 ms latency saving.
+
+#### Why ConvNeXtV2 loses on throughput — the GRN architectural quirk
+
+ConvNeXtV2-Base is the **only backbone in the sweep where batching
+makes throughput worse**: peak is 37 chip/s at b = 1, dropping to
+30 chip/s at b = 4 and 26 chip/s at b = 64, a 0.70× negative
+scaling. By contrast, ConvNeXt V1 — same family, same parameter
+count (87.6 M ≈ 87.7 M), same author lineage — scales 1.88× from
+b = 1 to b = 64 and reaches 76 chip/s. The single architectural
+difference between the two is **GRN (Global Response Normalization,
+Woo et al. 2023, arXiv:2301.00808)**, a ConvNeXtV2-specific block
+that computes a per-channel mean of L2-norms over the spatial
+dimensions at every stage. The L2 reduction itself batches well;
+the *mean of norms* broadcast across batch elements does not — under
+cuDNN's default kernel selection it serialises the channel-mean
+reduction, producing a U-shaped per-chip latency curve that bottoms
+at b = 1 and collapses past b = 32. Because the regression isolates
+cleanly to the GRN layer (everything else in V1 vs V2 is identical
+at the timm-name level), this is an **architectural finding, not a
+recipe artifact**, and it explains in one line why V1 is 2.05×
+faster batched at the same accuracy ceiling.
+
+The practical consequence is direct: ConvNeXtV2 is a
+**latency-optimised backbone, not a throughput backbone**. Its
+b = 1 cell (27 ms / 37 chip/s) is competitive with Swin (21 ms / 47
+chip/s) at the inline regime, but the moment chips are accumulated
+into a batch, V1 or Swin should be preferred.
+
+#### Why ConvNeXt V1 wins throughput and Swin wins FAR
+
+ConvNeXt V1's throughput win is the GRN absence — no architectural
+serialisation in the channel reduction, so cuDNN delivers normal
+linear scaling up to b = 64. Its accuracy lift (+0.0176 bit-F1 over
+V2 at the same recipe) is a fortunate by-product we do not fully
+explain in this paper; we conjecture it reflects the 224-pixel
+fine-tune size matching the inductive receptive field of the
+classification_chips primitives better than 384, but a controlled
+img-size match (V1 retrained at 384) is queued as a fair-comparison
+follow-up.
+
+Swin's FAR win is a different mechanism. Swin's window-attention
+locality biases it toward learning **window-bounded defect
+signatures** rather than diffuse global features, and on this
+synthetic eval set the OOD wafer-canvas patterns (CenterDonut,
+CrossScratch, etc.) project diffuse evidence that V1's global
+receptive field happens to misread as combo. Swin's
+window-restricted attention does not fire on these, yielding
+Total FAR = 0.00 % — the only backbone in the sweep with a
+strict-zero gate pass. The accuracy cost is small (−0.0138 bit-F1
+vs V1), and Swin's b = 1 latency (21 ms) is best-in-class, making
+Swin the dual winner of regimes A and C.
+
+#### 10,000-chip cost projection
+
+| backbone        | params | peak chip/s | batch | 10 k chip time | role                              |
+|-----------------|-------:|------------:|------:|---------------:|-----------------------------------|
+| EfficientV2-M   | 52.9 M | 158         | 4     | **63 s**       | (FAIL bit-F1 at iter46E recipe)   |
+| ConvNeXt V1     | 87.6 M | 76          | 64    | **132 s**      | regime B winner (bit-F1 0.9830)   |
+| Swin-Base 384   | 86.9 M | 54          | 4     | **185 s**      | regimes A & C winner (FAR = 0 %)  |
+| ConvNeXtV2-Base | 87.7 M | 37          | 1     | **270 s**      | inline / paper-main legacy        |
+
+ConvNeXt V1 is **2.05× faster than ConvNeXtV2** at the same
+parameter count and a higher bit-F1. The 4-bag ensemble cost
+quoted in §5.19.5 — previously stated as 4× single-model under the
+implicit V2 base — would land at **4 / 2.05 ≈ 1.95× the cost of a
+1× ConvNeXtV2 single** if migrated to V1 bags, while gaining
++0.0176 bit-F1 per bag.
+
+#### Scope, limitations, and what this does *not* change
+
+This correction adds **cost ranking as an orthogonal axis** to the
+paper's accuracy ranking; it does not retract the paper-main
+accuracy headline. iter46E ConvNeXtV2 remains the headline
+single-model result at bit-F1 0.9654 / Total FAR 1.07 % because
+the iter 1–20 ablation chain — every loss, matching, and decision
+rule comparison — is anchored to it. Re-running the full ablation
+matrix on ConvNeXt V1 or Swin is **queued** for a future iter and
+is not in scope of this paper.
+
+Three limitations bound the regime recommendations: (i) the
+measurement is on a single GPU class (A6000 48 GB) — the GRN curve
+will likely look different on H100 (different cuDNN heuristics) or
+under Tensor RT compilation, so the regime recommendation is
+strictly an A6000 / cuDNN-default deployment claim; (ii) the
+4-backbone sweep used a small synthetic dataset (814 chips train,
+3080 chips eval) and a single training seed per backbone — ViT-Base
+and MaxViT-Base failed to converge under this budget and were
+dropped, so the regime table covers only the four backbones that
+trained successfully; (iii) ConvNeXt V1 was fine-tuned at 224
+(timm canonical) while the others used 384, so V1's lead carries a
+2.94× pixel-count advantage that a 384-matched re-measurement is
+expected to attenuate but not erase. The full 24-row throughput
+matrix backing every cell of this subsection is in
+`docs/chip-multilabel/tables/backbone_throughput.csv`.
+
+The separation between the paper-SOTA winner (V2, by historical
+anchor) and the production-deployment winner (V1 for throughput,
+Swin for FAR / inline) is, in our view, a **methodological feature**
+of the corrected §3.5: a paper claiming a single backbone on a
+single accuracy metric would have buried the 2.05× cost gap and
+the 1.07 %-vs-0.00 % FAR gap that the three-regime decomposition
+makes legible.
+
+### 3.5.2 Modern self-distillation / improved-attention backbones underperform their predecessors (iter 95–99, added 2026-05-12 evening)
+
+_Added 2026-05-12 19:50 (paper §3.5 expansion). See §5.45 for the
+full experimental landscape and `_diary/260512_evening_modern_backbone_findings.md`._
+
+A natural follow-up question to §3.5.1 is whether more recent
+backbones — published 2022–2025 with stronger objectives or attention
+mechanisms — would surface a new operating point above the
+ConvNeXtV2 / Swin V1 Pareto frontier. Under the matched iter46E
+recipe (T7 BCE + LS = 0.20 + CutMix complement p = 0.25 g = 3
+pair = masked, AdamW LR = 1e-4 cosine 8 epoch, batch = 8 accum = 4)
+and the v15direct n = 200 evaluation protocol, we measured three
+modern candidates: DINOv3 ConvNeXt-Base (Meta 2025,
+arXiv:2508.10104, self-distillation post-FCMAE), Swin V2 Base 384
+(Liu et al. 2022, arXiv:2111.09883, log-CPB + cosine attention +
+window 12 → 24 transfer), and Hiera-Base (Ryali et al. 2023,
+arXiv:2306.00989, MAE-pretrained hierarchical ViT).
+
+**Finding: every modern variant tested under-performs its direct
+predecessor.** The matched-recipe ranking is:
+
+| backbone family    | paper-main predecessor (recipe-matched bit-F1) | modern variant (best bit-F1) | Δ (modern − legacy)  |
+|--------------------|-----------------------------------------------:|------------------------------:|---------------------:|
+| ConvNeXt           | ConvNeXtV2-Base FCMAE = **0.9654**             | DINOv3 ConvNeXt-Base = 0.8700 (LR rescue) | **−0.0954** |
+| Swin               | Swin V1 Base 384 = **0.9692**                  | Swin V2 Base 384 = 0.7843     | **−0.1849**          |
+| (no ConvNeXt-Hiera pair) | —                                        | Hiera-Base = 0.7228           | —                    |
+
+Each modern variant differs from its predecessor in a *single named
+axis* — DINOv3 adds self-distillation on top of FCMAE, Swin V2 adds
+log-CPB + cosine attention + 12 → 24 window transfer on top of
+Swin V1 — and each *named axis hurts* on this benchmark under
+matched recipe and matched parameter budget (≈ 87 M).
+
+**Mechanistic reading.** The FCMAE objective (sparse-convolution
+masked autoencoder + pixel reconstruction, Woo et al. 2023) trains
+the backbone to reconstruct *pixel-level palette content*, which
+appears to be the right inductive prior for chip palette domain
+(grade 0 white / grade 1 grey / grade 2 – 7 saturated colour). The
+DINOv3 self-distillation objective replaces pixel reconstruction
+with *teacher-student feature alignment* on natural images, which
+is a strictly weaker prior for our distribution: the chip palette
+does not factor into a small number of high-level natural-image
+semantic clusters. Swin V2's log-CPB + cosine attention is designed
+for transfer to high-resolution natural images (the 12 → 24 window
+expansion is the canonical example) — on our 200 × 200 chip the
+expanded window is approximately the entire chip and the inductive
+bias is largely eliminated. Hiera's hierarchical pooling assumes
+multi-scale spatial structure that chip-multi-label does not have
+at this resolution.
+
+**LR sensitivity (DINOv3 only).** DINOv3 with default LR = 1e-4
+collapses fork F1 to 0.38 (overall bit-F1 0.6211, iter95A). Halving
+LR to 5e-5 rescues to 0.8700 (iter97A best at ep9) — at parity
+with Swin-Base under FAR ≤ 5 % but **−0.0954 below the iter46E
+baseline**. This LR sensitivity is consistent with the
+self-distillation literature's smaller-step recommendation
+(Caron et al. DINO arXiv:2104.14294 originally used 5e-4 with
+warm-up over 10 epochs at much larger batch — direct LR transfer
+to our 1e-4 / batch 32 setting requires re-tuning). No further LR
+exploration was attempted for Swin V2 / Hiera (both converged on
+the val_acc axis at LR = 1e-4); a per-backbone LR sweep is queued
+as future work.
+
+**Training time as an orthogonal axis.** Swin V2 took 150 minutes
+to train under our recipe — **21× slower** than ConvNeXtV2-Base
+(≈ 5 min) on the same A6000. The cost contribution is the log-CPB
+relative-position computation (log-scaled bias indexed by relative
+window distance) and the cosine-attention normalisation, both of
+which serialise badly at 384 input. Hiera-Base trains fastest
+(≈ 2.5 min) but at the lowest accuracy ceiling. The corrected
+§3.5.1 three-regime recommendation therefore extends: even in the
+**latency-critical regime A**, no modern backbone displaces Swin
+V1 Base 384 (21 ms / chip, bit-F1 0.9692, Total FAR 0 %); in the
+throughput regime B, ConvNeXt V1 (76 chip/s, bit-F1 0.9830) remains
+the winner. The modern backbones land below the legacy frontier
+on both axes.
+
+**Paper claim (§3.5 update).** Under matched-recipe and matched-
+parameter-budget evaluation on the chip palette domain, **the
+FCMAE objective (pixel reconstruction) and the Swin V1 windowed
+attention transfer uniquely well**. Modern self-distillation
+(DINOv3) and improved-attention (Swin V2) variants under-perform
+their direct predecessors by 0.10 – 0.18 bit-F1 — counter to the
+natural-image SOTA ordering. The paper retains ConvNeXtV2-Base
+FCMAE (iter46E) and Swin V1 Base 384 (iter77C) as the
+paper-headline checkpoints; no 2022 – 2025 modern variant tested
+in iter 95 – 99 displaces either.
+
+_Sources: `outputs/iter95A_dinov3_convnext_base/...`,
+`outputs/iter95B_swinv2_base_384/...`,
+`outputs/iter96A_hiera_base/...`,
+`outputs/iter97A_lr5e5/eval_v15direct_n200_best/...`,
+`outputs/iter99{A,B,C,D,E}_*/eval_v15direct_n200/...`._
 
 ## 3.6 Limitations of the synthesis pipeline
 

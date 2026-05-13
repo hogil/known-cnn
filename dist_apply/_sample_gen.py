@@ -764,8 +764,10 @@ ALPHA_FNS = {
 }
 
 CHIP_OBJECTS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']                   # round 26 spec
-# Normal 전용 = 등록된 4개 + 새로운 5개 novel (defect class와 구분)
-NORMAL_OBJECTS = CHIP_OBJECTS + ['geometric_random', 'small_dot', 'fragment', 'irregular', 'ring_small']
+# 260508 v5.2.2: Normal 의 chip-internal 결함 = 4 standard 만 (사용자 directive
+# "이상한 칩내 동그라미 같은건 하지마라"). 5 novel (geometric_random/small_dot/fragment/irregular/ring_small)
+# 영구 제거 — 기존 wafer 의 70% novel 비중이 chip 내 비현실적 동그라미 origin.
+NORMAL_OBJECTS = list(CHIP_OBJECTS)
 
 # ===== Defect chip selection =====
 def _wafer_inside_mask():
@@ -892,9 +894,8 @@ def select_normal_chips(rng, inside):
     idx = rng.choice(n_inside, size=n_pick, replace=False)
     mask[ys[idx], xs[idx]] = True
 
-    # 9 object types, novel 비중 ↑
-    obj_p = np.array([0.05, 0.05, 0.05, 0.05, 0.10, 0.20, 0.20, 0.20, 0.10])
-    obj_p = obj_p / obj_p.sum()
+    # 260508 v5.2.2: 4 standard obj 만 — 동그라미 영구 제거. uniform weight (4 obj).
+    obj_p = np.ones(len(NORMAL_OBJECTS)) / len(NORMAL_OBJECTS)
     for (gy, gx) in np.argwhere(mask):
         obj_map[(int(gy), int(gx))] = NORMAL_OBJECTS[int(rng.choice(len(NORMAL_OBJECTS), p=obj_p))]
     return mask, obj_map
@@ -1003,10 +1004,28 @@ def render(class_name, object_name, seed):
     # 5) Defect chips: alpha modulation per chip with assigned object
     #    Round 29 v15: intensity_tier per-wafer scales alpha + shifts grade dist
     alpha_scale = INTENSITY_ALPHA_SCALE[intensity_tier]
+    # 260508 v5.2.3: Normal 만 — chip-level intensity 를 wafer-wide smooth field 로 변화
+    # (사용자 directive "그라데이션 고려"). 한 wafer 내 chip 결함 intensity 가 위치별 부드러운 변화.
+    intensity_grid_normal = None
+    if class_name == 'Normal':
+        # 32×32 smooth field (chip-level), 0.6 ~ 1.0 multiplier
+        # 1/f^1.5 pink noise on 32×32 grid → 부드러운 위치별 강도
+        _white = rng.standard_normal((GRID, GRID))
+        _freqs = np.fft.fftfreq(GRID)
+        _fx, _fy = np.meshgrid(_freqs, _freqs)
+        _fmag = np.sqrt(_fx*_fx + _fy*_fy); _fmag[0,0] = 1.0
+        _spec = 1.0 / (_fmag ** 1.5); _spec[0,0] = 0.0
+        _filt = np.real(np.fft.ifft2(np.fft.fft2(_white) * _spec))
+        _fmin, _fmax = float(_filt.min()), float(_filt.max())
+        _norm = (_filt - _fmin) / (_fmax - _fmin + 1e-9) if (_fmax-_fmin) > 1e-9 else np.full_like(_filt, 0.5)
+        intensity_grid_normal = (0.6 + 0.4 * _norm).astype(np.float32)                # ∈ [0.6, 1.0]
     for (gy, gx), meta in chip_meta.items():
         if meta['kind'] != 'defect': continue
         obj = meta['obj']
-        alpha = ALPHA_FNS[obj](rng) * alpha_scale                                     # weak/mid/strong scale
+        if intensity_grid_normal is not None:
+            alpha = ALPHA_FNS[obj](rng) * float(intensity_grid_normal[gy, gx])         # Normal: spatial gradient
+        else:
+            alpha = ALPHA_FNS[obj](rng) * alpha_scale                                  # weak/mid/strong scale
         cum_obj = np.cumsum(shifted_object_dist(obj, intensity_tier))                 # grade shift down
         # 11단계 세분화 + 익스포넨셜 ramp toward CENTER
         # BG↔EDGE 0~0.40 (wider, smoother transition with normal area)
@@ -1071,6 +1090,33 @@ def render(class_name, object_name, seed):
         y0, x0 = gy*CHIP, gx*CHIP
         canvas[y0:y0+CHIP, x0:x0+CHIP] = grades
 
+    # 5b) Normal class 전용: wafer-canvas weak overlay (260508 v5.2.2 사용자 directive
+    # "wafer canvas 불량 참조해서 그런 노이즈들도 좀 넣자"). 50% Normal wafer 에 random
+    # wafer-canvas alpha × 0.20-0.35 적용 — line/arc/ring 의 faint trace 만 추가.
+    if class_name == 'Normal' and rng.random() < 0.5:
+        try:
+            import sys as _sys
+            _here = os.path.dirname(os.path.abspath(__file__))
+            if _here not in _sys.path: _sys.path.insert(0, _here)
+            from _sample_canvas_gen import ALPHA_FNS as CANVAS_ALPHA_FNS, CANVAS_CLASSES as CANVAS_CLS
+            picked = CANVAS_CLS[int(rng.integers(0, len(CANVAS_CLS)))]
+            alpha_canvas = CANVAS_ALPHA_FNS[picked](rng)
+            weak_scale = float(rng.uniform(0.20, 0.35))
+            alpha_weak = (alpha_canvas * weak_scale).astype(np.float32)
+            # mask wafer outside (chip-less area)
+            inside_pix2 = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)
+            alpha_weak = alpha_weak * inside_pix2.astype(np.float32)
+            # apply: where alpha > 0.05, randomly upgrade pixel to grade 1 or 2
+            u_overlay = rng.random((SIZE, SIZE))
+            is_overlay = (u_overlay < alpha_weak)
+            u_overlay2 = rng.random((SIZE, SIZE))
+            overlay_grade = np.where(u_overlay2 < 0.92, np.uint8(1), np.uint8(2))
+            # only override grade 0 (don't overwrite existing defect pixel)
+            apply_mask = is_overlay & (canvas == 0)
+            canvas = np.where(apply_mask, overlay_grade, canvas).astype(np.uint8)
+        except Exception as e:
+            pass  # graceful fallback — Normal wafer 그대로
+
     # 6) Invalid chip pixels = palette 31 white
     for (gy, gx), meta in chip_meta.items():
         if meta['kind'].startswith('invalid'):
@@ -1127,7 +1173,8 @@ def render(class_name, object_name, seed):
     LT = TM_OPTIONS[int(rng.integers(0, len(TM_OPTIONS)))]                            # filename slot "LT" = TM value (NORMAL/...)
 
     # 10) Save PNG → wm-811k/unknown/<class>/<filename>.png
-    cls_label = f"{class_name}_{object_name}"
+    # Normal class 는 obj 무관 (scattered random mix) — 폴더명 'Normal' 만 사용 (260507 v5.2.1).
+    cls_label = class_name if class_name == 'Normal' else f"{class_name}_{object_name}"
     png_dir   = os.path.join(PNG_OUT_DIR, cls_label)
     json_dir  = os.path.join(JSON_OUT_DIR, cls_label)
     os.makedirs(png_dir, exist_ok=True); os.makedirs(json_dir, exist_ok=True)

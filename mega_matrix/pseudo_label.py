@@ -201,13 +201,8 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
         log(f"  retrain on pseudo_train (sel={sel}, backbone={BACKBONE})")
         # Offline weights passthrough (closed-network server)
         weights_dir = PROJ_ROOT / "mega_matrix" / "weights"
-        offline_wpath = None
-        for ext in (".pth", ".safetensors", ".bin"):
-            p = weights_dir / f"{BACKBONE}{ext}"
-            if p.exists():
-                offline_wpath = p
-                break
-        if offline_wpath is None:
+        offline_wpath = weights_dir / f"{BACKBONE}.pth"
+        if not offline_wpath.exists():
             log(f"  ERROR missing offline weights for {BACKBONE} under {weights_dir}")
             log("  closed-network mode forbids HF/timm download; skip pseudo retrain")
             return
