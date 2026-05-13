@@ -6,6 +6,10 @@
 #   - no Normal/Invalid/OOD/real combo/synthetic combo roots are used for training
 #   - FCM-PM/CutMix pseudo-combo is generated on the fly from 4 single chips
 #
+# iter126e base recipe:
+#   LS=0.30, cutmix_n_groups=2, cutmix_grid_dim=16, epochs=10,
+#   val_criterion=margin_max.
+#
 # Primary target:
 #   maximize single+2-combo bit-F1 while improving val2 bit-wise margins,
 #   especially fork/scratch active lower tails.
@@ -79,102 +83,102 @@ train_eval() {
 }
 
 # A. FCM-PM signal strength. Baseline neighborhood, one axis at a time.
-train_eval A_p015 --variant T7 --ls 0.20 --epochs 10 \
+train_eval A_p015 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.15 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.15 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval B_p025_base --variant T7 --ls 0.20 --epochs 10 \
+train_eval B_iter126e_base --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval C_p035 --variant T7 --ls 0.20 --epochs 10 \
+train_eval C_p035 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.35 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.35 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval D_p040 --variant T7 --ls 0.20 --epochs 10 \
+train_eval D_p040 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.40 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.40 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval E_g2 --variant T7 --ls 0.20 --epochs 10 \
+train_eval E_g3 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
 
-train_eval F_g4 --variant T7 --ls 0.20 --epochs 10 \
+train_eval F_g4 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 4 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 4 --cutmix-complete-label-scale 0.5
 
-train_eval G_cls07 --variant T7 --ls 0.20 --epochs 10 \
+train_eval G_cls07 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.7
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.7
 
-train_eval H_cls10 --variant T7 --ls 0.20 --epochs 10 \
+train_eval H_cls10 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 1.0
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 1.0
 
-train_eval I_ab1008 --variant T7 --ls 0.20 --epochs 10 \
+train_eval I_ab1008 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
     --cutmix-ab-labels "1.0,0.8"
 
-train_eval J_ab1010 --variant T7 --ls 0.20 --epochs 10 \
+train_eval J_ab1010 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
     --cutmix-ab-labels "1.0,1.0"
 
 # B. Weak-pair focus: fork+scratch lower-tail boost.
-train_eval K_bias_fs2 --variant T7 --ls 0.20 --epochs 10 \
+train_eval K_bias_fs2 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
     --cutmix-pair-bias "fork,scratch:2"
 
-train_eval L_bias_fs3 --variant T7 --ls 0.20 --epochs 10 \
+train_eval L_bias_fs3 --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
     --cutmix-pair-bias "fork,scratch:3"
 
 # C. Spatial coherence alternatives.
-train_eval M_bisect_h --variant T7 --ls 0.20 --epochs 10 \
+train_eval M_bisect_h --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode bisect_h --cutmix-pair masked --cutmix-pair-fill corner \
     --cutmix-p 0.25 --cutmix-complete-label-scale 0.5
 
-train_eval N_bisect_v --variant T7 --ls 0.20 --epochs 10 \
+train_eval N_bisect_v --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode bisect_v --cutmix-pair masked --cutmix-pair-fill corner \
     --cutmix-p 0.25 --cutmix-complete-label-scale 0.5
 
-train_eval O_bisect_rand --variant T7 --ls 0.20 --epochs 10 \
+train_eval O_bisect_rand --variant T7 --ls 0.30 --epochs 10 \
     --cutmix-mode bisect_rand --cutmix-pair masked --cutmix-pair-fill corner \
     --cutmix-p 0.25 --cutmix-complete-label-scale 0.5
 
 # D. Calibration/regularization checks.
-train_eval P_ls10 --variant T7 --ls 0.10 --epochs 10 \
+train_eval P_ls20 --variant T7 --ls 0.20 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval Q_ls30 --variant T7 --ls 0.30 --epochs 10 \
+train_eval Q_ls40 --variant T7 --ls 0.40 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval R_dp003 --variant T7 --ls 0.20 --epochs 10 --drop-path-rate 0.03 \
+train_eval R_dp003 --variant T7 --ls 0.30 --epochs 10 --drop-path-rate 0.03 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval S_dp005 --variant T7 --ls 0.20 --epochs 10 --drop-path-rate 0.05 \
+train_eval S_dp005 --variant T7 --ls 0.30 --epochs 10 --drop-path-rate 0.05 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval T_pos125 --variant T7 --ls 0.20 --epochs 10 \
+train_eval T_pos125 --variant T7 --ls 0.30 --epochs 10 \
     --pos-weight "fork:1.25,scratch:1.25" \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
-train_eval U_pos150 --variant T7 --ls 0.20 --epochs 10 \
+train_eval U_pos150 --variant T7 --ls 0.30 --epochs 10 \
     --pos-weight "fork:1.5,scratch:1.5" \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
 train_eval V_t9_focal --variant T9 --ls 0.00 --epochs 10 \
     --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-    --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5
+    --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5
 
 # Refresh absolute-rule table and val2-margin audit for completed iter124 cells.
 python -X utf8 _reeval_absolute_rule.py >> "$RUN_LOG" 2>&1 || true

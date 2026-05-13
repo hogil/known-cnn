@@ -172,11 +172,13 @@ scheduler: cosine
 no_normal: true
 val_criterion: f1 | margin_max
 save_every_epoch: true
+recipe: iter126e
 cutmix_mode: complement
 cutmix_pair: masked
 cutmix_pair_fill: corner
 cutmix_p: 0.25
-cutmix_n_groups: 3
+cutmix_grid_dim: 16
+cutmix_n_groups: 2
 cutmix_complete_label_scale: 0.5
 ```
 

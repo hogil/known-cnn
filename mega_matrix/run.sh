@@ -5,6 +5,7 @@
 # train_n / class ∈ {50, 100, 200}
 # eval_n / class  ∈ {200, 2000, 20000}
 # selection       ∈ {val_f1, val_margin}
+# recipe          = iter126e (LS=0.30, g=2, grid_dim=16, ep=10)
 # + Stage 5: pseudo-label retrain
 #
 # Usage:
@@ -91,7 +92,7 @@ train_one() {
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-        --cutmix-p 0.25 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
+        --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \

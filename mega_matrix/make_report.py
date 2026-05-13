@@ -27,7 +27,7 @@ FIG_DIR = REPORT_DIR / "figs_mega"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 TRAIN_NS = [50, 100, 200]
-EVAL_NS = ['200', '2000', 'max']
+EVAL_NS = ['200', '2000', '20000']
 SELS = ['f1', 'margin_max']
 
 
@@ -142,7 +142,7 @@ def collect_all():
 
 def write_table_md(rows, fpath):
     out = []
-    out.append("# Mega Matrix Sweep — `train {50/100/200}` × `eval {200/2000/MAX}` × `selection {val_f1, val_margin}`\n")
+    out.append("# Mega Matrix Sweep — `train {50/100/200}` × `eval {200/2000/20000}` × `selection {val_f1, val_margin}`\n")
     out.append("Run date: 2026-05-13\n")
     out.append("\n")
 

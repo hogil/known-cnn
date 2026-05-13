@@ -12,6 +12,10 @@ $ErrorActionPreference = "Stop"
 #   - train source remains 4 single defect classes only via classification_chips
 #   - no Normal/Invalid/OOD/real combo/synthetic combo roots are used for training
 #   - FCM-PM/CutMix pseudo-combo is generated on the fly from 4 single chips
+#
+# iter126e base recipe:
+#   LS=0.30, cutmix_n_groups=2, cutmix_grid_dim=16, epochs=10,
+#   val_criterion=margin_max.
 
 Set-Location "D:\project\known-cnn"
 
@@ -85,7 +89,7 @@ function Train-Eval {
 
 if ($Smoke) {
     $SmokeData = "outputs\_smoke_iter124_4single_data"
-    $SmokeOut = "outputs\iter124SMOKE_p025_g3"
+    $SmokeOut = "outputs\iter124SMOKE_iter126e_p025_g2_grid16"
     if (Test-Path $SmokeData) {
         Remove-Item -LiteralPath $SmokeData -Recurse -Force
     }
@@ -101,111 +105,112 @@ if ($Smoke) {
             Select-Object -First 4 |
             Copy-Item -Destination $Dst
     }
-    Train-Eval "SMOKE_p025_g3" @("--variant","T7","--ls","0.20","--epochs","1",
+    Train-Eval "SMOKE_iter126e_p025_g2_grid16" @("--variant","T7","--ls","0.30","--epochs","1",
         "--batch","1","--accum","1","--freeze-backbone",
         "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-        "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5") $SmokeData 5
+        "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2",
+        "--cutmix-complete-label-scale","0.5") $SmokeData 5
     "$(Get-Date) [iter124] SMOKE DONE" | Add-Content -Path $RunLog -Encoding UTF8
     exit 0
 }
 
 # A. FCM-PM signal strength. Baseline neighborhood, one axis at a time.
-Train-Eval "A_p015" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "A_p015" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.15","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.15","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "B_p025_base" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "B_iter126e_base" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "C_p035" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "C_p035" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.35","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.35","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "D_p040" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "D_p040" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.40","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.40","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "E_g2" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "E_g3" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "F_g4" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "F_g4" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","4","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","4","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "G_cls07" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "G_cls07" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.7")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.7")
 
-Train-Eval "H_cls10" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "H_cls10" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","1.0")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","1.0")
 
-Train-Eval "I_ab1008" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "I_ab1008" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5",
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5",
     "--cutmix-ab-labels","1.0,0.8")
 
-Train-Eval "J_ab1010" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "J_ab1010" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5",
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5",
     "--cutmix-ab-labels","1.0,1.0")
 
 # B. Weak-pair focus: fork+scratch lower-tail boost.
-Train-Eval "K_bias_fs2" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "K_bias_fs2" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5",
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5",
     "--cutmix-pair-bias","fork,scratch:2")
 
-Train-Eval "L_bias_fs3" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "L_bias_fs3" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5",
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5",
     "--cutmix-pair-bias","fork,scratch:3")
 
 # C. Spatial coherence alternatives.
-Train-Eval "M_bisect_h" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "M_bisect_h" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","bisect_h","--cutmix-pair","masked","--cutmix-pair-fill","corner",
     "--cutmix-p","0.25","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "N_bisect_v" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "N_bisect_v" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","bisect_v","--cutmix-pair","masked","--cutmix-pair-fill","corner",
     "--cutmix-p","0.25","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "O_bisect_rand" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "O_bisect_rand" @("--variant","T7","--ls","0.30","--epochs","10",
     "--cutmix-mode","bisect_rand","--cutmix-pair","masked","--cutmix-pair-fill","corner",
     "--cutmix-p","0.25","--cutmix-complete-label-scale","0.5")
 
 # D. Calibration/regularization checks.
-Train-Eval "P_ls10" @("--variant","T7","--ls","0.10","--epochs","10",
+Train-Eval "P_ls20" @("--variant","T7","--ls","0.20","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "Q_ls30" @("--variant","T7","--ls","0.30","--epochs","10",
+Train-Eval "Q_ls40" @("--variant","T7","--ls","0.40","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "R_dp003" @("--variant","T7","--ls","0.20","--epochs","10","--drop-path-rate","0.03",
+Train-Eval "R_dp003" @("--variant","T7","--ls","0.30","--epochs","10","--drop-path-rate","0.03",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "S_dp005" @("--variant","T7","--ls","0.20","--epochs","10","--drop-path-rate","0.05",
+Train-Eval "S_dp005" @("--variant","T7","--ls","0.30","--epochs","10","--drop-path-rate","0.05",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "T_pos125" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "T_pos125" @("--variant","T7","--ls","0.30","--epochs","10",
     "--pos-weight","fork:1.25,scratch:1.25",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
-Train-Eval "U_pos150" @("--variant","T7","--ls","0.20","--epochs","10",
+Train-Eval "U_pos150" @("--variant","T7","--ls","0.30","--epochs","10",
     "--pos-weight","fork:1.5,scratch:1.5",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
 Train-Eval "V_t9_focal" @("--variant","T9","--ls","0.00","--epochs","10",
     "--cutmix-mode","complement","--cutmix-pair","masked","--cutmix-pair-fill","corner",
-    "--cutmix-p","0.25","--cutmix-n-groups","3","--cutmix-complete-label-scale","0.5")
+    "--cutmix-p","0.25","--cutmix-grid-dim","16","--cutmix-n-groups","2","--cutmix-complete-label-scale","0.5")
 
 # Refresh absolute-rule table and val2-margin audit for completed iter124 cells.
 & python -X utf8 _reeval_absolute_rule.py *>> $RunLog
