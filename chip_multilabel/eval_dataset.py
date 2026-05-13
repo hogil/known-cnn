@@ -154,8 +154,18 @@ def discover_records_runtime(
         by_class.setdefault(ck, []).append(row)
 
     out: List[EvalRecord] = []
+    missing = 0
     for ck, rs in by_class.items():
         m, is_inv, is_norm = _multihot_for_key(ck)
+        # Filter dangling chip_paths (missing files / broken symlinks) before sampling
+        valid_rs = []
+        for row in rs:
+            cp = row.get("chip_path", "")
+            if cp and Path(cp).exists():
+                valid_rs.append(row)
+            else:
+                missing += 1
+        rs = valid_rs
         if n_per_class is not None and len(rs) > n_per_class:
             idx = rng.choice(len(rs), size=n_per_class, replace=False)
             rs = [rs[i] for i in sorted(idx)]
@@ -167,6 +177,8 @@ def discover_records_runtime(
                 is_invalid_gt=is_inv,
                 is_normal_gt=is_norm,
             ))
+    if missing > 0:
+        print(f"[eval_dataset] WARN skipped {missing} dangling chip_paths (missing files)", flush=True)
     return out
 
 
