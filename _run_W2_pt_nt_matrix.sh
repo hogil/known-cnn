@@ -46,6 +46,7 @@ train_one() {
         --epochs 10 --lr 1e-4 \
         --backbone-timm "$BACKBONE" --img-size 384 \
         --backbone-timm-weights "$WEIGHTS" \
+        --data-root D:/project/data/wm-811k/classification_chips \
         --no-normal --val-criterion margin_max --save-every-epoch \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 \
