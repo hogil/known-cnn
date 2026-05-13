@@ -573,6 +573,16 @@ def main():
     ap.add_argument("--neg-target", type=float, default=None,
                     help="260513: independent negative bit target (e.g., 0.1). "
                          "Pairs with --pos-target.")
+    ap.add_argument("--pos-targets-asy", type=str, default=None,
+                    help="260513: ASYMMETRIC per-bit pos targets, comma-separated 4 values "
+                         "in TRAIN_CLASSES order (bank_boundary, fork, scratch, scratch_rot). "
+                         "e.g. '1.0,0.9,0.95,0.9'. Overrides --pos-target.")
+    ap.add_argument("--neg-targets-asy", type=str, default=None,
+                    help="260513: ASYMMETRIC per-bit neg targets, comma-separated 4 values "
+                         "in TRAIN_CLASSES order. e.g. '0.05,0.2,0.1,0.15'. Overrides --neg-target.")
+    ap.add_argument("--bce-temperature", type=float, default=1.0,
+                    help="260513: training-time temperature for BCE. logit/T applied before sigmoid. "
+                         "T<1 sharpen (boundary 양극화), T>1 soften (under-confident).")
     ap.add_argument("--asl-gpos", type=float, default=1.0,
                     help="ASL gamma_pos (T4 only). default 1.0 (Ridnik 2021).")
     ap.add_argument("--asl-gneg", type=float, default=4.0,
@@ -715,6 +725,18 @@ def main():
         build_kw["pos_target"] = float(args.pos_target)
     if args.neg_target is not None:
         build_kw["neg_target"] = float(args.neg_target)
+    # 260513 asymmetric per-bit targets (4 values in TRAIN_CLASSES order)
+    if args.pos_targets_asy is not None:
+        parts = [float(x) for x in args.pos_targets_asy.split(',')]
+        assert len(parts) == len(TRAIN_CLASSES), f"--pos-targets-asy needs {len(TRAIN_CLASSES)} values"
+        build_kw["pos_target_per_bit"] = parts
+    if args.neg_targets_asy is not None:
+        parts = [float(x) for x in args.neg_targets_asy.split(',')]
+        assert len(parts) == len(TRAIN_CLASSES), f"--neg-targets-asy needs {len(TRAIN_CLASSES)} values"
+        build_kw["neg_target_per_bit"] = parts
+    # 260513 training-time temperature (logit / T before BCE)
+    if args.bce_temperature != 1.0:
+        build_kw["bce_temperature"] = float(args.bce_temperature)
     if args.variant in ("T4", "T6"):
         build_kw["gamma_pos"] = float(args.asl_gpos)
         build_kw["gamma_neg"] = float(args.asl_gneg)
