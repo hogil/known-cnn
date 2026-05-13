@@ -19,9 +19,11 @@
 set -e
 cd "$(dirname "$0")"
 
+export WM811K_ROOT="E:/data/images"
+
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
-WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
-EVAL_SET="D:/project/data/wm-811k/chip_multilabel_v15direct"
+WEIGHTS="models/${BACKBONE}.pth"
+EVAL_SET="E:/data/images/chip_multilabel_v15direct"
 
 OUT_BASE="outputs"
 SUMMARY="${OUT_BASE}/_W1_g2_matrix_summary.log"

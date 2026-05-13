@@ -20,8 +20,13 @@ OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"
 OUT_BASE.mkdir(parents=True, exist_ok=True)
 DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
 
-TRAIN_SIZES = [50, 100, 200]
-EVAL_SIZES = [200, 2000, 20000]
+def _sizes(env, default):
+    v = os.environ.get(env)
+    return [int(x) for x in v.split(",") if x.strip()] if v else default
+
+
+TRAIN_SIZES = _sizes("MEGA_TRAIN_SIZES", [50, 100, 200])
+EVAL_SIZES = _sizes("MEGA_EVAL_SIZES", [200, 2000, 20000])
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 MASTER_TRAIN = Path(os.environ.get("CLASSIFICATION_CHIPS_ROOT", str(DATA_ROOT / "classification_chips"))).resolve()
 

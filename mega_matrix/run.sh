@@ -36,6 +36,11 @@ OUT_BASE=outputs/_mega_matrix    # shared train/eval data root
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
 DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
 DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
+SMOKE=0
+EPOCHS=10
+TRAIN_SIZES_LIST="50 100 200"
+SEL_LIST="f1 margin_max"
+EVAL_SIZES_LIST="200 2000 20000"
 while [ $# -gt 0 ]; do
     case $1 in
         --skip-data) DO_DATA=0 ;;
@@ -49,6 +54,7 @@ while [ $# -gt 0 ]; do
         --data-base=*) DATA_BASE="${1#--data-base=}" ;;
         --backbone) shift; BACKBONE="$1" ;;
         --backbone=*) BACKBONE="${1#--backbone=}" ;;
+        --smoke) SMOKE=1 ;;
         --help|-h) head -20 "$0" | tail -16; exit 0 ;;
     esac
     shift
@@ -77,6 +83,19 @@ case "$BACKBONE" in
     *efficientnetv2*)       BATCH_PER_GPU=64 ;;
     *)                      BATCH_PER_GPU=16 ;;
 esac
+
+# Smoke mode override: 1 cell × 1 epoch × tiny data × micro batch
+if [ $SMOKE -eq 1 ]; then
+    BATCH_PER_GPU=2
+    EPOCHS=1
+    TRAIN_SIZES_LIST="10"
+    SEL_LIST="margin_max"
+    EVAL_SIZES_LIST="200"
+    DO_PSEUDO=0
+    DO_REPORT=0
+    export MEGA_TRAIN_SIZES="10"
+    export MEGA_EVAL_SIZES="200"
+fi
 
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
 TRAIN_WORKERS="$TOTAL_CPU"
@@ -137,7 +156,7 @@ train_one() {
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
     TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
-        --variant T7 --ls 0.30 --epochs 10 --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
+        --variant T7 --ls 0.30 --epochs $EPOCHS --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$TRAIN_WORKERS" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         --data-root "${OUT_BASE}/train_n${TN}" \
@@ -160,9 +179,9 @@ train_one() {
 export -f train_one
 
 if [ $DO_TRAIN -eq 1 ]; then
-    log "=== STAGE 2: training (6 models) ==="
-    for TN in 50 100 200; do
-        for SEL in f1 margin_max; do
+    log "=== STAGE 2: training ==="
+    for TN in $TRAIN_SIZES_LIST; do
+        for SEL in $SEL_LIST; do
             train_one $TN $SEL
         done
     done
@@ -199,10 +218,10 @@ eval_one() {
 }
 
 if [ $DO_EVAL -eq 1 ]; then
-    log "=== STAGE 3: evaluation (18 cells) ==="
-    for TN in 50 100 200; do
-        for SEL in f1 margin_max; do
-            for EN in 200 2000 20000; do
+    log "=== STAGE 3: evaluation ==="
+    for TN in $TRAIN_SIZES_LIST; do
+        for SEL in $SEL_LIST; do
+            for EN in $EVAL_SIZES_LIST; do
                 eval_one $TN $SEL $EN
             done
         done
