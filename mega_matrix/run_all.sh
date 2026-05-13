@@ -9,9 +9,9 @@
 # Per-backbone outputs land at:
 #   outputs/_mega_matrix/<backbone>/
 #     model_train{N}_{sel}/T*/best_model.pth + eval_{N}/
-#     model_pseudo_{sel}/...
-#     pseudo_train/
 #     _run.log
+#     _run_ddp.log, _run_ddp.log.train, _run_ddp.log.gpuN when using DDP
+#     model_pseudo_{sel}/... and pseudo_train/ only with --with-pseudo
 # Shared data (regardless of backbone):
 #   outputs/_mega_matrix/train_n{50,100,200}/
 #   outputs/_mega_matrix/eval_n{200,2000,20000}/
@@ -20,7 +20,7 @@
 #   bash mega_matrix/run_all.sh                   # all backbones, single GPU
 #   bash mega_matrix/run_all.sh --gpus 4          # all backbones, DDP 4 GPU
 #   bash mega_matrix/run_all.sh --only convnext   # only backbones matching substring
-#   bash mega_matrix/run_all.sh --skip-pseudo     # forward to inner script
+#   bash mega_matrix/run_all.sh --with-pseudo     # forward to inner script
 #   bash mega_matrix/run_all.sh --skip-data       # data already generated
 #
 # Data is generated ONCE (during first backbone) and reused (--skip-data

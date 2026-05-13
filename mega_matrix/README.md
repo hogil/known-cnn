@@ -1,6 +1,7 @@
-# Mega Matrix Sweep — train × eval × selection × pseudo-label
+# Mega Matrix Sweep — train × eval × selection
 
-Self-contained 5-stage pipeline: data 생성 → 학습 → 평가 → pseudo-label retrain → report.md.
+Self-contained default pipeline: data 생성 → 학습 → 평가 → report.md.
+Pseudo-label retrain은 기본 OFF이며 `--with-pseudo`를 줄 때만 실행한다.
 
 ## 목적
 
@@ -9,9 +10,9 @@ Self-contained 5-stage pipeline: data 생성 → 학습 → 평가 → pseudo-la
 | train_n / class | {50, 100, 200} |
 | eval_n / class | {200, 2000, 20000} |
 | best-model selection | {`val_f1`, `val_margin`} |
-| pseudo-label retrain | val 의 high-confidence pred 모아 train 에 추가 후 재학습 + 평가 |
+| pseudo-label retrain | 기본 OFF. `--with-pseudo` 때만 val 의 high-confidence pred 모아 train 에 추가 후 재학습 + 평가 |
 
-총 18 primary cells (6 train × 3 eval) + pseudo-label stage.
+기본은 총 18 primary cells (6 train × 3 eval) + report.
 
 ## 폴더
 
@@ -35,11 +36,11 @@ outputs/_mega_matrix/
 ├── _run.log
 ├── train_n50/, train_n100/, train_n200/                # train subsets
 ├── eval_n200/, eval_n2000/, eval_n20000/               # eval subsets (per-class)
-├── pseudo_train/                                       # ★ pseudo-labeled chips
 ├── model_train{N}_{sel}/T7_*/                          # 6 trained models
 │   ├── best_model.pth
 │   └── eval_{N}/stage1_*/                              # 18 eval results
-├── model_pseudo_train{N}_{sel}/T7_*/                   # ★ pseudo-label models
+├── pseudo_train/                                       # only with --with-pseudo
+├── model_pseudo_train{N}_{sel}/T7_*/                   # only with --with-pseudo
 │   └── eval_{N}/stage1_*/
 
 docs/chip-multilabel/manager_report/
@@ -76,7 +77,7 @@ bash mega_matrix/run_ddp.sh --gpus 4 --backbone vit_base_patch16_384.augreg_in21
 bash mega_matrix/run_all.sh                       # auto-detect GPU
 bash mega_matrix/run_all.sh --gpus 4              # DDP
 bash mega_matrix/run_all.sh --only convnextv2     # name substring filter
-bash mega_matrix/run_all.sh --skip-pseudo         # forward flag to inner script
+bash mega_matrix/run_all.sh --with-pseudo         # optional pseudo-label stage
 
 # 데이터 생성은 첫 backbone 에서만 → 이후 backbone 은 --skip-data 자동
 # 각 backbone 산출은 outputs/_mega_matrix/<backbone>/ 아래로 격리
@@ -87,7 +88,7 @@ bash mega_matrix/run_all.sh --skip-pseudo         # forward flag to inner script
 ```bash
 bash mega_matrix/run.sh --skip-data        # data 이미 있으면
 bash mega_matrix/run.sh --skip-train       # eval+report only
-bash mega_matrix/run.sh --skip-pseudo      # pseudo-label 단계 skip
+bash mega_matrix/run.sh --with-pseudo      # pseudo-label 단계까지 실행
 bash mega_matrix/run.sh --report-only      # report 만 재생성
 ```
 
@@ -131,7 +132,7 @@ bash mega_matrix/run.sh --report-only      # report 만 재생성
 - iter116J empirical: val_margin pick (ep6) bit_F1 0.9943 vs val_f1 pick (ep1) 0.9422 = **+0.052** ★
 - side effect: OOD-friendly (낮은 neg_prob)
 
-## ★ Stage 5 — Pseudo-label retrain
+## Optional Stage 4 — Pseudo-label retrain
 
 ### 동기
 6 trained models 중 best (e.g., train200_margin_max) 로 **unlabeled chip pool 에 prediction 적용** → high-confidence prediction 만 모아 train data 에 추가 → semi-supervised 재학습.

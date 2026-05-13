@@ -15,6 +15,7 @@
 #   bash mega_matrix/run_ddp.sh                # auto-detect GPU count
 #   bash mega_matrix/run_ddp.sh --gpus 4       # force 4 GPU
 #   bash mega_matrix/run_ddp.sh --skip-data    # skip data gen
+#   bash mega_matrix/run_ddp.sh --with-pseudo  # also run pseudo-label retrain
 #
 # NOTE: vanilla PyTorch single-GPU training per cell (NOT torch.distributed DDP).
 #       For true torchrun DDP inside one cell, trainer code needs modification
@@ -23,6 +24,7 @@
 #       different GPUs simultaneously, single GPU per cell.
 # =====================================================================
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -32,7 +34,7 @@ OUT_BASE=outputs/_mega_matrix
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
 
 # Default flags
-DO_DATA=1; DO_EVAL=1; DO_REPORT=1; DO_PSEUDO=1
+DO_DATA=1; DO_EVAL=1; DO_REPORT=1; DO_PSEUDO=0
 NGPU=$(nvidia-smi -L 2>/dev/null | wc -l)
 [ "$NGPU" -lt 1 ] && NGPU=1
 
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
     case $1 in
         --skip-data) DO_DATA=0 ;;
         --skip-eval) DO_EVAL=0 ;;
+        --with-pseudo) DO_PSEUDO=1 ;;
         --skip-pseudo) DO_PSEUDO=0 ;;
         --skip-report) DO_REPORT=0 ;;
         --gpus) shift; NGPU=$1 ;;
@@ -86,7 +89,13 @@ LOG="$MODEL_BASE/_run_ddp.log"
 mkdir -p "$OUT_BASE" "$MODEL_BASE"
 export MEGA_MODEL_BASE="$MODEL_BASE"
 
-echo "$(date) [ddp] start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU" > "$LOG"
+log() {
+    echo "$(date) [ddp] $*" | tee -a "$LOG"
+}
+
+: > "$LOG"
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date) [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
+log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
 
 # Offline weights (closed-network) — auto-passthrough
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
@@ -94,10 +103,10 @@ OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
 [ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.bin"
 if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
-    echo "$(date) [ddp] offline weights: $OFFLINE_WEIGHTS" >> "$LOG"
+    log "offline weights: $OFFLINE_WEIGHTS"
 else
     BACKBONE_WEIGHTS_FLAG=""
-    echo "$(date) [ddp] online mode (no $OFFLINE_WEIGHTS) - timm will fetch from HF" >> "$LOG"
+    log "online mode (no $OFFLINE_WEIGHTS) - timm will fetch from HF"
 fi
 export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
 export MEGA_MODEL_BASE="$MODEL_BASE"
@@ -108,8 +117,8 @@ export MEGA_IMG_SIZE="$IMG_SIZE"
 # 1. Data generation (sequential, single CPU)
 # ======================================================================
 if [ $DO_DATA -eq 1 ]; then
-    echo "$(date) [ddp] === STAGE 1: data generation ===" >> "$LOG"
-    python -u -X utf8 mega_matrix/gen_data.py >> "$LOG" 2>&1
+    log "=== STAGE 1: data generation ==="
+    python -u -X utf8 mega_matrix/gen_data.py 2>&1 | tee -a "$LOG"
 fi
 
 # ======================================================================
@@ -125,12 +134,13 @@ train_cell() {
     local TAG="train${TN}_${SEL}"
     local OUT_ROOT="${MODEL_BASE}/model_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
-        echo "$(date) [ddp] skip ${TAG} ($BACKBONE)" >> "$LOG"
+        log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
     fi
-    echo "$(date) [ddp] TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU" >> "$LOG"
+    log "TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU"
     # True torchrun DDP: each rank sees --batch as its OWN batch (per-rank).
     # effective global batch = BATCH_PER_GPU * NGPU
+    set +e
     torchrun --standalone --nproc_per_node="$NGPU" \
         -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs 10 \
@@ -143,13 +153,19 @@ train_cell() {
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
-        >> "${LOG}.train" 2>&1
+        2>&1 | tee -a "${LOG}.train"
+    local TRAIN_RC=${PIPESTATUS[0]}
+    set -e
     local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
     [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth
-    echo "$(date) [ddp] DONE ${TAG}" >> "$LOG"
+    if [ "$TRAIN_RC" -ne 0 ]; then
+        log "TRAIN_FAIL ${TAG} rc=$TRAIN_RC"
+        return 0
+    fi
+    log "DONE ${TAG}"
 }
 
-echo "$(date) [ddp] === STAGE 2: sequential torchrun DDP (6 cells on $NGPU GPUs each) ===" >> "$LOG"
+log "=== STAGE 2: sequential torchrun DDP (6 cells on $NGPU GPUs each) ==="
 # True DDP: each train_cell uses ALL $NGPU GPUs via torchrun. Cells run
 # sequentially (since they share GPUs). Effective global batch per cell =
 # BATCH_PER_GPU * NGPU.
@@ -158,7 +174,7 @@ for TN in 50 100 200; do
         train_cell "$TN" "$SEL"
     done
 done
-echo "$(date) [ddp] all trainings complete" >> "$LOG"
+log "all trainings complete"
 
 # ======================================================================
 # 3. Eval — distribute 18 cells across $NGPU GPUs
@@ -167,22 +183,31 @@ eval_cell() {
     local GPU=$1; local TN=$2; local SEL=$3; local EN=$4
     local MODEL_ROOT="${MODEL_BASE}/model_train${TN}_${SEL}"
     local RUN=$(ls -d "$MODEL_ROOT"/T*/ 2>/dev/null | head -1)
-    [ -z "$RUN" ] && return 0
+    if [ -z "$RUN" ]; then
+        log "SKIP eval train${TN}_${SEL} eval${EN}: no trained run under $MODEL_ROOT"
+        return 0
+    fi
     local EVAL_OUT="${RUN}eval_${EN}"
-    [ -d "$EVAL_OUT" ] && return 0
+    if [ -d "$EVAL_OUT" ]; then
+        log "SKIP eval train${TN}_${SEL} eval${EN}: exists $EVAL_OUT"
+        return 0
+    fi
     local EVAL_SET="${OUT_BASE}/eval_n${EN}"
-    [ ! -d "$EVAL_SET" ] && return 0
-    echo "$(date) [ddp GPU${GPU}] EVAL train${TN}_${SEL} eval${EN} ($BACKBONE)" >> "$LOG"
+    if [ ! -d "$EVAL_SET" ]; then
+        log "SKIP eval train${TN}_${SEL} eval${EN}: missing $EVAL_SET"
+        return 0
+    fi
+    log "GPU${GPU} EVAL train${TN}_${SEL} eval${EN} ($BACKBONE)"
     CUDA_VISIBLE_DEVICES=$GPU python -u -m chip_multilabel.run_stage1 \
         --model "${RUN}best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
         --variants I3,I7,I10,I13 --n-per-class 99999 \
         --strength-min 0.0 --strength-max 1.0 --seed 42 \
-        >> "${LOG}.gpu${GPU}" 2>&1 || true
+        2>&1 | tee -a "${LOG}.gpu${GPU}" || log "EVAL_FAIL train${TN}_${SEL} eval${EN}"
 }
 
 if [ $DO_EVAL -eq 1 ]; then
-    echo "$(date) [ddp] === STAGE 3: parallel eval (18 cells / $NGPU GPUs) ===" >> "$LOG"
+    log "=== STAGE 3: parallel eval (18 cells / $NGPU GPUs) ==="
     # Round-robin assignment
     IDX=0
     PIDS=()
@@ -202,23 +227,23 @@ if [ $DO_EVAL -eq 1 ]; then
         done
     done
     for pid in "${PIDS[@]}"; do wait $pid; done
-    echo "$(date) [ddp] all evals complete" >> "$LOG"
+    log "all evals complete"
 fi
 
 # ======================================================================
 # 4. Pseudo-label retrain (Stage 5 in main pipeline)
 # ======================================================================
-if [ ${DO_PSEUDO:-1} -eq 1 ]; then
-    echo "$(date) [ddp] === STAGE 4: pseudo-label retrain ===" >> "$LOG"
-    python -u -X utf8 mega_matrix/pseudo_label.py >> "$LOG" 2>&1
+if [ ${DO_PSEUDO:-0} -eq 1 ]; then
+    log "=== STAGE 4: pseudo-label retrain ==="
+    python -u -X utf8 mega_matrix/pseudo_label.py 2>&1 | tee -a "$LOG"
 fi
 
 # ======================================================================
 # 5. Report
 # ======================================================================
 if [ $DO_REPORT -eq 1 ]; then
-    echo "$(date) [ddp] === STAGE 5: report ===" >> "$LOG"
-    python -u -X utf8 mega_matrix/make_report.py >> "$LOG" 2>&1
+    log "=== STAGE 5: report ==="
+    python -u -X utf8 mega_matrix/make_report.py 2>&1 | tee -a "$LOG"
 fi
 
-echo "$(date) [ddp] ALL DONE" >> "$LOG"
+log "ALL DONE"
