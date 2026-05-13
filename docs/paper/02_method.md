@@ -285,3 +285,266 @@ archive 14 class 데이터 = `D:/project/data/wm-811k/unknown_archive/<class>/` 
   `D:/project/anomaly-detection/docs/summary.md`
 - multi-label → `docs/multi-label/{README,STAGES,LOSS_DESIGN,MATCHING_DESIGN,DECISION_RULE}.md`
 - active class → `docs/wafer-ensemble/ACTIVE_CLASSES.md`
+
+## 6. Hybrid CNN + obj_id_map prototype matching (proposed, round 29)
+
+> **상태**: 제안 (proposal, 미실험). 사용자 round 29 발화 (2026-05-14):
+> *"can 으로 prob 낮은것만 obj맵으로 만들고 class별 obj 맵 분포를 만들고 maximum
+>  likelihood 로 가장 가까운거 찾아나가는데 threshold로 어느값이상 올라가지 않으면
+>  그냥 cnn 결과 뱉고 값이 좀 나오면 obj map으로 매칭 어떤가"*
+
+### 6.1 Motivation
+
+V3 chipgrid (val_f1 0.9946, 출처: `project_v3_chipgrid_best.md`) 는 33-class wafer
+분류에서 saturated plateau 이며, compound BICUBIC 384 ceiling (test_f1 0.9784, 출처:
+`docs/wafer-ensemble/DISCOVERY.md`) 은 오히려 R-only 대비 낮다. 본 제안은 **새 compound
+trainer 학습 없이** V3 의 remaining error case (val 54 건) 를 후처리 refine 하는
+**2-stage confidence-gated hybrid 추론 path**.
+
+핵심 아이디어:
+- CNN max_prob 가 높으면 (high confidence) → CNN 결과 그대로 출력
+- 낮으면 (uncertain) → wafer 의 chip CNN obj_id_map 을 **클래스별 분포** 와 대조해
+  **maximum likelihood** class 로 refine
+- compound trainer 학습은 보류 (architecture-independent 후처리)
+
+### 6.1.1 시각 요약 (초보자 가이드 — 비AI 심사위원용)
+
+본 §6 의 6 장 figure 만 차례로 보면 method 의 동작 원리·차별성·약점 모두 파악 가능
+하도록 구성. 순서:
+
+| 순서 | Figure | 메시지 |
+|---|---|---|
+| 1 | Figure 5 | "**obj_id_map 이 뭔가**" — 한 cell = 한 chip = chip CNN 판정 |
+| 2 | Figure 6 | "**왜 어렵나**" — 사람 눈에도 비슷한 클래스 4 쌍 비교 |
+| 3 | Figure 2 | "**분포가 fingerprint**" — 클래스마다 공간 패턴이 다름 |
+| 4 | Figure 1 | "**한 장 요약**" — 실제 V3 오답 case 에서 hybrid 가 회복 |
+| 5 | Figure 3 | "**4 단계 결정**" — 한 wafer 가 어떻게 흘러가는지 |
+| 6 | Figure 4 | "**Flowchart**" — 분기 규칙 |
+
+#### Figure 5 — obj_id_map 이 뭔가 (확대 1 장)
+
+먼저 입력 형태부터.
+
+![Fig 5 — Zoomed obj_id_map example with cell-level annotations](figures/hybrid_fig5_zoomed_example.png)
+
+***Figure 5 — "obj_id_map 이 뭔지" 한 장으로 답.*** 6400×6400 wafer 가 32×32 = 1024
+개 정사각형 chip (각 200×200 px) 로 나뉘고, **각 chip 의 내용물을 chip CNN 이 6 카테고리
+중 하나로 분류** 한 결과가 32×32 색깔 grid (obj_id_map). 노란 callout 두 개는 cell 의
+실제 의미 — 아래 띠에 박힌 파란 cell = "이 chip 안에 bank_boundary 패턴 있음",
+중앙 회색 cell = "이 chip 은 정상 (none)". 핵심: **이 32×32 색깔 grid 가 wafer 클래스
+의 fingerprint** — 위치 + 색깔 조합으로 클래스가 결정됨.
+
+#### Figure 6 — 왜 어렵나 (사람 눈에도 비슷한 4 쌍)
+
+다음, 왜 단일 CNN 만으로는 부족한지.
+
+![Fig 6 — Confused class pairs gallery (4 rows)](figures/hybrid_fig6_confusion_pairs.png)
+
+***Figure 6 — CNN 이 헷갈리는 4 쌍 비교***. 각 행은 두 다른 wafer 클래스인데 한쪽
+관점에서 보면 비슷하게 생김:
+- **Pair 1 (same spatial, different obj)**: 둘 다 아래 띠 — 위치는 같음. 다른 점 =
+  띠 안 색깔 (빨강 scratch vs 파랑 bank_boundary). CNN 은 "아래 띠" 까지만 보고
+  헷갈릴 수 있음.
+- **Pair 2 (same obj, different spatial)**: 둘 다 주황 (fork) — 색깔은 같음. 다른
+  점 = 위치 (위 vs 아래). 회전 augmentation 학습 안 했어도 데이터 불균형 시
+  헷갈릴 수 있음.
+- **Pair 3 (donut family, different obj)**: 둘 다 도넛 링 모양. 다른 점 = 링 안
+  색깔 (빨강 scratch vs 주황 fork).
+- **Pair 4 (rotation variant)**: 둘 다 바깥 링 — 같은 가족. 다른 점 = 회전 (vertical
+  vs 21° 기울기). 가장 어려운 case — **TTA 금지 정책 (출처: `feedback_no_tta_wafer.md`)
+  의 직접 이유**.
+
+핵심 메시지: 위 4 가지 헷갈림은 모두 **공간 분포 (obj_id_map) 와 그 안 색깔 (chip
+class) 의 조합** 으로 명확히 구분된다. 즉 hybrid 의 P̂(obj_id | y, cell) 이 이 모든
+쌍에 대해 서로 다른 fingerprint 를 학습해 두면, low-conf CNN 의 tie 를 자연스럽게
+깬다.
+
+#### Figures 1 ~ 4 — 본 method 작동 원리
+
+`§6.1.1 ` 의 나머지 4 장은 분포·매칭·flowchart 의 동작 원리. Figure 1 + 4 부터.
+
+![Fig 1 — Hybrid method overview (real wafer + obj_id_map + per-class P̂ + posterior bar)](figures/hybrid_fig1_overview.png)
+
+***Figure 1 — 전체 pipeline 한 장 요약.***
+- **(A) 실제 wafer 이미지**: V3 CNN 이 실제로 틀린 case (`true =
+  Edge-Bottom_bank_boundary`, V3 가 `Edge-Bottom_scratch` 로 오답). 노랑→주황→빨강
+  = fail-bit grade 0→7 (어두울수록 심한 fail). 아래 가장자리에 띠 형태 fail 분포가
+  보이는데, V3 는 이 패턴을 `scratch` 로 혼동.
+- **(B) chip CNN forward → 32×32 obj_id_map**: wafer 의 각 chip 위치를 chip CNN
+  으로 분류한 결과. 색깔 범례는 figure 하단 참조. 아래 두 줄이 **파란색
+  (bank_boundary)** 으로 일관 분류 → 진짜 클래스 신호가 여기 박혀 있음.
+- **(C) 클래스별 P̂ 분포 (4 예시)**: 각 클래스마다 P̂ 의 dominant obj_id 가 공간적으로
+  다른 위치 (도넛 / 위쪽 / 아래쪽 / 바깥 링) 에 분포 → **클래스 fingerprint 역할**.
+- **(D) 최종 decision**: CNN softmax (주황 bar) 는 3 클래스가 거의 동률 → low-conf.
+  obj_id_map likelihood 결합 후 posterior (파랑 bar) 는 ★ TRUE 클래스로 명확히 쏠림.
+  hybrid 가 CNN tie 를 깨는 메커니즘.
+
+![Fig 4 — Confidence-gated decision flowchart](figures/hybrid_fig4_flowchart.png)
+
+***Figure 4 — Decision flowchart.*** wafer 입력 → CNN forward → `p_max` 가 `τ_gate`
+이상이면 오른쪽 초록 path (CNN 결과 그대로), 미만이면 왼쪽 path 로 들어가 사전 build
+된 `obj_id_map M(x)` 과 클래스별 `P̂` 로 `log L(y|M)` 계산 → `log p_post = log p_cnn
++ λ · log L` argmax. `λ = 0` 으로 두면 CNN-only baseline 회귀 (worst case 보장).
+초보자 핵심: **gating 분기 → 한쪽 branch 만 매번 실행** (한 wafer 가 양쪽 동시에
+가는 일 없음).
+
+### 6.2 확률 분포 — per-class per-cell categorical histogram
+
+**Source 데이터**: Stage 2 cache `D:/project/data/wm-811k/obj_id_maps/<basename>.npy`
+— 각 wafer 의 32×32 정수 obj_id map (0 = none / chip CNN none class, 1..K = chip
+CNN 분류 결과). chip CNN v3 forward 로 inline 생성 (이미 build 완료, 출처:
+`CHANGELOG.md` 2026-05-05T14:30).
+
+**분포 형식**: 클래스 y · cell (i,j) · obj_id k 의 3-축 categorical histogram +
+Laplace smoothing.
+
+```
+P̂(obj_id = k | class = y, cell = (i, j))
+=  ( count_{y,i,j,k}  +  α )
+   ───────────────────────────────────
+   ( count_{y,i,j,*}  +  α · (K+1) )
+```
+
+| 차원 | 범위 | 설명 |
+|---|---|---|
+| y | {1..C} | 활성 wafer 클래스 (현재 round 28: C=43; active 27 정책 시 C=27) |
+| (i,j) | {0..31}² | 32×32 grid, V3 native 해상도 — **block_expand 불필요** (출처: `feedback_block_expand_only.md`) |
+| k | {0..K} | chip CNN 카테고리 (현재 K = 5 obj class, 0=none 포함하면 6) |
+| α | scalar | Laplace prior, default 1.0 |
+
+**Storage**: tensor shape `(C, 32, 32, K+1)`. C=43·K=5 일 때 ≈ 43·32·32·6·4 byte =
+1.05 MB. cache 위치 `obj_id_dist/<train_split_hash>.npy`.
+
+**추정 데이터**: V3 best_run 의 **train split 만 사용** (val/test 누수 금지, fair-eval
+protocol 일치, 출처: `feedback_fair_eval_protocol.md`).
+
+**대안 distribution 후보** (본 round 채택 X, 미래 ablation):
+
+| 변형 | 표현 | trade-off |
+|---|---|---|
+| (a) **per-cell categorical histogram** ★ 채택 | (C, 32, 32, K+1) | cell 독립가정, 직관적, fast inference |
+| (b) prototype mean one-hot | (C, 32, 32, K+1) float | 분포 좁은 class 만 작동, 변동 흡수 못함 |
+| (c) KDE on flattened map | nonparametric | smooth, 비쌈, 32×32 그리드 over-kill |
+| (d) per-cell Dirichlet (Bayesian update) | (C, 32, 32, K+1) α | α 자동 학습, 추후 검토 |
+
+(a) 채택 — 단순·해석 가능·구현 즉시. cell 독립가정의 한계는 §6.4 변형 D 로 보완.
+
+**시각 (Figure 2)** — 6 개 예시 클래스의 P̂ 분포:
+
+![Fig 2 — per-class P(obj_id | y, cell) for 6 example wafer classes](figures/hybrid_fig2_distribution.png)
+
+***Figure 2 — 클래스별 P̂(obj_id | y, cell) 두 view.***
+- **위 row (argmax view)**: 각 cell 에서 `argmax_k P̂(obj_id=k | y, cell=(i,j))` —
+  가장 확률 높은 chip obj_id 색깔. Donut_scratch 는 가운데 도넛 링에 빨강 (scratch),
+  Donut_fork 는 같은 위치에 주황 (fork), Edge-Top_scratch 는 위쪽 띠 빨강,
+  Edge-Bottom_bank_boundary 는 아래 띠 파랑, Edge-Ring_scratch_rot 는 바깥 링 보라,
+  Center_invalid_main 은 중앙 점 노랑. 한눈에 보아도 **클래스마다 공간 fingerprint
+  가 완전히 다름** — hybrid 가 작동하는 근본 이유.
+- **아래 row (confidence view)**: `max_k P̂` — cell 별 분포가 얼마나 압도적인지.
+  밝은 cell = 확신 강함 (해당 obj_id 가 거의 항상 등장), 어두운 cell = 여러 obj_id
+  가 섞임. fingerprint 영역 안 cell 은 밝고, 바깥은 chip CNN noise 로 자잘하게 변함.
+- **Laplace α=1 효과**: 빈 cell (count=0) 도 P̂ = 1/(K+1) ≈ 0.17 균등분포 prior 가
+  유지돼 0 확률 곱셈으로 likelihood 가 음의 무한대 가는 사고 방지. unseen pattern
+  에도 robust.
+
+### 6.3 매칭 방식 — confidence-gated max-likelihood
+
+**입력**: wafer image x, 사전 build 된 obj_id_map M(x) ∈ {0..K}^{32×32}, CNN softmax
+prob `p_cnn(y | x)`.
+
+**Decision rule (Bayesian posterior)**:
+
+```python
+p_cnn = softmax(cnn(x))                 # shape (C,)
+p_max = p_cnn.max()
+y_cnn = p_cnn.argmax()
+
+if p_max >= tau_gate:
+    return y_cnn                        # high-conf, CNN only
+
+# low-conf branch: obj_id_map matching
+M = obj_id_maps[basename(x)]            # (32, 32) int, 이미 build 된 .npy
+ii, jj = np.indices((32, 32))           # broadcast index
+log_L = np.log(P_hist[:, ii, jj, M]).sum(axis=(1, 2))   # (C,)
+log_post = np.log(p_cnn + 1e-12) + lam * log_L
+return log_post.argmax()
+```
+
+**수학적 형태**: `P(y | x, M) ∝ P(y | x) · P(M | y)^λ`. λ=1 strict Bayesian, λ>1
+likelihood 강조, λ=0 → CNN only (baseline 회귀).
+
+**Hyperparameters** (val grid search, test 누수 금지):
+
+| Hyperparam | 의미 | Default | Sweep grid |
+|---|---|---|---|
+| `tau_gate` | gating threshold (p_max < tau 시 매칭 발동) | 0.85 | {0.70, 0.80, 0.85, 0.90, 0.95} |
+| `lam` | likelihood weight (Bayesian 결합) | 1.0 | {0.0, 0.5, 1.0, 2.0, 5.0} |
+| `alpha` | Laplace smoothing prior | 1.0 | {0.5, 1.0, 2.0} |
+
+`lam = 0` row 는 baseline (CNN only) 와 동일 — 본 hybrid 의 worst case 보장
+(net negative 불가능).
+
+**시각 (Figure 3)** — 한 wafer 가 4 단계 거치는 과정 시각화:
+
+![Fig 3 — step-by-step matching on a real wafer](figures/hybrid_fig3_matching.png)
+
+***Figure 3 — 매칭 단계별 walkthrough*** (true = Edge-Bottom_bank_boundary).
+- **Step 1 — 입력 wafer**: 실제 PNG (Figure 1A 와 동일 wafer). 아래 가장자리에
+  fail-bit 띠가 보임.
+- **Step 2 — chip CNN forward**: 각 32×32 cell 의 chip-object 분류 → obj_id_map M.
+  아래 두 줄 파란색이 핵심 신호.
+- **Step 3 — CNN softmax**: top-3 클래스가 0.18 / 0.30 / 0.33 으로 거의 동률
+  (`p_max = 0.33 < τ_gate = 0.85`) → matching 발동. 점선이 τ_gate. **CNN 만으로는
+  진짜 클래스 결정 불가**.
+- **Step 4 — log posterior**: 모든 클래스에 대해 log L(y|M) 계산 → `log p_post`
+  argmax. obj_id_map 의 아래 두 줄 bank_boundary 신호가 Edge-Bottom_bank_boundary
+  class 에 매우 큰 log L 부여 → posterior 가 TRUE 쪽으로 결정적 이동. CNN 의 tie 가
+  깨짐.
+
+초보자 핵심 take-away: **CNN 이 헷갈리는 case 에서 chip 단위 obj 정보 (Step 2 의
+공간 분포) 가 추가 단서로 들어가 tie 를 분리**.
+
+### 6.4 Alternative decision rules (ablation candidates)
+
+| ID | 규칙 | 설명 |
+|---|---|---|
+| **A** (default) | gated soft Bayesian | p_max < τ → log_post argmax, else CNN |
+| B | hard override | p_max < τ AND (log L 1위 - 2위) > δ → argmax(L); else CNN |
+| C | always soft | gating 없이 모든 case posterior — full Bayesian baseline |
+| D | agreement boost | argmax(p_cnn) == argmax(L) 일 때만 confidence 부스트 |
+
+본 round 채택: **A default**, C 를 ablation baseline 으로 동시 비교. B/D 는 A 회복률
+부족 시 추가.
+
+### 6.5 평가 protocol
+
+- **Estimation**: V3 best_run 의 train split 으로 P̂ histogram 산출
+- **Validation**: (τ_gate, λ, α) grid (5×5×3 = 75 cell) 의 val_f1 측정
+- **Test**: val-best hyperparam 1 조합만 test_f1 측정 (test 누수 금지)
+- **Metric**: macro test_f1, per-class F1, error count.
+  V3 errors (val 54건 / test ~?건) 중 hybrid 회복률 % 보고
+- **Fair-eval protocol** 일치 (출처: `feedback_fair_eval_protocol.md`): split 0.8/0.1/0.1
+  stratified seed 42, augmentation 동일, TTA 금지
+
+**Target**: V3 val_f1 0.9946 → hybrid val_f1 ≥ 0.9970 (val errors ≤ 27).
+도달 못 하면 λ=0 (CNN only) 와 동일 → V3 그대로 + 1 추가 hyperparam 비용 (수용 가능).
+
+### 6.6 구현 plan
+
+| Step | 산출 |
+|---|---|
+| 1 | `hybrid_match/build_obj_id_hist.py` — train split obj_id_map .npy → P̂ tensor 저장 |
+| 2 | `hybrid_match/hybrid_predict.py` — V3 `best_model.pth` + P̂ 로드, val/test 추론, hyperparam grid CSV |
+| 3 | `hybrid_match/run_grid.py` — (τ, λ, α) 75-cell sweep dispatcher |
+| 4 | `docs/paper/05_results.md` row 추가 (V3 vs hybrid) |
+| 5 | `CHANGELOG.md` analysis entry + 회복률 % |
+
+**의존성**: V3 best_run `logs_chipgrid/<v3_best>/best_model.pth`, obj_id_maps cache
+`D:/project/data/wm-811k/obj_id_maps/*.npy` (8600 wafer 완료).
+
+### 6.7 본질 (compound > wafer-only) 와의 관계
+
+본 §6 은 **architecture-independent 후처리 contribution** — compound trainer 학습
+없이 chip-level obj 정보 (chip CNN forward) 만으로 wafer 분류 정확도 개선 시도. 본
+프로젝트 본질 (출처: `README.md` line 8, compound 학습 결과로 wafer-only 추월) 와
+**독립** — §6 결과 양·음 모두 compound experiments (§2-3) 진행 여부 결정 영향 없음.

@@ -35,3 +35,32 @@ fix 반복.
 출처: `logs_chip/v3_chip_260505_142036_running/best_history.txt`), obj_id_maps build
 ~92.6% (7965 / 8600 .npy, 출처: `data/wm-811k/obj_id_maps/`), wafer-only / compound
 학습 미실행 (TBD).
+
+## v4 addendum — Hybrid CNN + obj_id_map prototype matching (2026-05-14, round 29 proposal)
+
+round 29 에서 새 compound trainer 재학습 없이 V3 chipgrid (val_f1 0.9946) 의 remaining
+error (val 54건) 를 후처리 refine 하는 **2-stage confidence-gated hybrid 추론** 을
+제안 (상세 출처: `docs/paper/02_method.md` §6). 사용자 발화 *"prob 낮은것만 obj맵 …
+class별 obj 맵 분포 … maximum likelihood … threshold 어느값이상 안 올라가면 cnn 결과
+뱉고 좀 나오면 obj map 매칭"* 의 실증화.
+
+**확률 분포 (probability)** = **per-class per-cell categorical histogram with Laplace
+smoothing**. V3 best_run 의 train split 의 32×32 obj_id_map .npy (이미 Stage 2 build
+완료, 출처: `_build_obj_id_maps.py`) 에서 클래스 y · cell (i,j) · obj_id k 별 빈도수
+count_{y,i,j,k} 를 collect 해 P̂(obj_id=k | y, cell=(i,j)) = (count + α) / (Σ_k count
++ α(K+1)), α=1 default 로 추정. tensor shape (C, 32, 32, K+1) ≈ 1 MB. 32×32 native
+그대로 작동하여 block_expand 정책 (출처: `feedback_block_expand_only.md`) 일치 —
+V3 의 enabling factor 인 정수 grid 보존 유지.
+
+**매칭 방식 (matching)** = **confidence-gated max-likelihood Bayesian posterior**.
+CNN max_prob ≥ τ_gate (default 0.85) 면 CNN 결과 그대로 출력 (high-conf path);
+< τ_gate 면 wafer 의 obj_id_map M 을 P̂ 에 대조해 log L(y|M) = Σ_{i,j} log P̂(M[i,j]
+| y, (i,j)) 계산, 최종 결정은 log posterior = log p_cnn + λ · log L 의 argmax
+(λ default 1.0). 즉 `P(y | x, M) ∝ P(y | x) · P(M | y)^λ`. τ_gate / λ / α 는 val
+에서만 grid search (5×5×3 = 75 cell) 로 tune (test 누수 금지). λ=0 은 CNN only 와
+동일 → 본 hybrid 의 worst case = V3 그대로, **net negative 불가능**.
+
+본 §6 은 **architecture-independent 후처리 contribution** 으로 본질 (compound >
+wafer-only) 와 독립 — §6 양·음 결과 모두 compound trainer 학습 진행 여부 결정 영향
+없음. 산출 위치 예정: `hybrid_match/build_obj_id_hist.py` (P̂ 산출), `hybrid_match/
+hybrid_predict.py` (decision rule), `docs/paper/05_results.md` (V3 vs hybrid row).
