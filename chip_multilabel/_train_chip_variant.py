@@ -566,6 +566,13 @@ def main():
                     help="Fill for the masked rect. 'corner' = chip's own top-left 8×8 mean "
                          "(natural background match). 'white' = palette grade-0 hardcoded "
                          "(post-norm ~2.25). 'noise' = gaussian random.")
+    ap.add_argument("--pos-target", type=float, default=None,
+                    help="260513: independent positive bit target (e.g., 0.9). "
+                         "If set with --neg-target, overrides --ls. "
+                         "Decouples symmetric LS into independent per-class targets.")
+    ap.add_argument("--neg-target", type=float, default=None,
+                    help="260513: independent negative bit target (e.g., 0.1). "
+                         "Pairs with --pos-target.")
     ap.add_argument("--asl-gpos", type=float, default=1.0,
                     help="ASL gamma_pos (T4 only). default 1.0 (Ridnik 2021).")
     ap.add_argument("--asl-gneg", type=float, default=4.0,
@@ -703,6 +710,11 @@ def main():
     build_kw = {}
     if args.ls is not None:
         build_kw["ls"] = float(args.ls)
+    # 260513 absolute rule: pos_target / neg_target independent (override LS)
+    if args.pos_target is not None:
+        build_kw["pos_target"] = float(args.pos_target)
+    if args.neg_target is not None:
+        build_kw["neg_target"] = float(args.neg_target)
     if args.variant in ("T4", "T6"):
         build_kw["gamma_pos"] = float(args.asl_gpos)
         build_kw["gamma_neg"] = float(args.asl_gneg)

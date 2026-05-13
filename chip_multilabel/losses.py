@@ -51,9 +51,15 @@ class BCEMultiHot(nn.Module):
     """
 
     def __init__(self, label_smoothing: float = 0.0,
+                 pos_target: float | None = None,
+                 neg_target: float | None = None,
                  pos_weight: torch.Tensor | None = None):
         super().__init__()
         self.smoothing = float(label_smoothing)
+        # 260513 user: independent pos/neg target (decouple from symmetric LS).
+        # If pos_target or neg_target set, use them directly. Else fallback to LS formula.
+        self.pos_target = float(pos_target) if pos_target is not None else None
+        self.neg_target = float(neg_target) if neg_target is not None else None
         if pos_weight is not None:
             self.register_buffer("pos_weight", pos_weight.float())
         else:
@@ -61,7 +67,12 @@ class BCEMultiHot(nn.Module):
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         target = target.float()
-        if self.smoothing > 0:
+        if self.pos_target is not None or self.neg_target is not None:
+            # Independent pos/neg target (no sum constraint)
+            pt = self.pos_target if self.pos_target is not None else 1.0
+            nt = self.neg_target if self.neg_target is not None else 0.0
+            target = target * pt + (1.0 - target) * nt
+        elif self.smoothing > 0:
             # 1 -> 1 - smoothing/2, 0 -> smoothing/2 (symmetric BCE smoothing)
             target = target * (1.0 - self.smoothing) + 0.5 * self.smoothing
         pw = self.pos_weight if isinstance(self.pos_weight, torch.Tensor) else None
@@ -206,9 +217,13 @@ def build_loss(loss_name: str, **kw):
         ), "multi_hot"
     if loss_name == "bce":
         return BCEMultiHot(label_smoothing=kw.get("ls", 0.0),
+                           pos_target=kw.get("pos_target", None),
+                           neg_target=kw.get("neg_target", None),
                            pos_weight=kw.get("pos_weight", None)), "multi_hot"
     if loss_name == "bce_ls":
         return BCEMultiHot(label_smoothing=kw.get("ls", 0.20),
+                           pos_target=kw.get("pos_target", None),
+                           neg_target=kw.get("neg_target", None),
                            pos_weight=kw.get("pos_weight", None)), "multi_hot"
     if loss_name == "bce_then_asl":
         return BCEThenASL(warmup_epochs=kw.get("warmup_epochs", 5),
