@@ -2,7 +2,7 @@
 # =====================================================================
 # Mega matrix — run ALL backbones in weights/ folder sequentially
 #
-# Discovers every mega_matrix/weights/<name>.pth/.safetensors/.bin, then dispatches:
+# Discovers every mega_matrix/weights/<name>.pth, then dispatches:
 #   - bash mega_matrix/run.sh        --backbone <name>     (single GPU, default)
 #   - bash mega_matrix/run_ddp.sh    --backbone <name>     (multi-GPU)
 #
@@ -77,10 +77,10 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] start NGPU=$NGPU runner='$RUNNER'" 
 
 # Discover backbones
 shopt -s nullglob
-WEIGHT_FILES=("$WEIGHTS_DIR"/*.pth "$WEIGHTS_DIR"/*.safetensors "$WEIGHTS_DIR"/*.bin)
+WEIGHT_FILES=("$WEIGHTS_DIR"/*.pth)
 shopt -u nullglob
 if [ ${#WEIGHT_FILES[@]} -eq 0 ]; then
-    echo "[run_all] ERROR: no .pth/.safetensors/.bin in $WEIGHTS_DIR/" | tee -a "$SUMMARY"
+    echo "[run_all] ERROR: no .pth in $WEIGHTS_DIR/" | tee -a "$SUMMARY"
     echo "[run_all] copy weights first, or run 'python mega_matrix/download.py --allow-download' on an internet machine." | tee -a "$SUMMARY"
     exit 1
 fi

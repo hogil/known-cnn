@@ -100,16 +100,14 @@ log() {
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
 log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU accum=1 workers=$TRAIN_WORKERS data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
-# Offline weights (closed-network) — auto-passthrough if file exists
+# Offline weights (closed-network) — .pth only
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
-[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.safetensors"
-[ ! -f "$OFFLINE_WEIGHTS" ] && OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.bin"
 if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
 else
     log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
-    log "closed-network mode forbids HF/timm download; copy .pth/.safetensors/.bin first"
+    log "closed-network mode forbids HF/timm download; create mega_matrix/weights/${BACKBONE}.pth first"
     exit 2
 fi
 
@@ -148,7 +146,7 @@ train_one() {
         2>&1 | tee -a "$LOG"
     local TRAIN_RC=${PIPESTATUS[0]}
     local RUN=$(find "$OUT_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
-    [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth
+    [ -n "$RUN" ] && rm -f "$RUN"/epoch_*.pth
     set -e
     if [ "$TRAIN_RC" -ne 0 ]; then
         log "TRAIN_FAIL ${TAG} rc=$TRAIN_RC"
@@ -178,7 +176,7 @@ eval_one() {
         log "SKIP eval train${TN}_${SEL} eval_${EN}: no trained run under $MODEL_ROOT"
         return 0
     fi
-    local EVAL_OUT="${RUN}eval_${EN}"
+    local EVAL_OUT="${RUN}/eval_${EN}"
     if [ -d "$EVAL_OUT" ]; then
         log "SKIP eval train${TN}_${SEL} eval_${EN}: exists $EVAL_OUT"
         return 0
@@ -190,7 +188,7 @@ eval_one() {
     fi
     log "EVAL train${TN}_${SEL} eval_${EN} ($BACKBONE)"
     python -u -m chip_multilabel.run_stage1 \
-        --model "${RUN}best_model.pth" \
+        --model "${RUN}/best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
         --variants I3,I7,I10,I13 --n-per-class 99999 \
         --strength-min 0.0 --strength-max 1.0 --seed 42 \

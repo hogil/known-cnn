@@ -1,9 +1,9 @@
 """
 Pretrained backbone weights checker/downloader (mega_matrix).
 
-기본값은 폐쇄망 안전 모드다. mega_matrix/weights/{model_id}.{pth,safetensors,bin}
-파일이 이미 있으면 skip하고, 없으면 실패한다. HuggingFace/timm 다운로드는
-인터넷 머신에서 명시적으로 --allow-download 를 준 경우에만 실행한다.
+기본값은 폐쇄망 안전 모드다. 최종 산출물은 항상
+mega_matrix/weights/{model_id}.pth 이다. HuggingFace/timm 다운로드는 인터넷
+머신에서 명시적으로 --allow-download 를 준 경우에만 실행한다.
 
 - 항상 MODELS 목록 전부 시도. 1개 실패해도 나머지는 계속 진행.
 - 이미 있는 파일은 자동 skip (재다운 안 함).
@@ -23,7 +23,11 @@ import argparse
 import difflib
 import os
 import sys
+import tempfile
+import urllib.request
 from pathlib import Path
+
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 
 # Default closed-network mode must be active before importing timm/huggingface helpers.
 if "--allow-download" not in sys.argv:
@@ -31,12 +35,19 @@ if "--allow-download" not in sys.argv:
     os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
     os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+else:
+    # A parent shell may have exported offline flags during server-side runs.
+    # Explicit --allow-download means this process is running on an internet box.
+    os.environ.pop("HF_HUB_OFFLINE", None)
+    os.environ.pop("TRANSFORMERS_OFFLINE", None)
+    os.environ.pop("HF_DATASETS_OFFLINE", None)
 
+from huggingface_hub import hf_hub_download
 import timm
 import torch
 
 WEIGHTS_DIR = Path(__file__).parent / "weights"
-WEIGHT_EXTS = (".pth", ".safetensors", ".bin")
+HF_SOURCE_FILENAMES = ("model.safetensors", "pytorch_model.bin", "model.bin")
 
 # HF / timm model id (파일명으로 그대로 사용)
 MODELS = [
@@ -67,12 +78,37 @@ def verify_weight_file(path: Path) -> None:
             raise ValueError("not a non-empty state_dict")
 
 
+def load_weight_state(path: Path):
+    if path.suffix == ".safetensors":
+        try:
+            from safetensors.torch import load_file as _load_safetensors
+        except ImportError as e:
+            raise RuntimeError("safetensors is required to convert .safetensors weights") from e
+        return _load_safetensors(str(path), device="cpu")
+    return torch.load(str(path), map_location="cpu", weights_only=False)
+
+
+def convert_to_pth(src: Path, model_name: str) -> Path:
+    dst = WEIGHTS_DIR / f"{model_name}.pth"
+    if src.resolve() == dst.resolve():
+        verify_weight_file(dst)
+        return dst
+    state = load_weight_state(src)
+    if isinstance(state, dict):
+        for key in ("state_dict", "model", "model_state_dict"):
+            if key in state and hasattr(state[key], "keys"):
+                state = state[key]
+                break
+    if not hasattr(state, "keys") or len(state) == 0:
+        raise ValueError(f"not a non-empty state_dict: {src}")
+    torch.save(state, str(dst))
+    verify_weight_file(dst)
+    return dst
+
+
 def find_existing_weight(model_name: str) -> Path | None:
-    for ext in WEIGHT_EXTS:
-        p = WEIGHTS_DIR / f"{model_name}{ext}"
-        if p.exists():
-            return p
-    return None
+    p = WEIGHTS_DIR / f"{model_name}.pth"
+    return p if p.exists() else None
 
 
 def validate_timm_models(model_names: list[str]) -> list[str]:
@@ -93,17 +129,53 @@ def print_invalid_models(invalid: list[str]) -> None:
                 print(f"      {s}", file=sys.stderr)
 
 
+def download_hf_weight(model_name: str) -> Path:
+    cfg = timm.models.get_pretrained_cfg(model_name)
+    if not cfg.hf_hub_id:
+        raise RuntimeError("timm pretrained cfg has no hf_hub_id")
+    errors = []
+    for filename in HF_SOURCE_FILENAMES:
+        try:
+            cached = Path(hf_hub_download(repo_id=cfg.hf_hub_id, filename=filename))
+            return convert_to_pth(cached, model_name)
+        except Exception as e:
+            errors.append(f"{filename}: {type(e).__name__}: {e}")
+    raise RuntimeError("; ".join(errors))
+
+
+def download_url_weight(model_name: str) -> Path:
+    cfg = timm.models.get_pretrained_cfg(model_name)
+    if not cfg.url:
+        raise RuntimeError("timm pretrained cfg has no direct url")
+    suffix = Path(cfg.url.split("?", 1)[0]).suffix.lower()
+    if suffix not in (".pth", ".pt", ".bin"):
+        raise RuntimeError(f"direct url is {suffix or 'unknown'}; use HF source and convert to .pth")
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td) / f"{model_name}{suffix}"
+        with urllib.request.urlopen(cfg.url, timeout=60) as r, open(tmp, "wb") as f:
+            while True:
+                chunk = r.read(1024 * 1024)
+                if not chunk:
+                    break
+                f.write(chunk)
+        return convert_to_pth(tmp, model_name)
+
+
 def download_one(model_name: str, force: bool = False, allow_download: bool = False) -> str:
     """단일 모델 다운로드. 반환: 'ok' / 'skip' / 'fail'."""
     existing = find_existing_weight(model_name)
     if existing is not None and not force:
         size_mb = existing.stat().st_size / 1e6
         try:
-            verify_weight_file(existing)
+            out_path = convert_to_pth(existing, model_name)
         except Exception as e:
             print(f"  invalid {existing.name} ({type(e).__name__}: {e})", file=sys.stderr)
             return "fail"
-        print(f"  skip   {existing.name} ({size_mb:.0f} MB, local)")
+        if existing.suffix == ".pth":
+            print(f"  skip   {existing.name} ({size_mb:.0f} MB, local)")
+        else:
+            out_mb = out_path.stat().st_size / 1e6
+            print(f"  convert {existing.name} -> {out_path.name} ({out_mb:.0f} MB)")
         return "skip"
     if existing is not None and force and not allow_download:
         print(f"  skip   {existing.name} (--force ignored without --allow-download)")
@@ -112,19 +184,25 @@ def download_one(model_name: str, force: bool = False, allow_download: bool = Fa
         print(f"  FAIL   {model_name}: missing local weights under {WEIGHTS_DIR}; "
               f"download disabled", file=sys.stderr)
         return "fail"
+    if force:
+        p = WEIGHTS_DIR / f"{model_name}.pth"
+        if p.exists():
+            p.unlink()
 
-    out_path = WEIGHTS_DIR / f"{model_name}.pth"
     print(f"  download {model_name} ...")
-    try:
-        m = timm.create_model(model_name, pretrained=True)
-        torch.save(m.state_dict(), str(out_path))
-        verify_weight_file(out_path)
-        size_mb = out_path.stat().st_size / 1e6
-        print(f"  saved  {out_path.name} ({size_mb:.0f} MB, verified)")
-        return "ok"
-    except Exception as e:
-        print(f"  FAIL   {model_name}: {type(e).__name__}: {e}", file=sys.stderr)
-        return "fail"
+    errors = []
+    for label, fn in (("hf", download_hf_weight), ("url", download_url_weight)):
+        try:
+            out_path = fn(model_name)
+            size_mb = out_path.stat().st_size / 1e6
+            print(f"  saved  {out_path.name} ({size_mb:.0f} MB, {label})")
+            return "ok"
+        except Exception as e:
+            msg = f"{label}: {type(e).__name__}: {e}"
+            errors.append(msg)
+            print(f"  warn   {msg}", file=sys.stderr)
+    print(f"  FAIL   {model_name}: " + " | ".join(errors), file=sys.stderr)
+    return "fail"
 
 
 def main():
@@ -168,7 +246,7 @@ def main():
     WEIGHTS_DIR.mkdir(parents=True, exist_ok=True)
     print(f"timm: {getattr(timm, '__version__', 'unknown')}")
     print(f"Targets: {len(targets)} models")
-    print(f"Weights: {WEIGHTS_DIR}/{{model_name}}.{{pth,safetensors,bin}}")
+    print(f"Weights: {WEIGHTS_DIR}/{{model_name}}.pth")
     print(f"Network: {'ENABLED (--allow-download)' if args.allow_download else 'DISABLED'}")
     print()
 

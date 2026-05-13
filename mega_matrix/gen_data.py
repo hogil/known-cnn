@@ -46,7 +46,7 @@ def ensure_master_pool(need=200):
             "--per-class", str(need),
             "--out", str(MASTER_TRAIN),
         ]
-        subprocess.run(cmd, check=False, cwd=str(PROJ_ROOT))
+        subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
     else:
         log(f"master pool OK (min={min_avail} ≥ need={need})")
 
@@ -97,10 +97,7 @@ def make_eval_sets():
                 "--classification-chips-root", str(MASTER_TRAIN),
                 "--seed", "42",
             ]
-            try:
-                subprocess.run(cmd, check=False, cwd=str(PROJ_ROOT))
-            except Exception as e:
-                log(f"gen_eval_set n={en} FAIL: {e}")
+            subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
 
         if not master_eval_dir.exists():
             log(f"WARN eval_n{en} not generated, skipping local copy")

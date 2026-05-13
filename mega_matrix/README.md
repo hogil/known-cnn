@@ -22,8 +22,8 @@ mega_matrix/
 ├── run.sh               # 1-backbone all-in-one (single GPU)
 ├── run_ddp.sh           # 1-backbone parallel across N GPUs
 ├── run_all.sh           # ★ NEW — loops every backbone in weights/
-├── download.py          # ★ weight checker; download only with --allow-download
-├── weights/             # pre-downloaded backbone <name>.pth/.safetensors/.bin (gitignored)
+├── download.py          # ★ creates/checks <backbone>.pth; download only with --allow-download
+├── weights/             # pre-downloaded backbone <name>.pth (gitignored)
 ├── gen_data.py          # data 생성 (train + eval, per-class scale)
 ├── pseudo_label.py      # pseudo-label stage (per-backbone)
 └── make_report.py       # summary.md + plots
@@ -72,14 +72,14 @@ bash mega_matrix/run_ddp.sh --gpus 4
 bash mega_matrix/run.sh     --backbone swinv2_base_window12to24_192to384.ms_in22k_ft_in1k
 bash mega_matrix/run_ddp.sh --gpus 4 --backbone vit_base_patch16_384.augreg_in21k_ft_in1k
 # img-size 는 name 의 "384"/"256"/"224" 패턴으로 자동 결정
-# weights/<backbone>.pth/.safetensors/.bin 있으면 offline mode 자동
+# weights/<backbone>.pth 있으면 offline mode 자동
 # 없으면 HF/timm 다운로드 없이 즉시 실패
 # 결과는 outputs/_mega_matrix/<backbone>/ 아래
 ```
 
 ### ★ 모든 backbone 순차 평가 — `run_all.sh`
 ```bash
-# weights/*.pth/.safetensors/.bin 모두 발견 → 순차로 run.sh / run_ddp.sh 호출
+# weights/*.pth 모두 발견 → 순차로 run.sh / run_ddp.sh 호출
 bash mega_matrix/run_all.sh                       # auto-detect GPU
 bash mega_matrix/run_all.sh --gpus 4              # DDP
 bash mega_matrix/run_all.sh --only convnextv2     # name substring filter
@@ -275,7 +275,7 @@ scp -r mega_matrix/weights/ user@server:/path/to/known-cnn/mega_matrix/
 
 ```bash
 bash mega_matrix/run_ddp.sh --gpus 4
-# run.sh / run_ddp.sh 가 mega_matrix/weights/*.pth/.safetensors/.bin 존재 시
+# run.sh / run_ddp.sh 가 mega_matrix/weights/*.pth 존재 시
 # --backbone-timm-weights <path> 자동 passthrough → HF download 안 함
 # pseudo_label.py 도 동일 적용
 ```
@@ -296,7 +296,7 @@ MODELS = [
 ```bash
 python -m chip_multilabel._train_chip_variant \
     --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 \
-    --backbone-timm-weights mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.safetensors \
+    --backbone-timm-weights mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.pth \
     (... 나머지 args)
 ```
 

@@ -245,14 +245,9 @@ class ModelEMA:
 
 def _load_local_timm_weights(model: torch.nn.Module, wpath: Path) -> Tuple[int, int, int]:
     """Load a local timm backbone state_dict without any HF/timm network path."""
-    if wpath.suffix == ".safetensors":
-        try:
-            from safetensors.torch import load_file as _load_safetensors
-        except ImportError as e:
-            raise RuntimeError("safetensors is required to load .safetensors weights") from e
-        sd = _load_safetensors(str(wpath), device="cpu")
-    else:
-        sd = torch.load(str(wpath), map_location="cpu", weights_only=False)
+    if wpath.suffix != ".pth":
+        raise ValueError("backbone_timm_weights must be a .pth file. Run mega_matrix/download.py first.")
+    sd = torch.load(str(wpath), map_location="cpu", weights_only=False)
     if isinstance(sd, dict):
         for key in ("state_dict", "model", "model_state_dict"):
             if key in sd and hasattr(sd[key], "keys"):
@@ -449,7 +444,7 @@ def main():
                          "--backbone-timm-weights instead of --init-ckpt. "
                          "HF/timm auto-download is forbidden.")
     ap.add_argument("--backbone-timm-weights", type=str, default=None,
-                    help="Required local weight file (.pth / .safetensors / .bin / .pt) for "
+                    help="Required local .pth weight file for "
                          "--backbone-timm. Copy mega_matrix/weights/ to the server first, "
                          "then pass --backbone-timm-weights mega_matrix/weights/<file>.")
     ap.add_argument("--img-size", type=int, default=None,
