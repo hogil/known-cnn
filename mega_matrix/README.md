@@ -41,11 +41,11 @@ outputs/_mega_matrix/
 │   └── YYYYMMDD_HHMMSS_run_all_summary.log
 ├── train_n50/, train_n100/, train_n200/                # train subsets
 ├── eval_n200/, eval_n2000/, eval_n20000/               # eval subsets (per-class)
-├── model_train{N}_{sel}/T7_*/                          # 6 trained models
+├── YYYYMMDD_HHMMSS_model_train{N}_{sel}/YYYYMMDD_HHMMSS_T7_*/  # 6 trained models
 │   ├── best_model.pth
 │   └── eval_{N}/stage1_*/                              # 18 eval results
 ├── pseudo_train/                                       # only with --with-pseudo
-├── model_pseudo_train{N}_{sel}/T7_*/                   # only with --with-pseudo
+├── YYYYMMDD_HHMMSS_model_pseudo_{sel}/YYYYMMDD_HHMMSS_T7_*/     # only with --with-pseudo
 │   └── eval_{N}/stage1_*/
 
 docs/chip-multilabel/manager_report/

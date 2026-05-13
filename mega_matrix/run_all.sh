@@ -8,11 +8,11 @@
 #
 # Per-backbone outputs land at:
 #   outputs/_mega_matrix/<backbone>/
-#     model_train{N}_{sel}/T*/best_model.pth + eval_{N}/
+#     YYYYMMDD_HHMMSS_model_train{N}_{sel}/YYYYMMDD_HHMMSS_T*/best_model.pth + eval_{N}/
 #   outputs/_mega_matrix/logs/
 #     YYYYMMDD_HHMMSS_pidPID_<backbone>_run.log
 #     YYYYMMDD_HHMMSS_pidPID_<backbone>_run_ddp.log(.train/.gpuN)
-#     model_pseudo_{sel}/... and pseudo_train/ only with --with-pseudo
+#     YYYYMMDD_HHMMSS_model_pseudo_{sel}/... and pseudo_train/ only with --with-pseudo
 # Shared data (regardless of backbone):
 #   outputs/_mega_matrix/train_n{50,100,200}/
 #   outputs/_mega_matrix/eval_n{200,2000,20000}/

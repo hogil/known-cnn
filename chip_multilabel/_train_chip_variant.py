@@ -649,9 +649,9 @@ def main():
               f"{args.kd_teacher_probs}  alpha={args.kd_alpha} T={args.kd_temperature} "
               f"skip_on_cutmix={args.kd_skip_on_cutmix}")
 
-    ts = datetime.now().strftime("%y%m%d_%H%M%S")
+    ts = os.environ.get("TRAIN_RUN_STAMP") or datetime.now().strftime("%Y%m%d_%H%M%S")
     name = args.variant if not args.tag else f"{args.variant}_{args.tag}"
-    out_dir = Path(args.out_root) / f"{name}_{ts}"
+    out_dir = Path(args.out_root) / f"{ts}_{name}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"[train {args.variant}] device={device}  out={out_dir}")

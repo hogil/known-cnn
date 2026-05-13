@@ -121,14 +121,15 @@ fi
 train_one() {
     local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${MODEL_BASE}/model_${TAG}"
+    local OUT_ROOT="${MODEL_BASE}/${RUN_STAMP}_model_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
     fi
     log "TRAIN ${TAG} ($BACKBONE) batch=$BATCH_PER_GPU workers=$TRAIN_WORKERS"
     set +e
-    python -u -m chip_multilabel._train_chip_variant \
+    local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
+    TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs 10 --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$TRAIN_WORKERS" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
@@ -140,7 +141,7 @@ train_one() {
         --out-root "$OUT_ROOT" --tag "${TAG}" \
         2>&1 | tee -a "$LOG"
     local TRAIN_RC=${PIPESTATUS[0]}
-    local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
+    local RUN=$(find "$OUT_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth
     set -e
     if [ "$TRAIN_RC" -ne 0 ]; then
@@ -165,8 +166,8 @@ fi
 # ======================================================================
 eval_one() {
     local TN=$1; local SEL=$2; local EN=$3
-    local MODEL_ROOT="${MODEL_BASE}/model_train${TN}_${SEL}"
-    local RUN=$(ls -d "$MODEL_ROOT"/T*/ 2>/dev/null | head -1)
+    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "*_model_train${TN}_${SEL}" -o -name "model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
+    local RUN=$(find "$MODEL_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     if [ -z "$RUN" ]; then
         log "SKIP eval train${TN}_${SEL} eval_${EN}: no trained run under $MODEL_ROOT"
         return 0

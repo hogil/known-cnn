@@ -141,7 +141,7 @@ fi
 train_cell() {
     local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${MODEL_BASE}/model_${TAG}"
+    local OUT_ROOT="${MODEL_BASE}/${RUN_STAMP}_model_${TAG}"
     if [ -d "$OUT_ROOT" ]; then
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
@@ -150,7 +150,8 @@ train_cell() {
     # True torchrun DDP: each rank sees --batch as its OWN batch (per-rank).
     # effective global batch = BATCH_PER_GPU * NGPU
     set +e
-    torchrun --standalone --nproc_per_node="$NGPU" \
+    local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
+    TRAIN_RUN_STAMP="$TRAIN_STAMP" torchrun --standalone --nproc_per_node="$NGPU" \
         -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs 10 \
         --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
@@ -165,7 +166,7 @@ train_cell() {
         2>&1 | tee -a "${LOG}.train"
     local TRAIN_RC=${PIPESTATUS[0]}
     set -e
-    local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
+    local RUN=$(find "$OUT_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth
     if [ "$TRAIN_RC" -ne 0 ]; then
         log "TRAIN_FAIL ${TAG} rc=$TRAIN_RC"
@@ -190,8 +191,8 @@ log "all trainings complete"
 # ======================================================================
 eval_cell() {
     local GPU=$1; local TN=$2; local SEL=$3; local EN=$4
-    local MODEL_ROOT="${MODEL_BASE}/model_train${TN}_${SEL}"
-    local RUN=$(ls -d "$MODEL_ROOT"/T*/ 2>/dev/null | head -1)
+    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "*_model_train${TN}_${SEL}" -o -name "model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
+    local RUN=$(find "$MODEL_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
     if [ -z "$RUN" ]; then
         log "SKIP eval train${TN}_${SEL} eval${EN}: no trained run under $MODEL_ROOT"
         return 0

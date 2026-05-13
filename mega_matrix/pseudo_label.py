@@ -15,6 +15,7 @@ import ast
 import subprocess
 import sys
 from pathlib import Path
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import torch
@@ -38,6 +39,16 @@ TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 CONF_THRESHOLD = 0.85   # max_prob >= 0.85 for pseudo-label inclusion
 
 
+def find_model_roots(prefix):
+    cands = list(MODEL_BASE.glob(f"*_{prefix}")) + list(MODEL_BASE.glob(prefix))
+    return sorted([p for p in cands if p.is_dir()], key=lambda p: p.name, reverse=True)
+
+
+def find_run_dirs(model_root):
+    runs = [p for p in model_root.iterdir() if p.is_dir() and (p / "best_model.pth").exists()]
+    return sorted(runs, key=lambda p: p.name, reverse=True)
+
+
 def log(msg):
     print(f"[pseudo] {msg}", flush=True)
 
@@ -49,8 +60,10 @@ def find_best_primary_model():
     best = (None, None, -1.0, None)  # (TN, SEL, bit_F1, run_path)
     for tn in [50, 100, 200]:
         for sel in ["f1", "margin_max"]:
-            model_root = MODEL_BASE / f"model_train{tn}_{sel}"
-            runs = list(model_root.glob("T*/"))
+            model_roots = find_model_roots(f"model_train{tn}_{sel}")
+            if not model_roots:
+                continue
+            runs = find_run_dirs(model_roots[0])
             if not runs:
                 continue
             run = runs[0]
@@ -175,7 +188,8 @@ def build_pseudo_train_dir(filt_df, base_train="train_n200"):
 
 def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
     """Train new model on pseudo_train + evaluate."""
-    out_root = MODEL_BASE / f"model_pseudo_{sel}"
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_root = MODEL_BASE / f"{stamp}_model_pseudo_{sel}"
     if out_root.exists():
         log(f"  pseudo model {sel} exists, skip retrain")
     else:
@@ -210,12 +224,12 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             log(f"  using offline weights {offline_wpath.name}")
         subprocess.run(cmd, check=False, cwd=str(PROJ_ROOT))
         # Cleanup
-        runs = list(out_root.glob("T*/"))
+        runs = find_run_dirs(out_root)
         if runs:
             for ep_pth in runs[0].glob("epoch_*.pth"):
                 ep_pth.unlink()
     # Eval on eval_n2000
-    runs = list(out_root.glob("T*/"))
+    runs = find_run_dirs(out_root)
     if not runs:
         log(f"  no run dir, skip eval")
         return

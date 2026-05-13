@@ -1,13 +1,14 @@
 """
 Generate summary_mega_sweep.md + plots from mega matrix outputs.
 
-Reads outputs/_mega_matrix/model_*/T*/eval_*/stage1_*/preds_chip.parquet
+Reads outputs/_mega_matrix/*_model_*/*/eval_*/stage1_*/preds_chip.parquet
 Writes docs/chip-multilabel/manager_report/summary_mega_sweep.md + .png plots
 """
 import json
 import glob
 import ast
 import math
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ from sklearn.metrics import f1_score
 BITS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']
 SHORT = {'bank_boundary': 'bb', 'fork': 'fk', 'scratch': 'sc', 'scratch_rot': 'sr'}
 
-OUT_BASE = Path("outputs/_mega_matrix")
+OUT_BASE = Path(os.environ.get("MEGA_MODEL_BASE", "outputs/_mega_matrix"))
 REPORT_DIR = Path("docs/chip-multilabel/manager_report")
 REPORT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR = REPORT_DIR / "figs_mega"
@@ -29,6 +30,16 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 TRAIN_NS = [50, 100, 200]
 EVAL_NS = ['200', '2000', '20000']
 SELS = ['f1', 'margin_max']
+
+
+def find_model_root(tn, sel):
+    cands = list(OUT_BASE.glob(f"*_model_train{tn}_{sel}")) + list(OUT_BASE.glob(f"model_train{tn}_{sel}"))
+    return sorted([p for p in cands if p.is_dir()], key=lambda p: p.name, reverse=True)
+
+
+def find_run_dirs(model_root):
+    runs = [p for p in model_root.iterdir() if p.is_dir() and (p / 'best_model.pth').exists()]
+    return sorted(runs, key=lambda p: p.name, reverse=True)
 
 
 def get_group(row):
@@ -119,8 +130,10 @@ def collect_all():
     for tn in TRAIN_NS:
         for sel in SELS:
             for en in EVAL_NS:
-                model_root = OUT_BASE / f"model_train{tn}_{sel}"
-                runs = list(model_root.glob("T*/"))
+                model_roots = find_model_root(tn, sel)
+                if not model_roots:
+                    continue
+                runs = find_run_dirs(model_roots[0])
                 if not runs:
                     continue
                 run = runs[0]
