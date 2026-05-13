@@ -43,7 +43,12 @@ DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
 
 # Default flags
 DO_DATA=1; DO_EVAL=1; DO_REPORT=1; DO_PSEUDO=0
-NGPU=$(nvidia-smi -L 2>/dev/null | wc -l)
+# CUDA_VISIBLE_DEVICES has higher priority than nvidia-smi -L (which ignores CVD)
+if [ -n "$CUDA_VISIBLE_DEVICES" ]; then
+    NGPU=$(echo "$CUDA_VISIBLE_DEVICES" | tr ',' '\n' | grep -c '[0-9]')
+else
+    NGPU=$(nvidia-smi -L 2>/dev/null | wc -l)
+fi
 [ "$NGPU" -lt 1 ] && NGPU=1
 SMOKE=0
 EPOCHS=10
