@@ -22,8 +22,8 @@ mega_matrix/
 ├── run.sh               # 1-backbone all-in-one (single GPU)
 ├── run_ddp.sh           # 1-backbone parallel across N GPUs
 ├── run_all.sh           # ★ NEW — loops every backbone in weights/
-├── download.py          # ★ multi-backbone downloader (closed-network)
-├── weights/             # pre-downloaded backbone <name>.pth (gitignored)
+├── download.py          # ★ weight checker; download only with --allow-download
+├── weights/             # pre-downloaded backbone <name>.pth/.safetensors/.bin (gitignored)
 ├── gen_data.py          # data 생성 (train + eval, per-class scale)
 ├── pseudo_label.py      # pseudo-label stage (per-backbone)
 └── make_report.py       # summary.md + plots
@@ -72,13 +72,14 @@ bash mega_matrix/run_ddp.sh --gpus 4
 bash mega_matrix/run.sh     --backbone swinv2_base_window12to24_192to384.ms_in22k_ft_in1k
 bash mega_matrix/run_ddp.sh --gpus 4 --backbone vit_base_patch16_384.augreg_in21k_ft_in1k
 # img-size 는 name 의 "384"/"256"/"224" 패턴으로 자동 결정
-# weights/<backbone>.pth 있으면 offline mode 자동
+# weights/<backbone>.pth/.safetensors/.bin 있으면 offline mode 자동
+# 없으면 HF/timm 다운로드 없이 즉시 실패
 # 결과는 outputs/_mega_matrix/<backbone>/ 아래
 ```
 
 ### ★ 모든 backbone 순차 평가 — `run_all.sh`
 ```bash
-# weights/*.pth 모두 발견 → 순차로 run.sh / run_ddp.sh 호출
+# weights/*.pth/.safetensors/.bin 모두 발견 → 순차로 run.sh / run_ddp.sh 호출
 bash mega_matrix/run_all.sh                       # auto-detect GPU
 bash mega_matrix/run_all.sh --gpus 4              # DDP
 bash mega_matrix/run_all.sh --only convnextv2     # name substring filter
@@ -233,21 +234,24 @@ bash mega_matrix/run_ddp.sh --gpus 4
 
 ## 폐쇄망 (closed-network) 서버 사용
 
-서버가 인터넷 차단 → timm 의 `pretrained=True` 가 HuggingFace 다운로드 실패.
-해결: 인터넷 머신에서 weight 받아서 `mega_matrix/weights/` 폴더 통째 서버에 복사.
+서버는 폐쇄망 기준이다. `run.sh`, `run_ddp.sh`, trainer, pseudo retrain은
+HF/timm 자동 다운로드를 시도하지 않는다. `mega_matrix/weights/` 안에 로컬 weight
+파일이 없으면 즉시 실패한다.
+
+해결: 인터넷 머신에서 weight를 받아 `mega_matrix/weights/` 폴더 통째 서버에 복사.
 
 ### Step 1. 인터넷 머신에서 weight 다운로드
 
 ```bash
 cd /path/to/known-cnn
-python mega_matrix/download.py                  # 모든 backbone (~2-3 GB)
-python mega_matrix/download.py --only convnext  # substring filter
-python mega_matrix/download.py --list           # backbone 목록만 출력
-# → mega_matrix/weights/<backbone>.pth (torch.save 포맷, .safetensors 변환됨)
-# verify 단계 자동 — timm pretrained_cfg_overlay(file=...) 로 더미 forward 통과 확인
+python mega_matrix/download.py --allow-download                  # 모든 backbone (~2-3 GB)
+python mega_matrix/download.py --allow-download --only convnext  # substring filter
+python mega_matrix/download.py --list                            # backbone 목록만 출력
+# 기본 `python mega_matrix/download.py` 는 verify/skip only; 네트워크 사용 안 함
+# → mega_matrix/weights/<backbone>.pth
 ```
 
-기본 BACKBONES (download.py 안에 정의, 추가하려면 list 에 append):
+기본 MODELS (download.py 안에 정의, 추가하려면 list 에 append):
 - convnextv2_base.fcmae_ft_in22k_in1k_384 (~360 MB, paper baseline winner)
 - convnextv2_large.fcmae_ft_in22k_in1k_384 (~800 MB)
 - swinv2_base_window12to24_192to384.ms_in22k_ft_in1k (~340 MB)
@@ -266,23 +270,19 @@ scp -r mega_matrix/weights/ user@server:/path/to/known-cnn/mega_matrix/
 
 ```bash
 bash mega_matrix/run_ddp.sh --gpus 4
-# run.sh / run_ddp.sh 가 mega_matrix/weights/*.safetensors 존재 시
+# run.sh / run_ddp.sh 가 mega_matrix/weights/*.pth/.safetensors/.bin 존재 시
 # --backbone-timm-weights <path> 자동 passthrough → HF download 안 함
 # pseudo_label.py 도 동일 적용
 ```
 
 ### 다른 backbone 추가하려면
 
-`mega_matrix/download.py` 의 `BACKBONES` 리스트에 (timm_name, hf_repo_id, filenames) 추가:
+`mega_matrix/download.py` 의 `MODELS` 리스트에 timm model id 추가:
 
 ```python
-BACKBONES = [
-    ("convnextv2_base.fcmae_ft_in22k_in1k_384", "timm/convnextv2_base.fcmae_ft_in22k_in1k_384",
-     ["model.safetensors", "pytorch_model.bin"]),
-    # 추가 backbone
-    ("swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
-     "timm/swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
-     ["model.safetensors", "pytorch_model.bin"]),
+MODELS = [
+    "convnextv2_base.fcmae_ft_in22k_in1k_384",
+    "swinv2_base_window12to24_192to384.ms_in22k_ft_in1k",
 ]
 ```
 

@@ -31,6 +31,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJ_ROOT"
 
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export HF_HUB_DISABLE_TELEMETRY=1
+
 OUT_BASE=outputs/_mega_matrix
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
 DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
@@ -113,8 +118,9 @@ if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
 else
-    BACKBONE_WEIGHTS_FLAG=""
-    log "online mode (no $OFFLINE_WEIGHTS) - timm will fetch from HF"
+    log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
+    log "closed-network mode forbids HF/timm download; copy .pth/.safetensors/.bin first"
+    exit 2
 fi
 export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
 export MEGA_MODEL_BASE="$MODEL_BASE"

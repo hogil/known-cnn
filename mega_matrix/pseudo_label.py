@@ -14,16 +14,21 @@ import glob
 import ast
 import subprocess
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
+
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
 import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
 import timm
 import torchvision.transforms as T
-
-import os
 
 PROJ_ROOT = Path(__file__).parent.parent
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"          # shared data root (train_n*, eval_n*)
@@ -202,6 +207,10 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             if p.exists():
                 offline_wpath = p
                 break
+        if offline_wpath is None:
+            log(f"  ERROR missing offline weights for {BACKBONE} under {weights_dir}")
+            log("  closed-network mode forbids HF/timm download; skip pseudo retrain")
+            return
         cmd = [
             sys.executable, "-u", "-m", "chip_multilabel._train_chip_variant",
             "--variant", "T7", "--ls", "0.30", "--epochs", "10",
@@ -218,10 +227,9 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             "--img-size", str(IMG_SIZE),
             "--out-root", str(out_root),
             "--tag", f"pseudo_{sel}",
+            "--backbone-timm-weights", str(offline_wpath),
         ]
-        if offline_wpath:
-            cmd += ["--backbone-timm-weights", str(offline_wpath)]
-            log(f"  using offline weights {offline_wpath.name}")
+        log(f"  using offline weights {offline_wpath.name}")
         subprocess.run(cmd, check=False, cwd=str(PROJ_ROOT))
         # Cleanup
         runs = find_run_dirs(out_root)

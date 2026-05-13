@@ -2,7 +2,7 @@
 # =====================================================================
 # Mega matrix — run ALL backbones in weights/ folder sequentially
 #
-# Discovers every mega_matrix/weights/<name>.pth, then dispatches:
+# Discovers every mega_matrix/weights/<name>.pth/.safetensors/.bin, then dispatches:
 #   - bash mega_matrix/run.sh        --backbone <name>     (single GPU, default)
 #   - bash mega_matrix/run_ddp.sh    --backbone <name>     (multi-GPU)
 #
@@ -33,6 +33,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJ_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJ_ROOT"
+
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+export HF_HUB_DISABLE_TELEMETRY=1
 
 WEIGHTS_DIR="mega_matrix/weights"
 ONLY=""
@@ -72,22 +77,28 @@ echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] start NGPU=$NGPU runner='$RUNNER'" 
 
 # Discover backbones
 shopt -s nullglob
-PTHS=("$WEIGHTS_DIR"/*.pth)
+WEIGHT_FILES=("$WEIGHTS_DIR"/*.pth "$WEIGHTS_DIR"/*.safetensors "$WEIGHTS_DIR"/*.bin)
 shopt -u nullglob
-if [ ${#PTHS[@]} -eq 0 ]; then
-    echo "[run_all] ERROR: no .pth in $WEIGHTS_DIR/" | tee -a "$SUMMARY"
-    echo "[run_all] run 'python mega_matrix/download.py' on an internet machine first." | tee -a "$SUMMARY"
+if [ ${#WEIGHT_FILES[@]} -eq 0 ]; then
+    echo "[run_all] ERROR: no .pth/.safetensors/.bin in $WEIGHTS_DIR/" | tee -a "$SUMMARY"
+    echo "[run_all] copy weights first, or run 'python mega_matrix/download.py --allow-download' on an internet machine." | tee -a "$SUMMARY"
     exit 1
 fi
 
 # Filter
 BACKBONES=()
-for p in "${PTHS[@]}"; do
-    name=$(basename "$p" .pth)
+SEEN="|"
+for p in "${WEIGHT_FILES[@]}"; do
+    base=$(basename "$p")
+    name="${base%.*}"
+    if [[ "$SEEN" == *"|$name|"* ]]; then
+        continue
+    fi
     if [ -n "$ONLY" ] && [[ "$name" != *"$ONLY"* ]]; then
         continue
     fi
     BACKBONES+=("$name")
+    SEEN="${SEEN}${name}|"
 done
 
 if [ ${#BACKBONES[@]} -eq 0 ]; then

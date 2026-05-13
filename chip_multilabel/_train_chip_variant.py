@@ -27,6 +27,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple
 
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+
 import numpy as np
 import timm
 import torch
@@ -238,28 +243,61 @@ class ModelEMA:
                 ema_v.copy_(v)
 
 
+def _load_local_timm_weights(model: torch.nn.Module, wpath: Path) -> Tuple[int, int, int]:
+    """Load a local timm backbone state_dict without any HF/timm network path."""
+    if wpath.suffix == ".safetensors":
+        try:
+            from safetensors.torch import load_file as _load_safetensors
+        except ImportError as e:
+            raise RuntimeError("safetensors is required to load .safetensors weights") from e
+        sd = _load_safetensors(str(wpath), device="cpu")
+    else:
+        sd = torch.load(str(wpath), map_location="cpu", weights_only=False)
+    if isinstance(sd, dict):
+        for key in ("state_dict", "model", "model_state_dict"):
+            if key in sd and hasattr(sd[key], "keys"):
+                sd = sd[key]
+                break
+    if not hasattr(sd, "keys"):
+        raise ValueError(f"local weight file is not a state_dict: {wpath}")
+
+    msd = model.state_dict()
+    compat = {}
+    for k, v in sd.items():
+        kk = k
+        for prefix in ("module.", "model."):
+            if kk.startswith(prefix):
+                kk = kk[len(prefix):]
+        if kk in msd and hasattr(v, "shape") and msd[kk].shape == v.shape:
+            compat[kk] = v
+    if not compat:
+        raise ValueError(f"no compatible keys loaded from {wpath}")
+    model.load_state_dict(compat, strict=False)
+    return len(compat), len(sd) - len(compat), len(sd)
+
+
 def build_model(num_classes: int, init_ckpt: Path,
                 drop_path_rate: float = 0.0,
                 backbone_timm: str = None,
                 img_size_override: int = None,
                 backbone_timm_weights: str = None) -> Tuple[torch.nn.Module, str, int]:
-    # Mode A: timm pretrained (HF download OR offline file via --backbone-timm-weights)
+    # Mode A: timm backbone from an explicit local weight file only.
     if backbone_timm:
         img_size = int(img_size_override) if img_size_override else 224
-        if backbone_timm_weights:
-            wpath = Path(backbone_timm_weights)
-            if not wpath.is_file():
-                raise FileNotFoundError(f"--backbone-timm-weights not found: {wpath}")
-            # timm-native offline load: overlay pretrained_cfg with local file
-            model = timm.create_model(backbone_timm, pretrained=True,
-                                      pretrained_cfg_overlay=dict(file=str(wpath)),
-                                      num_classes=num_classes,
-                                      drop_path_rate=drop_path_rate)
-            print(f"[init] backbone={backbone_timm} (offline weights {wpath}), img_size={img_size}")
-        else:
-            model = timm.create_model(backbone_timm, pretrained=True, num_classes=num_classes,
-                                      drop_path_rate=drop_path_rate)
-            print(f"[init] backbone={backbone_timm} (timm pretrained download), img_size={img_size}")
+        if not backbone_timm_weights:
+            raise RuntimeError(
+                "--backbone-timm requires --backbone-timm-weights. "
+                "HF/timm auto-download is forbidden in closed-network mode."
+            )
+        wpath = Path(backbone_timm_weights)
+        if not wpath.is_file():
+            raise FileNotFoundError(f"--backbone-timm-weights not found: {wpath}")
+        model = timm.create_model(backbone_timm, pretrained=False,
+                                  num_classes=num_classes,
+                                  drop_path_rate=drop_path_rate)
+        loaded, skipped, total = _load_local_timm_weights(model, wpath)
+        print(f"[init] backbone={backbone_timm} loaded local weights {wpath} "
+              f"{loaded}/{total} keys (skipped={skipped}), img_size={img_size}")
         return model, backbone_timm, img_size
     # Mode B: local ckpt (default ConvNeXtV2-base path)
     ckpt = torch.load(init_ckpt, map_location="cpu", weights_only=False)
@@ -407,13 +445,12 @@ def main():
     ap.add_argument("--data-root", default=DEFAULT_CLASSIFICATION_CHIPS)
     ap.add_argument("--init-ckpt", default=DEFAULT_BACKBONE_CKPT)
     ap.add_argument("--backbone-timm", type=str, default=None,
-                    help="If set, use timm.create_model(pretrained=True) instead of --init-ckpt. "
-                         "Use for backbone comparison (e.g. 'vit_base_patch16_384.augreg_in21k_ft_in1k').")
+                    help="If set, use timm.create_model with explicit local "
+                         "--backbone-timm-weights instead of --init-ckpt. "
+                         "HF/timm auto-download is forbidden.")
     ap.add_argument("--backbone-timm-weights", type=str, default=None,
-                    help="Offline-mode local weight file (.safetensors / .bin / .pt) for "
-                         "--backbone-timm. Used on closed networks where HF auto-download is "
-                         "blocked. Run `python mega_matrix/download_weights.py` on an "
-                         "internet machine first, copy mega_matrix/weights/ to the server, "
+                    help="Required local weight file (.pth / .safetensors / .bin / .pt) for "
+                         "--backbone-timm. Copy mega_matrix/weights/ to the server first, "
                          "then pass --backbone-timm-weights mega_matrix/weights/<file>.")
     ap.add_argument("--img-size", type=int, default=None,
                     help="Override img_size for --backbone-timm mode (default 224).")
