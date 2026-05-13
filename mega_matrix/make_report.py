@@ -91,7 +91,17 @@ def metric_one_eval(eval_dir, cell='T0__I13'):
     fp = int(neg['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(neg) else 0
     far = fp / max(len(neg), 1)
 
-    # Per-OOD class FAR
+    # Split: NI (Normal + Invalid) vs OOD (wafer-pattern OOD only)
+    ni_mask = sub['group'].isin(['Normal', 'Invalid'])
+    ood_mask = sub['group'].apply(lambda g: g.startswith('OOD_'))
+    ni_sub = sub[ni_mask]
+    ood_sub = sub[ood_mask]
+    ni_fp = int(ni_sub['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(ni_sub) else 0
+    ood_fp = int(ood_sub['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(ood_sub) else 0
+    ni_far = ni_fp / max(len(ni_sub), 1)
+    ood_far_total = ood_fp / max(len(ood_sub), 1)
+
+    # Per-OOD class FAR (kept for per-class breakdown table)
     ood_far = {}
     for grp in sub['group'].unique():
         if grp.startswith('OOD_') or grp in ['Normal', 'Invalid']:
@@ -115,6 +125,10 @@ def metric_one_eval(eval_dir, cell='T0__I13'):
     return {
         'bit_F1': bit_F1,
         'total_far': far,
+        'ni_far': ni_far,
+        'ood_far_total': ood_far_total,
+        'n_ni': len(ni_sub),
+        'n_ood': len(ood_sub),
         'per_bit_F1': per_bit,
         'ood_far': ood_far,
         'prob_stats': prob_stats,
@@ -194,13 +208,14 @@ def write_table_md(rows, fpath):
     out.append("- `Total FAR` = (Normal + Invalid + OOD) chips with non-empty pred_labels / total negatives\n")
     out.append("- Cell `T0__I13` selected (entropy gate + Invalid heuristic, paper SOTA cell)\n\n")
 
-    out.append("\n| train n | selection | eval n | n_pos | n_neg | bit_F1 | Total FAR | bb F1 | fork F1 | sc F1 | sr F1 |\n")
-    out.append("|---|---|---|---|---|---|---|---|---|---|---|\n")
+    out.append("\n| train n | selection | eval n | n_pos | n_neg | bit_F1 | Total FAR | NI FAR | OOD FAR | bb F1 | fork F1 | sc F1 | sr F1 |\n")
+    out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
     for r in rows:
         out.append(
             f"| {r['train_n']} | {r['selection']} | {r['eval_n']} | "
             f"{r['n_pos']} | {r['n_neg']} | "
             f"**{r['bit_F1']:.4f}** | **{r['total_far']*100:.2f}%** | "
+            f"{r['ni_far']*100:.2f}% | {r['ood_far_total']*100:.2f}% | "
             f"{r['per_bit_F1']['bank_boundary']:.4f} | "
             f"{r['per_bit_F1']['fork']:.4f} | "
             f"{r['per_bit_F1']['scratch']:.4f} | "
@@ -340,6 +355,56 @@ def write_table_md(rows, fpath):
     plt.close()
     out.append("### Plot 2 — Total FAR heatmap (train × eval)\n\n")
     out.append("![FAR heatmap](figs_mega/total_far_heatmap.png)\n\n")
+
+    # Plot 2b: NI FAR heatmap (Normal + Invalid only)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    for ax, sel in zip(axes, SELS):
+        mat = np.zeros((len(TRAIN_NS), len(EVAL_NS)))
+        for i, tn in enumerate(TRAIN_NS):
+            for j, en in enumerate(EVAL_NS):
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                mat[i, j] = r['ni_far'] * 100 if r else np.nan
+        im = ax.imshow(mat, cmap='Oranges', vmin=0, vmax=5, aspect='auto')
+        ax.set_xticks(range(len(EVAL_NS)))
+        ax.set_xticklabels([f'eval={e}' for e in EVAL_NS])
+        ax.set_yticks(range(len(TRAIN_NS)))
+        ax.set_yticklabels([f'train={t}' for t in TRAIN_NS])
+        ax.set_title(f'NI FAR % (Normal+Invalid, {sel})')
+        for i in range(len(TRAIN_NS)):
+            for j in range(len(EVAL_NS)):
+                if not np.isnan(mat[i, j]):
+                    ax.text(j, i, f'{mat[i, j]:.2f}%', ha='center', va='center', fontsize=9)
+        plt.colorbar(im, ax=ax)
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / 'ni_far_heatmap.png', dpi=120)
+    plt.close()
+    out.append("### Plot 2b — NI FAR heatmap (Normal + Invalid only)\n\n")
+    out.append("![NI FAR heatmap](figs_mega/ni_far_heatmap.png)\n\n")
+
+    # Plot 2c: OOD FAR heatmap (wafer-pattern OOD only)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    for ax, sel in zip(axes, SELS):
+        mat = np.zeros((len(TRAIN_NS), len(EVAL_NS)))
+        for i, tn in enumerate(TRAIN_NS):
+            for j, en in enumerate(EVAL_NS):
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                mat[i, j] = r['ood_far_total'] * 100 if r else np.nan
+        im = ax.imshow(mat, cmap='Purples', vmin=0, vmax=5, aspect='auto')
+        ax.set_xticks(range(len(EVAL_NS)))
+        ax.set_xticklabels([f'eval={e}' for e in EVAL_NS])
+        ax.set_yticks(range(len(TRAIN_NS)))
+        ax.set_yticklabels([f'train={t}' for t in TRAIN_NS])
+        ax.set_title(f'OOD FAR % (wafer-pattern, {sel})')
+        for i in range(len(TRAIN_NS)):
+            for j in range(len(EVAL_NS)):
+                if not np.isnan(mat[i, j]):
+                    ax.text(j, i, f'{mat[i, j]:.2f}%', ha='center', va='center', fontsize=9)
+        plt.colorbar(im, ax=ax)
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / 'ood_far_heatmap.png', dpi=120)
+    plt.close()
+    out.append("### Plot 2c — OOD FAR heatmap (wafer-pattern OOD)\n\n")
+    out.append("![OOD FAR heatmap](figs_mega/ood_far_heatmap.png)\n\n")
 
     # Plot 3: train_n scaling (bit_F1 + FAR per selection)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
