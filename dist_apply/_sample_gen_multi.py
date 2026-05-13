@@ -22,9 +22,9 @@ Mix 비율 (default 70/20/10):
 - invalid_main 은 wafer 전체가 invalid 되는 special — multi 합성 부적합.
 
 출력:
-- D:/project/data/wm-811k/unknown_multi/<basename>.png
-- D:/project/data/positions/unknown_multi/<basename>.json
-- D:/project/data/wm-811k/unknown_multi/_manifest.csv (basename × distributions × objects × n_dist × n_obj)
+- <project>/data/wm-811k/unknown_multi/<basename>.png
+- <project>/data/positions/unknown_multi/<basename>.json
+- <project>/data/wm-811k/unknown_multi/_manifest.csv (basename × distributions × objects × n_dist × n_obj)
 """
 import argparse, csv, os, sys, time
 from concurrent.futures import ProcessPoolExecutor
@@ -33,14 +33,24 @@ import json
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from _fq_metadata import add_synthetic_fq_to_json
-from _sample_gen import (
-    GRID, CHIP, SIZE, PALETTE, KEY_TO_INDEX, IDX_BG, IDX_TEXT, IDX_BORDER_INV,
-    BIN_TO_BORDER_IDX, FONT_BIG, CUM_BASE, CUM_DEFECT_BG, CUM_EDGE,
-    ALPHA_FNS, OBJECT_DISTS, _wafer_inside_mask, select_distribution_chips,
-    select_random_invalid, assign_defect_bin, assign_invalid_bin, rand_prefix,
-    LT_OPTIONS, TM_OPTIONS, _GPU, _DEVICE,
-)
+try:
+    from ._fq_metadata import add_synthetic_fq_to_json
+    from ._sample_gen import (
+        GRID, CHIP, SIZE, PALETTE, KEY_TO_INDEX, IDX_BG, IDX_TEXT, IDX_BORDER_INV,
+        BIN_TO_BORDER_IDX, FONT_BIG, CUM_BASE, CUM_DEFECT_BG, CUM_EDGE,
+        ALPHA_FNS, OBJECT_DISTS, _wafer_inside_mask, select_distribution_chips,
+        select_random_invalid, assign_defect_bin, assign_invalid_bin, rand_prefix,
+        LT_OPTIONS, TM_OPTIONS, _GPU, _DEVICE,
+    )
+except ImportError:
+    from _fq_metadata import add_synthetic_fq_to_json
+    from _sample_gen import (
+        GRID, CHIP, SIZE, PALETTE, KEY_TO_INDEX, IDX_BG, IDX_TEXT, IDX_BORDER_INV,
+        BIN_TO_BORDER_IDX, FONT_BIG, CUM_BASE, CUM_DEFECT_BG, CUM_EDGE,
+        ALPHA_FNS, OBJECT_DISTS, _wafer_inside_mask, select_distribution_chips,
+        select_random_invalid, assign_defect_bin, assign_invalid_bin, rand_prefix,
+        LT_OPTIONS, TM_OPTIONS, _GPU, _DEVICE,
+    )
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
@@ -48,8 +58,12 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 DISTRIBUTIONS = ["Center", "Donut", "Edge-Ring", "Edge-Bottom", "Edge-Top", "Full", "Thick-Edge"]
 OBJECTS = ["bank_boundary", "fork", "scratch", "scratch_rot"]                            # round 26: particle_blast→fork, scratch_21deg→scratch_rot
 
-PNG_OUT_DIR = "D:/project/data/wm-811k/unknown_multi"
-JSON_OUT_DIR = "D:/project/data/positions/unknown_multi"
+PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_ROOT = os.environ.get("WM811K_ROOT", os.path.join(PROJ_ROOT, "data", "wm-811k"))
+POSITIONS_ROOT = os.environ.get("POSITIONS_ROOT", os.path.join(PROJ_ROOT, "data", "positions"))
+
+PNG_OUT_DIR = os.environ.get("WAFER_MULTI_PNG_OUT_DIR", os.path.join(DATA_ROOT, "unknown_multi"))
+JSON_OUT_DIR = os.environ.get("WAFER_MULTI_JSON_OUT_DIR", os.path.join(POSITIONS_ROOT, "unknown_multi"))
 MANIFEST_PATH = os.path.join(PNG_OUT_DIR, "_manifest.csv")
 
 
@@ -357,9 +371,9 @@ if __name__ == "__main__":
     p.add_argument("--workers", type=int, default=4, help="parallel workers")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--output-png", type=str, default=None,
-                   help="override PNG_OUT_DIR (default D:/project/data/wm-811k/unknown_multi)")
+                   help="override PNG_OUT_DIR (default <project>/data/wm-811k/unknown_multi)")
     p.add_argument("--output-json", type=str, default=None,
-                   help="override JSON_OUT_DIR (default D:/project/data/positions/unknown_multi)")
+                   help="override JSON_OUT_DIR (default <project>/data/positions/unknown_multi)")
     p.add_argument("--manifest", type=str, default=None,
                    help="override manifest path (default <output-png>/_manifest.csv)")
     args = p.parse_args()

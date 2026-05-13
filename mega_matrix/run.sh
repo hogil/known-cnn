@@ -13,6 +13,7 @@
 #   bash mega_matrix/run.sh --skip-data         # data 이미 있을 때
 #   bash mega_matrix/run.sh --skip-train        # eval+report only
 #   bash mega_matrix/run.sh --with-pseudo       # also run pseudo-label retrain
+#   bash mega_matrix/run.sh --data-base data/wm-811k
 #   bash mega_matrix/run.sh --report-only       # only summary.md regen
 #
 # DDP: bash mega_matrix/run_ddp.sh --gpus N
@@ -26,6 +27,7 @@ cd "$PROJ_ROOT"
 
 OUT_BASE=outputs/_mega_matrix    # shared train/eval data root
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
+DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
 DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
 while [ $# -gt 0 ]; do
     case $1 in
@@ -36,6 +38,8 @@ while [ $# -gt 0 ]; do
         --skip-pseudo) DO_PSEUDO=0 ;;
         --skip-report) DO_REPORT=0 ;;
         --report-only) DO_DATA=0; DO_TRAIN=0; DO_EVAL=0; DO_PSEUDO=0; DO_REPORT=1 ;;
+        --data-base) shift; DATA_BASE="$1" ;;
+        --data-base=*) DATA_BASE="${1#--data-base=}" ;;
         --backbone) shift; BACKBONE="$1" ;;
         --backbone=*) BACKBONE="${1#--backbone=}" ;;
         --help|-h) head -20 "$0" | tail -16; exit 0 ;;
@@ -51,19 +55,25 @@ case "$BACKBONE" in
 esac
 
 MODEL_BASE="$OUT_BASE/$BACKBONE"   # per-backbone model namespace (data shared at OUT_BASE)
-LOG="$MODEL_BASE/_run.log"
-mkdir -p "$OUT_BASE" "$MODEL_BASE"
+RUN_STAMP=$(date +%Y%m%d_%H%M%S)
+LOG_BACKBONE="${BACKBONE//\//_}"
+LOG_BACKBONE="${LOG_BACKBONE//:/_}"
+LOG_BACKBONE="${LOG_BACKBONE// /_}"
+LOG_DIR="$OUT_BASE/logs"
+LOG="$LOG_DIR/${RUN_STAMP}_pid$$_${LOG_BACKBONE}_run.log"
+mkdir -p "$OUT_BASE" "$MODEL_BASE" "$LOG_DIR"
 export MEGA_MODEL_BASE="$MODEL_BASE"   # consumed by pseudo_label.py / make_report.py
 export MEGA_BACKBONE="$BACKBONE"
 export MEGA_IMG_SIZE="$IMG_SIZE"
+export WM811K_ROOT="$DATA_BASE"
 
 log() {
-    echo "$(date) [mega] $*" | tee -a "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [mega] $*" | tee -a "$LOG"
 }
 
 : > "$LOG"
-trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date) [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
+log "start backbone=$BACKBONE img=$IMG_SIZE data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
 # Offline weights (closed-network) — auto-passthrough if file exists
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"

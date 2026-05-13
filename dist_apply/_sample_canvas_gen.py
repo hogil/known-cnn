@@ -25,15 +25,26 @@ import os, json
 import numpy as np
 from PIL import Image
 
-from _sample_gen import (
-    PALETTE, KEY_TO_INDEX, IDX_BG,
-    BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
-    SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
-    CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
-    pick_baseline_tier, pick_intensity_tier,
-    _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
-)
-from _fq_metadata import add_synthetic_fq_to_json
+try:
+    from ._sample_gen import (
+        PALETTE, KEY_TO_INDEX, IDX_BG,
+        BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
+        SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
+        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
+        pick_baseline_tier, pick_intensity_tier,
+        _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
+    )
+    from ._fq_metadata import add_synthetic_fq_to_json
+except ImportError:
+    from _sample_gen import (
+        PALETTE, KEY_TO_INDEX, IDX_BG,
+        BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
+        SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
+        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
+        pick_baseline_tier, pick_intensity_tier,
+        _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
+    )
+    from _fq_metadata import add_synthetic_fq_to_json
 
 CANVAS_CLASSES = [
     "DiagonalSmear", "CrossScratch", "CrescentArc",

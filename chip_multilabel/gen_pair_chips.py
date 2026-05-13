@@ -10,7 +10,7 @@ Example:
         --src-a fork --src-b scratch_rot --n 200 --seed 42
 
 Writes to:
-    D:/project/data/wm-811k/classification_chips/fork+scratch_rot/*.png
+    <data-root>/fork+scratch_rot/*.png
 """
 from __future__ import annotations
 
@@ -21,10 +21,12 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from .constants import DEFAULT_CLASSIFICATION_CHIPS
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data-root", default="D:/project/data/wm-811k/classification_chips")
+    ap.add_argument("--data-root", default=DEFAULT_CLASSIFICATION_CHIPS)
     ap.add_argument("--src-a", required=True,
                     help="source class A folder name (e.g. 'fork')")
     ap.add_argument("--src-b", required=True,

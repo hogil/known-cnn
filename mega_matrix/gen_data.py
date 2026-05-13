@@ -18,12 +18,12 @@ from pathlib import Path
 PROJ_ROOT = Path(__file__).parent.parent
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"
 OUT_BASE.mkdir(parents=True, exist_ok=True)
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
 
 TRAIN_SIZES = [50, 100, 200]
 EVAL_SIZES = [200, 2000, 20000]
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
-MASTER_TRAIN = Path("D:/project/data/wm-811k/classification_chips")
-DATA_ROOT = Path("D:/project/data/wm-811k")
+MASTER_TRAIN = Path(os.environ.get("CLASSIFICATION_CHIPS_ROOT", str(DATA_ROOT / "classification_chips"))).resolve()
 
 
 def log(msg):
@@ -125,6 +125,10 @@ def make_eval_sets():
 
 
 def main():
+    log(f"project root: {PROJ_ROOT}")
+    log(f"data root: {DATA_ROOT}")
+    log(f"classification chips: {MASTER_TRAIN}")
+
     log("=== STAGE 1A: ensure master train pool ===")
     ensure_master_pool(need=200)
 

@@ -6,7 +6,7 @@ v19 적용된 alpha_fork / alpha_scratch / alpha_scratch_rot / alpha_bank_bounda
 intensity tier (strong/mid/weak) + grade shift + 2px border + 8-color palette PNG 출력.
 
 Usage:
-    python _synth_chips_only.py --per-class 200 --out D:/project/data/wm-811k/classification_chips
+    python -m dist_apply._synth_chips_only --per-class 200 --out data/wm-811k/classification_chips
     python _synth_chips_only.py --per-class 50 --classes fork scratch scratch_rot
 
 wafer 합성 안 함. 빠르고 가벼움 (chip 200x200 만).
@@ -23,9 +23,14 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-# Import sister repo dist_apply
-sys.path.insert(0, str(Path("D:/project/known-cnn/dist_apply")))
-import _sample_gen as sg
+try:
+    from . import _sample_gen as sg
+except ImportError:
+    import _sample_gen as sg
+
+PROJ_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
+DEFAULT_OUT = DATA_ROOT / "classification_chips"
 
 
 def _make_palette() -> bytes:
@@ -151,7 +156,7 @@ def render_chip(obj: str, rng: np.random.Generator,
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument('--per-class', type=int, default=200)
-    ap.add_argument('--out', type=str, default='D:/project/data/wm-811k/classification_chips')
+    ap.add_argument('--out', type=str, default=str(DEFAULT_OUT))
     ap.add_argument('--classes', nargs='*',
                     default=['bank_boundary', 'fork', 'scratch', 'scratch_rot', 'invalid_main'])
     ap.add_argument('--seed', type=int, default=20260506)

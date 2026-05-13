@@ -10,7 +10,12 @@ The model is trained on TRAIN_CLASSES only (4-way single-label CE/Focal/ASL/BCE)
 """
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Tuple
+
+PROJ_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
 
 TRAIN_CLASSES: Tuple[str, ...] = (
     "bank_boundary",
@@ -93,11 +98,11 @@ INFERENCE_VARIANTS: Tuple[str, ...] = (
 )
 TRAIN_VARIANTS: Tuple[str, ...] = ("T0", "T1", "T2", "T3", "T4", "T5", "T6")
 
-DEFAULT_BACKBONE_CKPT = (
-    "D:/project/known-cnn/outputs/logs_chip/"
-    "chip5_round4_v14_260505_061558_running/best_model.pth"
+DEFAULT_BACKBONE_CKPT = str(
+    PROJ_ROOT / "outputs" / "logs_chip" /
+    "chip5_round4_v14_260505_061558_running" / "best_model.pth"
 )
-DEFAULT_CLASSIFICATION_CHIPS = "D:/project/data/wm-811k/classification_chips"
+DEFAULT_CLASSIFICATION_CHIPS = str(DATA_ROOT / "classification_chips")
 
 
 def sort_label_pair(a: str, b: str) -> str:

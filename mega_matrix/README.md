@@ -33,7 +33,12 @@ mega_matrix/
 
 ```
 outputs/_mega_matrix/
-├── _run.log
+├── logs/
+│   ├── YYYYMMDD_HHMMSS_pidPID_<backbone>_run.log
+│   ├── YYYYMMDD_HHMMSS_pidPID_<backbone>_run_ddp.log
+│   ├── YYYYMMDD_HHMMSS_pidPID_<backbone>_run_ddp.log.train
+│   ├── YYYYMMDD_HHMMSS_pidPID_<backbone>_run_ddp.log.gpuN
+│   └── YYYYMMDD_HHMMSS_run_all_summary.log
 ├── train_n50/, train_n100/, train_n200/                # train subsets
 ├── eval_n200/, eval_n2000/, eval_n20000/               # eval subsets (per-class)
 ├── model_train{N}_{sel}/T7_*/                          # 6 trained models
@@ -81,7 +86,7 @@ bash mega_matrix/run_all.sh --with-pseudo         # optional pseudo-label stage
 
 # 데이터 생성은 첫 backbone 에서만 → 이후 backbone 은 --skip-data 자동
 # 각 backbone 산출은 outputs/_mega_matrix/<backbone>/ 아래로 격리
-# 종합 로그: outputs/_mega_matrix/_run_all_summary.log
+# 종합 로그: outputs/_mega_matrix/logs/YYYYMMDD_HHMMSS_run_all_summary.log
 ```
 
 ### 부분 실행
@@ -89,8 +94,13 @@ bash mega_matrix/run_all.sh --with-pseudo         # optional pseudo-label stage
 bash mega_matrix/run.sh --skip-data        # data 이미 있으면
 bash mega_matrix/run.sh --skip-train       # eval+report only
 bash mega_matrix/run.sh --with-pseudo      # pseudo-label 단계까지 실행
+bash mega_matrix/run.sh --data-base data/wm-811k
 bash mega_matrix/run.sh --report-only      # report 만 재생성
 ```
+
+기본 데이터 루트는 `<project>/data/wm-811k` 이다. 다른 위치를 쓰려면
+`--data-base <path>` 또는 `WM811K_ROOT=<path>`를 사용한다. 프로젝트 루트
+자체는 입력하지 않는다. 실행 스크립트 위치에서 자동 계산한다.
 
 ## Data 정책 (★ user 명확화)
 

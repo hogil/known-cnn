@@ -26,12 +26,13 @@ import os
 
 PROJ_ROOT = Path(__file__).parent.parent
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"          # shared data root (train_n*, eval_n*)
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
 # Per-backbone model namespace (set by run.sh / run_ddp.sh / run_all.sh via env)
 # Falls back to OUT_BASE for legacy single-backbone use
 MODEL_BASE = Path(os.environ.get("MEGA_MODEL_BASE", str(OUT_BASE)))
 BACKBONE = os.environ.get("MEGA_BACKBONE", "convnextv2_base.fcmae_ft_in22k_in1k_384")
 IMG_SIZE = int(os.environ.get("MEGA_IMG_SIZE", "384"))
-PSEUDO_POOL_SRC = Path("D:/project/data/wm-811k/chip_multilabel_v15direct_n1000")
+PSEUDO_POOL_SRC = Path(os.environ.get("PSEUDO_POOL_SRC", str(DATA_ROOT / "chip_multilabel_v15direct_n1000")))
 PSEUDO_TRAIN_DIR = MODEL_BASE / "pseudo_train"
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 CONF_THRESHOLD = 0.85   # max_prob >= 0.85 for pseudo-label inclusion
@@ -197,7 +198,7 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
             "--data-root", str(pseudo_train_dir),
             "--cutmix-mode", "complement", "--cutmix-pair", "masked",
             "--cutmix-pair-fill", "corner",
-            "--cutmix-p", "0.25", "--cutmix-n-groups", "3",
+            "--cutmix-p", "0.25", "--cutmix-grid-dim", "16", "--cutmix-n-groups", "2",
             "--cutmix-complete-label-scale", "0.5",
             "--backbone-timm", BACKBONE,
             "--img-size", str(IMG_SIZE),
@@ -242,6 +243,8 @@ def retrain_and_eval(pseudo_train_dir, sel="margin_max"):
 
 def main():
     log("=== STAGE 5: pseudo-label retrain ===")
+    log(f"data root: {DATA_ROOT}")
+    log(f"pseudo pool: {PSEUDO_POOL_SRC}")
     log("Step 1: find best primary model from 18-cell matrix")
     tn, sel, bit_F1, run_path = find_best_primary_model()
     if run_path is None:

@@ -15,35 +15,66 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFilter
 from concurrent.futures import ThreadPoolExecutor
-from _fq_metadata import add_synthetic_fq_to_json
+try:
+    from ._fq_metadata import add_synthetic_fq_to_json
+except ImportError:
+    from _fq_metadata import add_synthetic_fq_to_json
 
 # Reuse setup from _sample_gen
-from _sample_gen import (
-    PALETTE, KEY_TO_INDEX,
-    SIZE, GRID, CHIP, HEATMAP_DIR, PNG_OUT_DIR, JSON_OUT_DIR,
-    BASELINE, CUM_BASE,
-    DEFECT_BG_DIST, CUM_DEFECT_BG,
-    EDGE_DIST, CUM_EDGE,
-    OBJECT_DISTS,
-    DEFECT_BUDGET,
-    LT_OPTIONS, TM_OPTIONS,
-    CLASSES, OBJECTS,
-    CHIP_OBJECTS, NORMAL_OBJECTS,
-    CHIP_BASE_ALPHA,
-    DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
-    BIN_TO_BORDER_IDX,
-    rand_prefix,
-    _wafer_inside_mask,
-    select_distribution_chips,
-    select_random_invalid,
-    select_normal_chips,
-    outside_chips_as_invalid,
-    assign_defect_bin, assign_invalid_bin, pick_mixed_object,
-    FONT_BIG,
-    build_tasks as base_build_tasks,
-    save_chip_crops,
-    _pink_noise_field_2d,
-)
+try:
+    from ._sample_gen import (
+        PALETTE, KEY_TO_INDEX,
+        SIZE, GRID, CHIP, HEATMAP_DIR, PNG_OUT_DIR, JSON_OUT_DIR,
+        BASELINE, CUM_BASE,
+        DEFECT_BG_DIST, CUM_DEFECT_BG,
+        EDGE_DIST, CUM_EDGE,
+        OBJECT_DISTS,
+        DEFECT_BUDGET,
+        LT_OPTIONS, TM_OPTIONS,
+        CLASSES, OBJECTS,
+        CHIP_OBJECTS, NORMAL_OBJECTS,
+        CHIP_BASE_ALPHA,
+        DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
+        BIN_TO_BORDER_IDX,
+        rand_prefix,
+        _wafer_inside_mask,
+        select_distribution_chips,
+        select_random_invalid,
+        select_normal_chips,
+        outside_chips_as_invalid,
+        assign_defect_bin, assign_invalid_bin, pick_mixed_object,
+        FONT_BIG,
+        build_tasks as base_build_tasks,
+        save_chip_crops,
+        _pink_noise_field_2d,
+    )
+except ImportError:
+    from _sample_gen import (
+        PALETTE, KEY_TO_INDEX,
+        SIZE, GRID, CHIP, HEATMAP_DIR, PNG_OUT_DIR, JSON_OUT_DIR,
+        BASELINE, CUM_BASE,
+        DEFECT_BG_DIST, CUM_DEFECT_BG,
+        EDGE_DIST, CUM_EDGE,
+        OBJECT_DISTS,
+        DEFECT_BUDGET,
+        LT_OPTIONS, TM_OPTIONS,
+        CLASSES, OBJECTS,
+        CHIP_OBJECTS, NORMAL_OBJECTS,
+        CHIP_BASE_ALPHA,
+        DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
+        BIN_TO_BORDER_IDX,
+        rand_prefix,
+        _wafer_inside_mask,
+        select_distribution_chips,
+        select_random_invalid,
+        select_normal_chips,
+        outside_chips_as_invalid,
+        assign_defect_bin, assign_invalid_bin, pick_mixed_object,
+        FONT_BIG,
+        build_tasks as base_build_tasks,
+        save_chip_crops,
+        _pink_noise_field_2d,
+    )
 
 assert torch.cuda.is_available(), "GPU pipeline requires CUDA"
 DEVICE = torch.device('cuda')

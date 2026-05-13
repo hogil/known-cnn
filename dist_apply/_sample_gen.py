@@ -28,7 +28,10 @@ Bin rules:
 """
 import os, time, json, numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from _fq_metadata import add_synthetic_fq_to_json
+try:
+    from ._fq_metadata import add_synthetic_fq_to_json
+except ImportError:
+    from _fq_metadata import add_synthetic_fq_to_json
 try:
     import torch
     _GPU = torch.cuda.is_available()
@@ -120,10 +123,14 @@ DEFECT_BIN_WEIGHTS /= DEFECT_BIN_WEIGHTS.sum()                                  
 
 # ===== Spec =====
 SIZE = 6400; GRID = 32; CHIP = 200
-HEATMAP_DIR  = "D:/project/known-cnn/dist_learn/_dist_heatmaps"
-PNG_OUT_DIR  = os.environ.get("WAFER_PNG_OUT_DIR",  "D:/project/data/wm-811k/unknown")
-JSON_OUT_DIR = os.environ.get("WAFER_JSON_OUT_DIR", "D:/project/data/positions/unknown")
-CHIP_OBJ_OUT_DIR = "D:/project/data/wm-811k/classification_chips"               # chip-object crop dataset (per-chip true label)
+PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_ROOT = os.environ.get("WM811K_ROOT", os.path.join(PROJ_ROOT, "data", "wm-811k"))
+POSITIONS_ROOT = os.environ.get("POSITIONS_ROOT", os.path.join(PROJ_ROOT, "data", "positions"))
+
+HEATMAP_DIR  = os.environ.get("HEATMAP_DIR", os.path.join(PROJ_ROOT, "dist_learn", "_dist_heatmaps"))
+PNG_OUT_DIR  = os.environ.get("WAFER_PNG_OUT_DIR",  os.path.join(DATA_ROOT, "unknown"))
+JSON_OUT_DIR = os.environ.get("WAFER_JSON_OUT_DIR", os.path.join(POSITIONS_ROOT, "unknown"))
+CHIP_OBJ_OUT_DIR = os.environ.get("CLASSIFICATION_CHIPS_ROOT", os.path.join(DATA_ROOT, "classification_chips"))               # chip-object crop dataset (per-chip true label)
 CHIP_OBJECT_LABELS = ('bank_boundary', 'fork', 'scratch',
                      'scratch_rot', 'invalid_main')
 CHIP_OBJ_PER_CLASS_CAP = 200                                                    # 260506 v19: 100 → 200 (master per-class 200 source 확보)

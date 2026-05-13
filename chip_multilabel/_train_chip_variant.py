@@ -35,7 +35,7 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-from .constants import DEFAULT_BACKBONE_CKPT, TRAIN_CLASSES, TRAIN_VARIANTS
+from .constants import DEFAULT_BACKBONE_CKPT, DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES, TRAIN_VARIANTS
 from .losses import BCEThenASL, build_loss
 
 VARIANT_TO_LOSS = {
@@ -404,7 +404,7 @@ def main():
                     help="label smoothing (T1 only). default 0.1 if not set.")
     ap.add_argument("--tag", type=str, default="",
                     help="optional tag suffix for out_dir name")
-    ap.add_argument("--data-root", default="D:/project/data/wm-811k/classification_chips")
+    ap.add_argument("--data-root", default=DEFAULT_CLASSIFICATION_CHIPS)
     ap.add_argument("--init-ckpt", default=DEFAULT_BACKBONE_CKPT)
     ap.add_argument("--backbone-timm", type=str, default=None,
                     help="If set, use timm.create_model(pretrained=True) instead of --init-ckpt. "
@@ -472,7 +472,7 @@ def main():
     # 260508 — multi-combo training data (iter 17B)
     ap.add_argument("--multi-combo-root", type=str, default="",
                     help="Path to multi-combo master folder (e.g. "
-                         "D:/project/data/wm-811k/chip_multilabel_synth). 10 combo subdirs (2+3-class). "
+                         "data/wm-811k/chip_multilabel_synth). 10 combo subdirs (2+3-class). "
                          "Empty = off. Adds multi-hot supervision for compositional generalization (iter 17B).")
     ap.add_argument("--multi-combo-n-per-class", type=int, default=50,
                     help="N chip per multi-combo class (10 combo). default 50.")
@@ -810,7 +810,7 @@ def main():
     scaler = torch.amp.GradScaler() if device.type == "cuda" else None
 
     history = []
-    best_val_acc = 0.0
+    best_val_acc = float("-inf")
     best_epoch = -1
     t_total = time.time()
     for ep in range(1, args.epochs + 1):

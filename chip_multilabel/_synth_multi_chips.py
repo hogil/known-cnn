@@ -14,7 +14,7 @@ Usage:
     python -m chip_multilabel._synth_multi_chips --per-class 200          # full
 
 Output:
-    D:/project/data/wm-811k/chip_multilabel_v15direct/
+    $WM811K_ROOT/chip_multilabel_v15direct/ (default: <project>/data/wm-811k)
         bank_boundary/                          (4 single, NEW direct)
         fork/
         scratch/
@@ -57,14 +57,13 @@ from typing import List, Optional
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-# Import sister repo dist_apply (single-defect alpha framework)
-sys.path.insert(0, str(Path("D:/project/known-cnn/dist_apply")))
-import _sample_gen as sg
+from dist_apply import _sample_gen as sg
 
 CHIP = sg.CHIP                                                              # 200
 DEFECT_CLASSES = ('bank_boundary', 'fork', 'scratch', 'scratch_rot')
-PRE_V5_ROOT = Path("D:/project/data/wm-811k/chip_multilabel_pre_v5_260507")  # COPY source for OOD/Normal/Invalid
-DEFAULT_OUT = Path("D:/project/data/wm-811k/chip_multilabel_v15direct")
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(Path(__file__).resolve().parents[1] / "data" / "wm-811k")))
+PRE_V5_ROOT = DATA_ROOT / "chip_multilabel_pre_v5_260507"  # COPY source for OOD/Normal/Invalid
+DEFAULT_OUT = DATA_ROOT / "chip_multilabel_v15direct"
 
 OOD_SINGLE_CLASSES = ('CenterDonut', 'CrossScratch', 'DiagonalSmear', 'Starburst')
 OOD_OVERLAY_CLASSES = (

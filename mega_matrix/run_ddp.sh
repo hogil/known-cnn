@@ -16,6 +16,7 @@
 #   bash mega_matrix/run_ddp.sh --gpus 4       # force 4 GPU
 #   bash mega_matrix/run_ddp.sh --skip-data    # skip data gen
 #   bash mega_matrix/run_ddp.sh --with-pseudo  # also run pseudo-label retrain
+#   bash mega_matrix/run_ddp.sh --data-base data/wm-811k
 #
 # NOTE: vanilla PyTorch single-GPU training per cell (NOT torch.distributed DDP).
 #       For true torchrun DDP inside one cell, trainer code needs modification
@@ -32,6 +33,7 @@ cd "$PROJ_ROOT"
 
 OUT_BASE=outputs/_mega_matrix
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
+DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
 
 # Default flags
 DO_DATA=1; DO_EVAL=1; DO_REPORT=1; DO_PSEUDO=0
@@ -45,6 +47,8 @@ while [ $# -gt 0 ]; do
         --with-pseudo) DO_PSEUDO=1 ;;
         --skip-pseudo) DO_PSEUDO=0 ;;
         --skip-report) DO_REPORT=0 ;;
+        --data-base) shift; DATA_BASE="$1" ;;
+        --data-base=*) DATA_BASE="${1#--data-base=}" ;;
         --gpus) shift; NGPU=$1 ;;
         --gpus=*) NGPU="${1#--gpus=}" ;;
         --backbone) shift; BACKBONE="$1" ;;
@@ -85,17 +89,22 @@ WORKERS_PER_RANK=$(( TOTAL_CPU / NGPU / 2 ))
 [ "$WORKERS_PER_RANK" -gt 16 ] && WORKERS_PER_RANK=16
 
 MODEL_BASE="$OUT_BASE/$BACKBONE"
-LOG="$MODEL_BASE/_run_ddp.log"
-mkdir -p "$OUT_BASE" "$MODEL_BASE"
+RUN_STAMP=$(date +%Y%m%d_%H%M%S)
+LOG_BACKBONE="${BACKBONE//\//_}"
+LOG_BACKBONE="${LOG_BACKBONE//:/_}"
+LOG_BACKBONE="${LOG_BACKBONE// /_}"
+LOG_DIR="$OUT_BASE/logs"
+LOG="$LOG_DIR/${RUN_STAMP}_pid$$_${LOG_BACKBONE}_run_ddp.log"
+mkdir -p "$OUT_BASE" "$MODEL_BASE" "$LOG_DIR"
 export MEGA_MODEL_BASE="$MODEL_BASE"
 
 log() {
-    echo "$(date) [ddp] $*" | tee -a "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [ddp] $*" | tee -a "$LOG"
 }
 
 : > "$LOG"
-trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date) [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
+trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
+log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
 
 # Offline weights (closed-network) — auto-passthrough
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
@@ -112,6 +121,7 @@ export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
 export MEGA_MODEL_BASE="$MODEL_BASE"
 export MEGA_BACKBONE="$BACKBONE"
 export MEGA_IMG_SIZE="$IMG_SIZE"
+export WM811K_ROOT="$DATA_BASE"
 
 # ======================================================================
 # 1. Data generation (sequential, single CPU)

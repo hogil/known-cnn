@@ -91,10 +91,7 @@ def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
     - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지)
     - return PIL Image mode='P' with palette (chip 결함 generator 와 동일 logic)
     """
-    import sys
-    from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "dist_apply"))
-    import _sample_gen as sg
+    from dist_apply import _sample_gen as sg
 
     p_noise = float(rng.beta(2, 10))   # per-chip random noise probability
     u = rng.random((CHIP_SIZE, CHIP_SIZE))
@@ -118,10 +115,7 @@ def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
     - White interior = grade 0 (palette index 0)
     - return PIL Image mode='P'
     """
-    import sys
-    from pathlib import Path as _P
-    sys.path.insert(0, str(_P(__file__).resolve().parents[1] / "dist_apply"))
-    import _sample_gen as sg
+    from dist_apply import _sample_gen as sg
 
     grades = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.uint8)  # all white (grade 0)
     BORDER_IDX = sg.KEY_TO_INDEX.get('border_inv', 11)

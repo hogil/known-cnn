@@ -31,7 +31,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from .constants import TRAIN_CLASSES
+from .constants import DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES
 from .model_io import load_chip_backbone
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -55,7 +55,7 @@ BAG_RUNS: List[str] = [
     "outputs/iter26H_g3_LS067_white",
 ]
 
-TRAIN_CHIPS_DIR = "D:/project/data/wm-811k/classification_chips"
+TRAIN_CHIPS_DIR = DEFAULT_CLASSIFICATION_CHIPS
 DEFAULT_OUT = "outputs/_teacher_probs_14bag.parquet"
 
 # Folders to include in teacher-prob computation. Per spec: "classification_chips/<class>/*.png"

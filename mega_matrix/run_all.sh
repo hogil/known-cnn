@@ -9,8 +9,9 @@
 # Per-backbone outputs land at:
 #   outputs/_mega_matrix/<backbone>/
 #     model_train{N}_{sel}/T*/best_model.pth + eval_{N}/
-#     _run.log
-#     _run_ddp.log, _run_ddp.log.train, _run_ddp.log.gpuN when using DDP
+#   outputs/_mega_matrix/logs/
+#     YYYYMMDD_HHMMSS_pidPID_<backbone>_run.log
+#     YYYYMMDD_HHMMSS_pidPID_<backbone>_run_ddp.log(.train/.gpuN)
 #     model_pseudo_{sel}/... and pseudo_train/ only with --with-pseudo
 # Shared data (regardless of backbone):
 #   outputs/_mega_matrix/train_n{50,100,200}/
@@ -21,6 +22,7 @@
 #   bash mega_matrix/run_all.sh --gpus 4          # all backbones, DDP 4 GPU
 #   bash mega_matrix/run_all.sh --only convnext   # only backbones matching substring
 #   bash mega_matrix/run_all.sh --with-pseudo     # forward to inner script
+#   bash mega_matrix/run_all.sh --data-base data/wm-811k
 #   bash mega_matrix/run_all.sh --skip-data       # data already generated
 #
 # Data is generated ONCE (during first backbone) and reused (--skip-data
@@ -36,14 +38,15 @@ WEIGHTS_DIR="mega_matrix/weights"
 ONLY=""
 NGPU=0
 FORWARD_ARGS=()
-for arg in "$@"; do
-    case $arg in
+while [ $# -gt 0 ]; do
+    case $1 in
         --only) shift; ONLY="$1" ;;
-        --only=*) ONLY="${arg#--only=}" ;;
+        --only=*) ONLY="${1#--only=}" ;;
         --gpus) shift; NGPU="$1" ;;
-        --gpus=*) NGPU="${arg#--gpus=}" ;;
-        *) FORWARD_ARGS+=("$arg") ;;
+        --gpus=*) NGPU="${1#--gpus=}" ;;
+        *) FORWARD_ARGS+=("$1") ;;
     esac
+    shift
 done
 
 # Auto-detect GPU count if --gpus not given
@@ -60,10 +63,12 @@ else
 fi
 
 OUT_BASE="outputs/_mega_matrix"
-SUMMARY="$OUT_BASE/_run_all_summary.log"
-mkdir -p "$OUT_BASE"
+RUN_STAMP=$(date +%Y%m%d_%H%M%S)
+LOG_DIR="$OUT_BASE/logs"
+SUMMARY="$LOG_DIR/${RUN_STAMP}_run_all_summary.log"
+mkdir -p "$OUT_BASE" "$LOG_DIR"
 : > "$SUMMARY"
-echo "$(date) [run_all] start NGPU=$NGPU runner='$RUNNER'" | tee -a "$SUMMARY"
+echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] start NGPU=$NGPU runner='$RUNNER'" | tee -a "$SUMMARY"
 
 # Discover backbones
 shopt -s nullglob
@@ -97,7 +102,7 @@ for B in "${BACKBONES[@]}"; do
     START=$(date +%s)
     echo "" | tee -a "$SUMMARY"
     echo "============================================================" | tee -a "$SUMMARY"
-    echo "$(date) [run_all] >>> $B" | tee -a "$SUMMARY"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] >>> $B" | tee -a "$SUMMARY"
     echo "============================================================" | tee -a "$SUMMARY"
 
     EXTRA=()
@@ -112,11 +117,11 @@ for B in "${BACKBONES[@]}"; do
         STATUS="FAIL"
     fi
     ELAPSED=$(( $(date +%s) - START ))
-    echo "$(date) [run_all] $B $STATUS (${ELAPSED}s)" | tee -a "$SUMMARY"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] $B $STATUS (${ELAPSED}s)" | tee -a "$SUMMARY"
     IS_FIRST=0
 done
 
 echo "" | tee -a "$SUMMARY"
-echo "$(date) [run_all] ALL BACKBONES DONE" | tee -a "$SUMMARY"
+echo "$(date '+%Y-%m-%d %H:%M:%S') [run_all] ALL BACKBONES DONE" | tee -a "$SUMMARY"
 echo "[run_all] per-backbone outputs at outputs/_mega_matrix/<backbone>/" | tee -a "$SUMMARY"
 echo "[run_all] summary: $SUMMARY" | tee -a "$SUMMARY"
