@@ -198,7 +198,7 @@ train_cell() {
         $MULTI_VAL_FLAG \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
-        --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \
+        --cutmix-p 0.25 --cutmix-grid-dim 8 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
