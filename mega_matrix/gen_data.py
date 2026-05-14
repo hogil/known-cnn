@@ -143,10 +143,10 @@ def make_eval_sets():
         )
         missing_classes = [c for c in expected_classes
                            if not (local_eval_dir / c).exists()
-                           or len(list((local_eval_dir / c).glob("*.png"))) == 0]
+                           or len(list((local_eval_dir / c).glob("*.png"))) < en]
         if local_eval_dir.exists() and not missing_classes:
             n = len(list(local_eval_dir.glob("*/*.png")))
-            log(f"eval_n{en} local complete ({n} chips, all 16 classes), skip")
+            log(f"eval_n{en} local complete ({n} chips, all 16 classes ≥ {en}), skip")
             continue
         if missing_classes:
             log(f"eval_n{en} local missing classes: {missing_classes} — proceeding to gen/symlink")
@@ -214,8 +214,8 @@ def make_eval_sets():
         for cls in OOD_CLASSES:
             cdir = master_eval_dir / cls
             n_have = len(list(cdir.glob("*.png"))) if cdir.exists() else 0
-            if n_have <= 0:
-                incomplete_ood.append(f"{cls}({n_have})")
+            if n_have < ood_n:
+                incomplete_ood.append(f"{cls}({n_have}/{ood_n})")
         if incomplete_ood:
             raise RuntimeError(
                 f"OOD eval classes missing after extraction under {master_eval_dir}: {incomplete_ood}"
