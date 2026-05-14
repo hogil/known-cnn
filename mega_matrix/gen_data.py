@@ -98,11 +98,40 @@ def make_eval_sets():
                 "--per-defect", str(en),
                 "--per-normal", str(en),
                 "--per-invalid", str(max(en // 4, 10)),
-                "--include-triples",
+                # NO --include-triples: absolute rule 260512 — positive = single + 2-combo only.
+                # 3-combo would inflate eval but is excluded from bit_F1 anyway by aggregator.
                 "--classification-chips-root", str(MASTER_TRAIN),
                 "--seed", "42",
             ]
             subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
+
+            # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
+            # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
+            ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
+            unknown_src = DATA_ROOT / "unknown"
+            ood_n = min(en, 200)
+            if unknown_src.exists():
+                try:
+                    sys.path.insert(0, str(PROJ_ROOT))
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location(
+                        "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        mod.SRC_ROOT = unknown_src
+                        mod.DST_ROOT = master_eval_dir
+                        import random as _r
+                        rng = _r.Random(42)
+                        for cls in ood_classes:
+                            try:
+                                mod.extract_class(cls, ood_n, 0.03, rng)
+                            except Exception as e:
+                                log(f"WARN OOD extract {cls}: {type(e).__name__}: {e}")
+                except Exception as e:
+                    log(f"WARN OOD module load failed: {type(e).__name__}: {e}")
+            else:
+                log(f"WARN OOD source {unknown_src} missing — skipping OOD class extraction")
 
         if not master_eval_dir.exists():
             log(f"WARN eval_n{en} not generated, skipping local copy")
