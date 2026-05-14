@@ -52,20 +52,24 @@ def log(msg):
     print(f"[gen_data] {msg}", flush=True)
 
 
+def count_pngs(path: Path) -> int:
+    return len(list(path.glob("*.png"))) if path.exists() else 0
+
+
 def ensure_master_pool(need=200):
     """Make sure classification_chips/ has ≥ need chips per class."""
-    counts = []
+    deficits = []
     for c in TRAIN_CLASSES:
         d = MASTER_TRAIN / c
-        n = len(list(d.glob("*.png"))) if d.exists() else 0
-        counts.append(n)
+        n = count_pngs(d)
+        deficits.append(max(0, need - n))
         log(f"master {c}: {n} chips")
-    min_avail = min(counts) if counts else 0
-    if min_avail < need:
-        log(f"synthesizing single chips (min={min_avail} < need={need})")
+    max_deficit = max(deficits) if deficits else 0
+    if max_deficit > 0:
+        log(f"synthesizing single chips to fill deficit (max_deficit={max_deficit})")
         cmd = [
             sys.executable, "-u", "-m", "dist_apply._synth_chips_only",
-            "--per-class", str(need),
+            "--per-class", str(max_deficit),
             "--out", str(MASTER_TRAIN),
         ]
         subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
@@ -76,13 +80,16 @@ def ensure_master_pool(need=200):
 def make_train_subsets():
     for tn in TRAIN_SIZES:
         out_dir = OUT_BASE / f"train_n{tn}"
-        if out_dir.exists() and all((out_dir / c).exists() for c in TRAIN_CLASSES):
+        if out_dir.exists() and all(count_pngs(out_dir / c) >= tn for c in TRAIN_CLASSES):
             existing = len(list(out_dir.glob("*/*.png")))
-            log(f"train_n{tn} exists ({existing} files), skip")
+            log(f"train_n{tn} complete ({existing} files, all classes ≥ {tn}), skip")
             continue
         out_dir.mkdir(parents=True, exist_ok=True)
         for c in TRAIN_CLASSES:
             (out_dir / c).mkdir(exist_ok=True)
+            n_have = count_pngs(out_dir / c)
+            if n_have < tn:
+                log(f"train_n{tn}/{c}: {n_have}/{tn} — filling")
             files = sorted((MASTER_TRAIN / c).glob("*.png"))
             for f in files[:tn]:
                 tgt = out_dir / c / f.name
@@ -96,33 +103,68 @@ def make_train_subsets():
         log(f"train_n{tn} ready ({tn}/class × 4 = {tn*4} chips)")
 
 
-def ensure_ood_wafer_canvases():
-    """Ensure source wafer canvases exist for the 4 OOD eval classes."""
+def ensure_ood_wafer_class(cls: str, min_wafers: int) -> int:
     unknown_src = DATA_ROOT / "unknown"
     unknown_src.mkdir(parents=True, exist_ok=True)
+    cls_dir = unknown_src / cls
+    n_have = count_pngs(cls_dir)
+    if n_have >= min_wafers:
+        log(f"OOD wafer canvas {cls}: {n_have} ≥ {min_wafers}, skip")
+        return n_have
+    need = min_wafers - n_have
+    log(f"OOD wafer canvas {cls}: {n_have}/{min_wafers} — auto-generating {need}")
+    env = os.environ.copy()
+    env["WM811K_ROOT"] = str(DATA_ROOT)
+    env["WAFER_PNG_OUT_DIR"] = str(unknown_src)
+    env.setdefault("WAFER_JSON_OUT_DIR", str(PROJ_ROOT / "data" / "positions" / "unknown"))
+    cmd = [
+        sys.executable, "-u", "-X", "utf8", "-m", "dist_apply._sample_canvas_gen",
+        "--classes", cls,
+        "--n", str(need),
+    ]
+    subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT), env=env)
+    n_after = count_pngs(cls_dir)
+    if n_after < min_wafers:
+        raise RuntimeError(
+            f"OOD wafer canvas generation incomplete for {cls}: "
+            f"{n_after}/{min_wafers} under {cls_dir}"
+        )
+    return n_after
+
+
+def ensure_ood_wafer_canvases(min_wafers=OOD_WAFERS_PER_CLASS):
+    """Ensure source wafer canvases exist for the 4 OOD eval classes."""
     for cls in OOD_CLASSES:
-        cls_dir = unknown_src / cls
-        n_have = len(list(cls_dir.glob("*.png"))) if cls_dir.exists() else 0
-        if n_have >= OOD_WAFERS_PER_CLASS:
-            log(f"OOD wafer canvas {cls}: {n_have} ≥ {OOD_WAFERS_PER_CLASS}, skip")
-            continue
-        need = OOD_WAFERS_PER_CLASS - n_have
-        log(f"OOD wafer canvas {cls}: {n_have}/{OOD_WAFERS_PER_CLASS} — auto-generating {need}")
-        env = os.environ.copy()
-        env["WM811K_ROOT"] = str(DATA_ROOT)
-        env["WAFER_PNG_OUT_DIR"] = str(unknown_src)
-        env.setdefault("WAFER_JSON_OUT_DIR", str(PROJ_ROOT / "data" / "positions" / "unknown"))
-        cmd = [
-            sys.executable, "-u", "-X", "utf8", "-m", "dist_apply._sample_canvas_gen",
-            "--classes", cls,
-            "--n", str(need),
-        ]
-        subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT), env=env)
-        n_after = len(list(cls_dir.glob("*.png"))) if cls_dir.exists() else 0
-        if n_after < OOD_WAFERS_PER_CLASS:
+        ensure_ood_wafer_class(cls, min_wafers)
+
+
+def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_root: Path):
+    dst_dir = dst_root / cls
+    rounds = 0
+    while count_pngs(dst_dir) < target:
+        before = count_pngs(dst_dir)
+        if before > 0:
+            log(f"OOD {cls} have {before}/{target}, filling")
+        mod.extract_class(cls, target, 0.03, rng, src_root=unknown_src, dst_root=dst_root)
+        after = count_pngs(dst_dir)
+        if after >= target:
+            return
+
+        missing = target - after
+        src_dir = unknown_src / cls
+        have_wafers = count_pngs(src_dir)
+        chips_per_wafer = max(1.0, float(after) / max(have_wafers, 1))
+        add_wafers = max(OOD_WAFERS_PER_CLASS, int((missing / chips_per_wafer) * 1.10) + 1)
+        log(
+            f"OOD {cls} still short {after}/{target}; "
+            f"auto-generating {add_wafers} more wafer canvases "
+            f"(observed {chips_per_wafer:.1f} chips/wafer)"
+        )
+        ensure_ood_wafer_class(cls, have_wafers + add_wafers)
+        rounds += 1
+        if rounds > 20:
             raise RuntimeError(
-                f"OOD wafer canvas generation incomplete for {cls}: "
-                f"{n_after}/{OOD_WAFERS_PER_CLASS} under {cls_dir}"
+                f"OOD {cls} could not be filled after {rounds} rounds: {after}/{target}"
             )
 
 
@@ -199,21 +241,18 @@ def make_eval_sets():
                 log(f"OOD src_root={unknown_src} dst_root={master_eval_dir}")
                 for cls in OOD_CLASSES:
                     ood_cdir = master_eval_dir / cls
-                    n_have = len(list(ood_cdir.glob("*.png"))) if ood_cdir.exists() else 0
+                    n_have = count_pngs(ood_cdir)
                     if n_have >= ood_n:
                         log(f"OOD {cls} already {n_have} ≥ {ood_n}, skip")
                         continue
-                    if n_have > 0:
-                        log(f"OOD {cls} have {n_have}, generating {ood_n - n_have} more (incremental)")
-                    mod.extract_class(cls, ood_n, 0.03, rng,
-                                      src_root=unknown_src, dst_root=master_eval_dir)
+                    fill_ood_eval_class(mod, cls, ood_n, rng, unknown_src, master_eval_dir)
         except Exception as e:
             raise RuntimeError(f"OOD extraction failed from {unknown_src}: {type(e).__name__}: {e}") from e
 
         incomplete_ood = []
         for cls in OOD_CLASSES:
             cdir = master_eval_dir / cls
-            n_have = len(list(cdir.glob("*.png"))) if cdir.exists() else 0
+            n_have = count_pngs(cdir)
             if n_have < ood_n:
                 incomplete_ood.append(f"{cls}({n_have}/{ood_n})")
         if incomplete_ood:
