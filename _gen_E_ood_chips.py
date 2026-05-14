@@ -27,9 +27,14 @@ DST_ROOT = Path("E:/data/images/chip_multilabel_v15direct")
 OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
 
 
-def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Random):
-    src_dir = SRC_ROOT / cls
-    dst_dir = DST_ROOT / cls
+def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Random,
+                  src_root: Path = None, dst_root: Path = None):
+    # Resolve src/dst roots explicitly. Caller passes via param OR sets module attrs.
+    sr = src_root if src_root is not None else SRC_ROOT
+    dr = dst_root if dst_root is not None else DST_ROOT
+    src_dir = sr / cls
+    dst_dir = dr / cls
+    print(f"[OOD] {cls}: src={src_dir}  dst={dst_dir}")
     dst_dir.mkdir(parents=True, exist_ok=True)
 
     wafers = sorted(src_dir.glob("*.png"))

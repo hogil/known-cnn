@@ -161,17 +161,17 @@ def make_eval_sets():
                 if spec and spec.loader:
                     mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(mod)
-                    mod.SRC_ROOT = unknown_src
-                    mod.DST_ROOT = master_eval_dir
                     import random as _r
                     rng = _r.Random(42)
+                    log(f"OOD src_root={unknown_src} dst_root={master_eval_dir}")
                     for cls in ood_classes:
                         ood_cdir = master_eval_dir / cls
                         if ood_cdir.exists() and len(list(ood_cdir.glob("*.png"))) > 0:
                             log(f"OOD {cls} exists ({len(list(ood_cdir.glob('*.png')))} chips), skip")
                             continue
                         try:
-                            mod.extract_class(cls, ood_n, 0.03, rng)
+                            mod.extract_class(cls, ood_n, 0.03, rng,
+                                              src_root=unknown_src, dst_root=master_eval_dir)
                         except Exception as e:
                             log(f"WARN OOD extract {cls}: {type(e).__name__}: {e}")
             except Exception as e:
