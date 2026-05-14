@@ -57,8 +57,9 @@ train_one() {
         --cutmix-complete-label-scale 0.5 \
         --tag "$TAG" --out-root "$OUT_ROOT" \
         >> "${OUT_BASE}/_${TAG}_train.log" 2>&1
-    local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
-    [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth || true
+    # Trainer's run dir is timestamp-prefixed (e.g. 20260514_xxx_T7_W1_n1_ls10), not just T*
+    local RUN=$(ls -d "$OUT_ROOT"/*/ 2>/dev/null | head -1)
+    [ -n "$RUN" ] && rm -f "$RUN"epoch_*.pth "$RUN"final_epoch_model.pth || true
     echo "$(date) [W1] DONE TRAIN $TAG" | tee -a "$SUMMARY"
 }
 
