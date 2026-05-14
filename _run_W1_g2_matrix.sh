@@ -67,7 +67,9 @@ eval_one() {
     local N="$1"; local LS_INT="$2"
     local TAG="W1_n${N}_ls${LS_INT}"
     local OUT_ROOT="${OUT_BASE}/${TAG}"
-    local RUN=$(ls -d "$OUT_ROOT"/T*/ 2>/dev/null | head -1)
+    # Inner run dir is timestamp-prefixed (e.g. 20260514_xxx_T7_W1_n1_ls10/), not just T*
+    # Prefer dirs that have best_model.pth
+    local RUN=$(ls -d "$OUT_ROOT"/*/ 2>/dev/null | while read d; do [ -f "${d}best_model.pth" ] && echo "$d"; done | head -1)
     [ -z "$RUN" ] && return 0
     local EVAL_OUT="${RUN}eval_v15direct"
     if [ -d "$EVAL_OUT" ] && [ -n "$(ls -A "$EVAL_OUT" 2>/dev/null)" ]; then
