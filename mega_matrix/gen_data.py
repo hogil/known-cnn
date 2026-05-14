@@ -90,7 +90,14 @@ def make_eval_sets():
             log(f"eval_n{en} local exists ({n} chips), skip")
             continue
 
-        if not master_eval_dir.exists() or len(list(master_eval_dir.glob("*/*.png"))) == 0:
+        # Check if master already has core defect/Normal/Invalid classes synth'd
+        # If 'bank_boundary' dir exists with PNGs, assume gen_eval_set ran OK.
+        master_done = (master_eval_dir.exists()
+                       and (master_eval_dir / "bank_boundary").exists()
+                       and len(list((master_eval_dir / "bank_boundary").glob("*.png"))) > 0)
+        if master_done:
+            log(f"master eval_n{en} already exists, skip gen_eval_set")
+        else:
             log(f"generating eval_n{en} via gen_eval_set...")
             cmd = [
                 sys.executable, "-u", "-X", "utf8", "-m", "chip_multilabel.gen_eval_set",
@@ -105,35 +112,38 @@ def make_eval_sets():
             ]
             subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
 
-            # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
-            # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
-            ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
-            unknown_src = DATA_ROOT / "unknown"
-            # OOD scale: match defect en (200/2000/20000) — no cap (replacement
-            # sampling fills if source candidates < en, e.g. Starburst 12k).
-            ood_n = en
-            if unknown_src.exists():
-                try:
-                    sys.path.insert(0, str(PROJ_ROOT))
-                    import importlib.util
-                    spec = importlib.util.spec_from_file_location(
-                        "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
-                    if spec and spec.loader:
-                        mod = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(mod)
-                        mod.SRC_ROOT = unknown_src
-                        mod.DST_ROOT = master_eval_dir
-                        import random as _r
-                        rng = _r.Random(42)
-                        for cls in ood_classes:
-                            try:
-                                mod.extract_class(cls, ood_n, 0.03, rng)
-                            except Exception as e:
-                                log(f"WARN OOD extract {cls}: {type(e).__name__}: {e}")
-                except Exception as e:
-                    log(f"WARN OOD module load failed: {type(e).__name__}: {e}")
-            else:
-                log(f"WARN OOD source {unknown_src} missing — skipping OOD class extraction")
+        # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
+        # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
+        # Skip individual OOD class if already has PNGs.
+        ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
+        unknown_src = DATA_ROOT / "unknown"
+        ood_n = en
+        if unknown_src.exists():
+            try:
+                sys.path.insert(0, str(PROJ_ROOT))
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(
+                    "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
+                if spec and spec.loader:
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    mod.SRC_ROOT = unknown_src
+                    mod.DST_ROOT = master_eval_dir
+                    import random as _r
+                    rng = _r.Random(42)
+                    for cls in ood_classes:
+                        ood_cdir = master_eval_dir / cls
+                        if ood_cdir.exists() and len(list(ood_cdir.glob("*.png"))) > 0:
+                            log(f"OOD {cls} exists ({len(list(ood_cdir.glob('*.png')))} chips), skip")
+                            continue
+                        try:
+                            mod.extract_class(cls, ood_n, 0.03, rng)
+                        except Exception as e:
+                            log(f"WARN OOD extract {cls}: {type(e).__name__}: {e}")
+            except Exception as e:
+                log(f"WARN OOD module load failed: {type(e).__name__}: {e}")
+        else:
+            log(f"WARN OOD source {unknown_src} missing — skipping OOD class extraction")
 
         if not master_eval_dir.exists():
             log(f"WARN eval_n{en} not generated, skipping local copy")
