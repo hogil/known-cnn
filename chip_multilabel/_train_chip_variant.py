@@ -538,7 +538,7 @@ def main():
                          "(OR multi-hot label or soft λ for CE-soft). "
                          "'scattered' = N small patches + soft proportional label "
                          "label_B = ratio × discount × alpha (iter 12, paper-quality). "
-                         "'grid' = 8×8 binary mask (50% prob per cell) — fine-grained "
+                         "'grid' = 8×8 binary mask (50%% prob per cell) — fine-grained "
                          "spatial mixing, area-proportional soft label (260507). "
                          "'grid_sparse' (260508) = K random cells from 8×8 grid "
                          "(grid + scatter mix). soft proportional label. "
@@ -588,8 +588,8 @@ def main():
     # 260507 — grid mode cell-flip probability (sweepable)
     ap.add_argument("--cutmix-grid-prob", type=float, default=0.5,
                     help="Per-cell flip probability for grid CutMix mode (default 0.5). "
-                         "0.5 ≈ 50% area mixed (32/64 cells), 0.25 ≈ 25% (16/64), "
-                         "0.125 ≈ 12.5% (8/64). Used only when --cutmix-mode=grid.")
+                         "0.5 ≈ 50%% area mixed (32/64 cells), 0.25 ≈ 25%% (16/64), "
+                         "0.125 ≈ 12.5%% (8/64). Used only when --cutmix-mode=grid.")
     # 260508 — paired CutMix: 동일 rect 영역을 mask 한 paired sample 도 forward.
     # disentangle "mask location prior" from "actual content signal" (counterfactual augmentation).
     ap.add_argument("--cutmix-pair", type=str, default="none", choices=["none", "masked"],
