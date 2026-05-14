@@ -1423,18 +1423,19 @@ def main():
         if args.multi_val_set:
             try:
                 if "_mv_cache" not in locals() and "_mv_cache" not in globals():
-                    from ._per_epoch_multi_eval import load_multi_val
-                    _mv_cache = load_multi_val(args.multi_val_set,
-                                               n_per_class=args.multi_val_n_per_class,
-                                               seed=args.seed, img_size=img_size)
+                    from ._per_epoch_multi_eval import load_multi_val as _mv_load
+                    _mv_cache = _mv_load(args.multi_val_set,
+                                         n_per_class=args.multi_val_n_per_class,
+                                         seed=args.seed, img_size=img_size)
                     print(f"[multi-val] loaded {len(_mv_cache['paths'])} chips from "
                           f"{args.multi_val_set} ({args.multi_val_n_per_class}/class)")
-                from ._per_epoch_multi_eval import evaluate, format_compact
+                from ._per_epoch_multi_eval import evaluate as _mv_evaluate
+                from ._per_epoch_multi_eval import format_compact as _mv_format
                 eval_model = ema.module if ema is not None else (
                     model.module if hasattr(model, "module") else model)
-                m = evaluate(eval_model, _mv_cache, device=str(device),
-                             threshold=0.5, batch_size=32, num_workers=0)
-                print(f"[ep {ep:02d}/multi] {format_compact(m)}")
+                m = _mv_evaluate(eval_model, _mv_cache, device=str(device),
+                                 threshold=0.5, batch_size=32, num_workers=0)
+                print(f"[ep {ep:02d}/multi] {_mv_format(m)}")
                 history[-1]["multi_val"] = {
                     "bit_F1": m["bit_F1"], "total_far": m["total_far"],
                     "ni_far": m["ni_far"], "ood_far": m["ood_far"],
