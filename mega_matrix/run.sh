@@ -35,6 +35,11 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 OUT_BASE=outputs/_mega_matrix    # shared train/eval data root
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
 DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
+# Fallback: if explicit WM811K_ROOT not set AND default path missing AND E:/data/images exists,
+# use E:/data/images (Windows local workspace convention, 260514).
+if [ -z "$WM811K_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
+    DATA_BASE="E:/data/images"
+fi
 DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
 SMOKE=0
 EPOCHS=20
