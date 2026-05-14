@@ -185,12 +185,17 @@ train_cell() {
     # effective global batch = BATCH_PER_GPU * NGPU
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
+    MULTI_VAL_FLAG=""
+    if [ -d "${OUT_BASE}/eval_n200" ]; then
+        MULTI_VAL_FLAG="--multi-val-set ${OUT_BASE}/eval_n200 --multi-val-n-per-class 50"
+    fi
     TRAIN_RUN_STAMP="$TRAIN_STAMP" torchrun --standalone --nproc_per_node="$NGPU" \
         -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs $EPOCHS \
         --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$WORKERS_PER_RANK" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
+        $MULTI_VAL_FLAG \
         --data-root "${OUT_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-grid-dim 16 --cutmix-n-groups 2 --cutmix-complete-label-scale 0.5 \

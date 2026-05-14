@@ -460,6 +460,12 @@ def main():
                     help="Save epoch_NN_model.pth at every epoch end (in addition to "
                          "best_model.pth). Used for per-epoch eval / multi-label selection. "
                          "Disk cost: ~350 MB × epochs (cleanup recommended after eval).")
+    ap.add_argument("--multi-val-set", type=str, default=None,
+                    help="Optional path to multi-label eval folder (with manifest.csv) "
+                         "for per-epoch class-level F1 + FAR reporting. e.g. "
+                         "E:/data/images/chip_multilabel_v15direct_n2000")
+    ap.add_argument("--multi-val-n-per-class", type=int, default=50,
+                    help="Per-class chip cap for --multi-val-set (default 50 = fast).")
     ap.add_argument("--val-criterion",
                     choices=["acc", "f1", "auroc", "bce_min", "brier_min",
                              "margin_max", "f1_best_tau"],
@@ -1413,6 +1419,31 @@ def main():
               f"v_bce={val_bce:.4f} v_brier={val_brier:.4f} "
               f"v_margin={val_margin:.4f} v_f1bτ={val_f1_best_tau:.4f} "
               f"sel={c}({val_for_best:.4f}) loss_active={active}")
+        # Optional: per-epoch class-level F1 + FAR on a multi-label val set
+        if args.multi_val_set:
+            try:
+                if "_mv_cache" not in locals() and "_mv_cache" not in globals():
+                    from ._per_epoch_multi_eval import load_multi_val
+                    _mv_cache = load_multi_val(args.multi_val_set,
+                                               n_per_class=args.multi_val_n_per_class,
+                                               seed=args.seed, img_size=img_size)
+                    print(f"[multi-val] loaded {len(_mv_cache['paths'])} chips from "
+                          f"{args.multi_val_set} ({args.multi_val_n_per_class}/class)")
+                from ._per_epoch_multi_eval import evaluate, format_compact
+                eval_model = ema.module if ema is not None else (
+                    model.module if hasattr(model, "module") else model)
+                m = evaluate(eval_model, _mv_cache, device=str(device),
+                             threshold=0.5, batch_size=32, num_workers=0)
+                print(f"[ep {ep:02d}/multi] {format_compact(m)}")
+                history[-1]["multi_val"] = {
+                    "bit_F1": m["bit_F1"], "total_far": m["total_far"],
+                    "ni_far": m["ni_far"], "ood_far": m["ood_far"],
+                    "per_class_f1": m["per_class_f1"],
+                    "per_class_far": m["per_class_far"],
+                    "per_bit_f1": m["per_bit_f1"],
+                }
+            except Exception as e:
+                print(f"[multi-val] FAIL ep{ep}: {type(e).__name__}: {e}")
         save_state_dict = None
         if val_for_best > best_val_acc and ep >= args.best_from_epoch:
             best_val_acc = val_for_best
