@@ -85,20 +85,39 @@ def make_eval_sets():
         master_eval_dir = DATA_ROOT / f"chip_multilabel_mega_eval_n{en}"
         local_eval_dir = OUT_BASE / f"eval_n{en}"
 
-        if local_eval_dir.exists() and len(list(local_eval_dir.glob("*/*.png"))) > 0:
+        # Strict local skip: 16 expected classes must all exist with PNGs
+        expected_classes = (
+            ["bank_boundary", "fork", "scratch", "scratch_rot"]  # 4 single
+            + ["bank_boundary+fork", "bank_boundary+scratch", "bank_boundary+scratch_rot",
+               "fork+scratch", "fork+scratch_rot", "scratch+scratch_rot"]  # 6 2-combo
+            + ["Normal", "Invalid"]
+            + ["CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst"]  # 4 OOD
+        )
+        missing_classes = [c for c in expected_classes
+                           if not (local_eval_dir / c).exists()
+                           or len(list((local_eval_dir / c).glob("*.png"))) == 0]
+        if local_eval_dir.exists() and not missing_classes:
             n = len(list(local_eval_dir.glob("*/*.png")))
-            log(f"eval_n{en} local exists ({n} chips), skip")
+            log(f"eval_n{en} local complete ({n} chips, all 16 classes), skip")
             continue
+        if missing_classes:
+            log(f"eval_n{en} local missing classes: {missing_classes} — proceeding to gen/symlink")
 
-        # Check if master already has core defect/Normal/Invalid classes synth'd
-        # If 'bank_boundary' dir exists with PNGs, assume gen_eval_set ran OK.
-        master_done = (master_eval_dir.exists()
-                       and (master_eval_dir / "bank_boundary").exists()
-                       and len(list((master_eval_dir / "bank_boundary").glob("*.png"))) > 0)
-        if master_done:
-            log(f"master eval_n{en} already exists, skip gen_eval_set")
+        # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all exist.
+        # OOD checked separately below.
+        base_classes = [c for c in expected_classes if c not in
+                        ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")]
+        master_base_done = (master_eval_dir.exists() and all(
+            (master_eval_dir / c).exists()
+            and len(list((master_eval_dir / c).glob("*.png"))) > 0
+            for c in base_classes))
+        if master_base_done:
+            log(f"master eval_n{en} base 12 classes exist, skip gen_eval_set")
         else:
-            log(f"generating eval_n{en} via gen_eval_set...")
+            missing_base = [c for c in base_classes
+                            if not (master_eval_dir / c).exists()
+                            or len(list((master_eval_dir / c).glob("*.png"))) == 0]
+            log(f"generating eval_n{en} via gen_eval_set (missing base: {missing_base})...")
             cmd = [
                 sys.executable, "-u", "-X", "utf8", "-m", "chip_multilabel.gen_eval_set",
                 "--out-root", str(master_eval_dir),
