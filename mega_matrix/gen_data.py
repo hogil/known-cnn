@@ -142,6 +142,13 @@ def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_
     dst_dir = dst_root / cls
     rounds = 0
     while count_pngs(dst_dir) < target:
+        src_dir = unknown_src / cls
+        have_wafers = count_pngs(src_dir)
+        if have_wafers <= 0:
+            log(f"OOD {cls} source empty — auto-generating wafer canvases before extraction")
+            ensure_ood_wafer_class(cls, OOD_WAFERS_PER_CLASS)
+            have_wafers = count_pngs(src_dir)
+
         before = count_pngs(dst_dir)
         if before > 0:
             log(f"OOD {cls} have {before}/{target}, filling")
@@ -151,7 +158,6 @@ def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_
             return
 
         missing = target - after
-        src_dir = unknown_src / cls
         have_wafers = count_pngs(src_dir)
         chips_per_wafer = max(1.0, float(after) / max(have_wafers, 1))
         add_wafers = max(OOD_WAFERS_PER_CLASS, int((missing / chips_per_wafer) * 1.10) + 1)
