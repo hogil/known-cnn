@@ -83,8 +83,8 @@ case "$BACKBONE" in
 esac
 
 # Per-rank batch for H100 80GB + small chip PNGs. Sized to ~60 GB / 80 GB
-# (~75% utilization, ~25% reduction from prior fill-VRAM table) to leave
-# headroom for activations + FCM-PM forward-batch multiplier (up to 4x).
+# (~75% utilization) for SERVER (mega_matrix exception — runs on server
+# with no baseline GPU contention; local 30-40GB rule does NOT apply).
 # Per-rank, NOT divided by world_size.
 # Effective global batch = BATCH_PER_GPU * world_size.
 case "$BACKBONE" in

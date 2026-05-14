@@ -67,9 +67,9 @@ case "$BACKBONE" in
     *)     IMG_SIZE=224 ;;
 esac
 
-# H100 batch table — sized to ~60 GB / 80 GB (~75% utilization) to leave headroom
-# for activations and FCM-PM forward-batch multiplier (up to 4x). All values
-# reduced ~25% from prior table that filled VRAM completely (260514 user feedback).
+# H100 batch table — sized to ~60 GB / 80 GB (~75% utilization) for SERVER
+# (mega_matrix exception — runs on server with no baseline GPU contention).
+# Local-machine 30-40GB baseline rule does NOT apply here.
 case "$BACKBONE" in
     *convnextv2_large*384*) BATCH_PER_GPU=9 ;;
     *swinv2_base*384*)      BATCH_PER_GPU=12 ;;
