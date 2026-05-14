@@ -487,6 +487,13 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--num-workers", type=int, default=0)
     ap.add_argument("--device", default=None)
+    ap.add_argument("--gpu-mem-fraction", type=float, default=None,
+                    help="Cap process GPU memory usage as fraction of total VRAM (e.g. 0.4 = 40%%). "
+                         "Local-machine rule (260514): set 0.4 to leave room for other work.")
+    ap.add_argument("--grad-checkpointing", action="store_true",
+                    help="Enable gradient checkpointing (timm set_grad_checkpointing). "
+                         "Reduces activation memory ~30%% at ~20%% slower step. "
+                         "Use when batch>=2 needed for CutMix but cap 0.40 OOMs (260515).")
     # Phase F additions (anomaly-detection BKM ported)
     ap.add_argument("--warmup-epochs", type=int, default=0,
                     help="LinearLR warmup epochs (0 = no warmup, current default)")
@@ -670,6 +677,14 @@ def main():
         _rank = 0
         device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
+    # Cap GPU memory share (260514 — leave 60%+ for other processes in this project)
+    if device.type == "cuda" and args.gpu_mem_fraction is not None and 0.0 < args.gpu_mem_fraction < 1.0:
+        try:
+            torch.cuda.set_per_process_memory_fraction(args.gpu_mem_fraction, device.index or 0)
+            print(f"[init] gpu_mem_fraction={args.gpu_mem_fraction} (cap ≈{args.gpu_mem_fraction*100:.0f}%% of total VRAM)")
+        except Exception as e:
+            print(f"[init] WARN set_per_process_memory_fraction failed: {e}")
+
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
 
@@ -708,6 +723,17 @@ def main():
                                             init_ckpt=Path(args.init_ckpt),
                                             drop_path_rate=args.drop_path_rate)
     model = model.to(device)
+    # 260515 — gradient checkpointing for pair-masked CutMix + batch>=2 within cap=0.40.
+    # Solves batch=1 silent-cutmix-no-op bug while staying inside GPU memory budget.
+    if args.grad_checkpointing:
+        if hasattr(model, "set_grad_checkpointing"):
+            try:
+                model.set_grad_checkpointing(enable=True)
+                print(f"[init] gradient checkpointing ENABLED via timm set_grad_checkpointing")
+            except Exception as e:
+                print(f"[init] WARN set_grad_checkpointing failed: {e}")
+        else:
+            print(f"[init] WARN model has no set_grad_checkpointing — --grad-checkpointing ignored")
     if _ddp:
         model = DDP(model, device_ids=[_local_rank], output_device=_local_rank,
                     find_unused_parameters=args.freeze_backbone)
@@ -809,6 +835,15 @@ def main():
         loss_fn, target_kind = build_loss(loss_name)
     loss_fn = loss_fn.to(device)
     print(f"[train] loss={loss_name} target_kind={target_kind}")
+    # 260515 — guard against silent-no-op CutMix when batch=1.
+    # Bug: torch.randperm(1)=[0] → diff_class_mask all False → cutmix never applied,
+    # config flags printed but ignored. Result: bit-identical weights across configs.
+    if args.cutmix_p > 0 and args.batch < 2:
+        raise ValueError(
+            f"--cutmix-p={args.cutmix_p} requires --batch >= 2 (got {args.batch}). "
+            "CutMix needs intra-batch pair to mix. batch=1 silently degenerates to no-op. "
+            "Use --batch 2 --accum 16 (effective batch 32) + --grad-checkpointing if OOM."
+        )
     if args.cutmix_p > 0:
         if args.cutmix_mode == "scattered":
             soft_b = float(args.cutmix_total_ratio) * float(args.cutmix_discount) \

@@ -27,6 +27,7 @@ train_one() {
         --backbone-timm-weights "$WEIGHTS" \
         --no-normal --val-criterion margin_max --save-every-epoch \
         --multi-val-set "$EVAL_SET" --multi-val-n-per-class 50 \
+        --gpu-mem-fraction 0.30 \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill "$FILL" \
         --cutmix-p 0.25 --cutmix-grid-dim "$GRID" --cutmix-n-groups "$NG" --cutmix-complete-label-scale 0.5 \
         --tag "$TAG" --out-root "$OUT_ROOT" \

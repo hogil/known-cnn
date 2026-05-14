@@ -28,6 +28,7 @@ train_one() {
         --backbone-timm-weights "$WEIGHTS" \
         --no-normal --val-criterion margin_max --save-every-epoch \
         --multi-val-set "$EVAL_SET" --multi-val-n-per-class 50 \
+        --gpu-mem-fraction 0.30 \
         --tag "$TAG" --out-root "$OUT_ROOT" \
         "$@" \
         > "outputs/_${TAG}_train.log" 2>&1
