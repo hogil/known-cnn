@@ -118,21 +118,24 @@ def make_eval_sets():
         if missing_classes:
             log(f"eval_n{en} local missing classes: {missing_classes} — proceeding to gen/symlink")
 
-        # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all exist.
-        # OOD checked separately below.
+        # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all have ≥ en chips.
+        # If any class < en, gen_eval_set is monolithic and re-runs all 12 (limitation accepted).
         base_classes = [c for c in expected_classes if c not in
                         ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")]
         master_base_done = (master_eval_dir.exists() and all(
             (master_eval_dir / c).exists()
-            and len(list((master_eval_dir / c).glob("*.png"))) > 0
+            and len(list((master_eval_dir / c).glob("*.png"))) >= en
             for c in base_classes))
         if master_base_done:
-            log(f"master eval_n{en} base 12 classes exist, skip gen_eval_set")
+            log(f"master eval_n{en} base 12 classes all ≥ {en} chips, skip gen_eval_set")
         else:
-            missing_base = [c for c in base_classes
-                            if not (master_eval_dir / c).exists()
-                            or len(list((master_eval_dir / c).glob("*.png"))) == 0]
-            log(f"generating eval_n{en} via gen_eval_set (missing base: {missing_base})...")
+            partial_base = []
+            for c in base_classes:
+                cd = master_eval_dir / c
+                cnt = len(list(cd.glob("*.png"))) if cd.exists() else 0
+                if cnt < en:
+                    partial_base.append(f"{c}({cnt}/{en})")
+            log(f"generating eval_n{en} via gen_eval_set (partial base: {partial_base})...")
             cmd = [
                 sys.executable, "-u", "-X", "utf8", "-m", "chip_multilabel.gen_eval_set",
                 "--out-root", str(master_eval_dir),
@@ -166,9 +169,12 @@ def make_eval_sets():
                     log(f"OOD src_root={unknown_src} dst_root={master_eval_dir}")
                     for cls in ood_classes:
                         ood_cdir = master_eval_dir / cls
-                        if ood_cdir.exists() and len(list(ood_cdir.glob("*.png"))) > 0:
-                            log(f"OOD {cls} exists ({len(list(ood_cdir.glob('*.png')))} chips), skip")
+                        n_have = len(list(ood_cdir.glob("*.png"))) if ood_cdir.exists() else 0
+                        if n_have >= ood_n:
+                            log(f"OOD {cls} already {n_have} ≥ {ood_n}, skip")
                             continue
+                        if n_have > 0:
+                            log(f"OOD {cls} have {n_have}, generating {ood_n - n_have} more (incremental)")
                         try:
                             mod.extract_class(cls, ood_n, 0.03, rng,
                                               src_root=unknown_src, dst_root=master_eval_dir)

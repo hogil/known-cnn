@@ -37,6 +37,17 @@ def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Ra
     print(f"[OOD] {cls}: src={src_dir}  dst={dst_dir}")
     dst_dir.mkdir(parents=True, exist_ok=True)
 
+    # Incremental: count existing PNGs, generate only delta
+    existing = sorted(dst_dir.glob("*.png"))
+    n_have = len(existing)
+    if n_have >= per_class:
+        print(f"[OOD] {cls}: already has {n_have} ≥ {per_class}, skip")
+        return n_have
+    if n_have > 0:
+        print(f"[OOD] {cls}: have {n_have}, need {per_class - n_have} more (incremental)")
+    target_delta = per_class - n_have
+    idx_start = n_have  # continue numbering from existing
+
     wafers = sorted(src_dir.glob("*.png"))
     if not wafers:
         print(f"[OOD] {cls}: no wafer source")
@@ -70,23 +81,25 @@ def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Ra
         print(f"[OOD] {cls}: zero candidates — abort")
         return 0
     rng.shuffle(candidates)
-    # 사용 가능한 만큼 저장 (per_class 보다 적으면 적은 대로)
-    pick = candidates[:per_class]
+    # 사용 가능한 만큼 저장 (target_delta 보다 적으면 적은 대로)
+    pick = candidates[:target_delta]
 
     saved = 0
-    for idx, (wi, gy, gx) in enumerate((c[0], c[1], c[2]) for c in pick):
+    for k, (wi, gy, gx) in enumerate((c[0], c[1], c[2]) for c in pick):
         im = Image.open(wafers[wi])
         arr = np.array(im, dtype=np.uint8)
         y0, x0 = gy * CHIP, gx * CHIP
         tile = arr[y0:y0+CHIP, x0:x0+CHIP]
         out = Image.fromarray(tile, mode="P")
         out.putpalette(palette_bytes)
+        idx = idx_start + k  # continue from existing
         out_path = dst_dir / f"{cls}_{idx:04d}.png"
         out.save(out_path, optimize=True)
         saved += 1
 
-    print(f"[OOD] {cls}: saved {saved} → {dst_dir}")
-    return saved
+    total = n_have + saved
+    print(f"[OOD] {cls}: saved {saved} new → {dst_dir} (total now {total}/{per_class})")
+    return total
 
 
 def main():
