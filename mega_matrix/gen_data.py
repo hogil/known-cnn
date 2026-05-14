@@ -97,7 +97,7 @@ def make_eval_sets():
                 "--out-root", str(master_eval_dir),
                 "--per-defect", str(en),
                 "--per-normal", str(en),
-                "--per-invalid", str(max(en // 4, 10)),
+                "--per-invalid", str(en),  # match defect scale (was en // 4, 260514 fix)
                 # NO --include-triples: absolute rule 260512 — positive = single + 2-combo only.
                 # 3-combo would inflate eval but is excluded from bit_F1 anyway by aggregator.
                 "--classification-chips-root", str(MASTER_TRAIN),
@@ -109,7 +109,9 @@ def make_eval_sets():
             # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
             ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
             unknown_src = DATA_ROOT / "unknown"
-            ood_n = min(en, 200)
+            # OOD scale: match defect en (200/2000/20000). Cap at 10000 since
+            # Starburst source has only ~12 wafers × 1024 chips ≈ 12k available.
+            ood_n = min(en, 10000)
             if unknown_src.exists():
                 try:
                     sys.path.insert(0, str(PROJ_ROOT))
