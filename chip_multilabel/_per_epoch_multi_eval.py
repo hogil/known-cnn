@@ -61,21 +61,35 @@ class _MultiEvalDataset(Dataset):
 
 def load_multi_val(eval_root: str, n_per_class: int = 50, seed: int = 42,
                    img_size: int = 384) -> Dict:
-    """Sample n_per_class chips per class_key (positive + negative)."""
-    root = Path(eval_root)
-    manifest = root / "manifest.csv"
-    if not manifest.exists():
-        raise FileNotFoundError(f"manifest.csv missing at {manifest}")
+    """Sample n_per_class chips per class_key (positive + negative).
 
+    Prefers manifest.csv; falls back to walking <eval_root>/<class_key>/*.png
+    (mega_matrix uses symlinked subdirs without manifest).
+    """
+    root = Path(eval_root)
     rng = np.random.default_rng(seed)
     rows_by_class: Dict[str, List[str]] = {}
-    with open(manifest, "r", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            ck = row.get("class_key", "")
-            cp = row.get("chip_path", "")
-            if not (ck and cp and Path(cp).exists()):
+    manifest = root / "manifest.csv"
+    if manifest.exists():
+        with open(manifest, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                ck = row.get("class_key", "")
+                cp = row.get("chip_path", "")
+                if not (ck and cp and Path(cp).exists()):
+                    continue
+                rows_by_class.setdefault(ck, []).append(cp)
+    else:
+        # Fallback: walk subdirs (manifest-less mega_matrix eval_n200/2000/20000)
+        for cdir in sorted(root.iterdir()):
+            if not cdir.is_dir() or cdir.name.startswith("_"):
                 continue
-            rows_by_class.setdefault(ck, []).append(cp)
+            ck = cdir.name
+            for png in sorted(cdir.glob("*.png")):
+                if png.is_file():
+                    rows_by_class.setdefault(ck, []).append(str(png))
+        if not rows_by_class:
+            raise FileNotFoundError(
+                f"no manifest.csv and no <class>/*.png subdirs at {root}")
 
     all_classes = list(POSITIVE) + list(NEG_NI) + list(NEG_OOD)
     paths, class_keys = [], []
