@@ -27,6 +27,113 @@ DST_ROOT = Path("E:/data/images/chip_multilabel_v15direct")
 OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
 
 
+def _palette():
+    try:
+        from dist_apply._sample_gen import PALETTE
+        return PALETTE
+    except Exception:
+        pal = [
+            255, 255, 255, 155, 155, 155, 0, 150, 25, 0, 0, 255,
+            217, 29, 255, 255, 255, 0, 255, 0, 0, 0, 0, 0,
+            220, 238, 255, 0, 0, 1, 190, 190, 190, 255, 153, 0,
+        ]
+        while len(pal) < 96:
+            pal.append(0)
+        return pal
+
+
+def _grid():
+    yy = np.arange(CHIP, dtype=np.float32)[:, None]
+    xx = np.arange(CHIP, dtype=np.float32)[None, :]
+    return yy, xx
+
+
+def _line_alpha(yy, xx, cy, cx, angle, sigma, half_len, peak):
+    cos_a = float(np.cos(angle))
+    sin_a = float(np.sin(angle))
+    d_perp = cos_a * (yy - cy) - sin_a * (xx - cx)
+    d_along = sin_a * (yy - cy) + cos_a * (xx - cx)
+    core = np.exp(-(d_perp * d_perp) / (sigma * sigma)).astype(np.float32)
+    taper = np.exp(-np.maximum(np.abs(d_along) - half_len, 0.0) ** 2 / ((sigma * 8.0) ** 2))
+    return peak * core * taper.astype(np.float32)
+
+
+def _alpha_for_chip(cls: str, rng: np.random.Generator):
+    yy, xx = _grid()
+    cy = CHIP / 2.0 + rng.uniform(-12, 12)
+    cx = CHIP / 2.0 + rng.uniform(-12, 12)
+    if cls == "CenterDonut":
+        r = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+        r0 = rng.uniform(16, 34)
+        sigma = rng.uniform(2.5, 5.0)
+        return rng.uniform(0.55, 0.90) * np.exp(-((r - r0) ** 2) / (sigma * sigma))
+    if cls == "CrossScratch":
+        angle = rng.uniform(-0.15, 0.15)
+        sigma = rng.uniform(2.5, 5.5)
+        half_len = rng.uniform(55, 95)
+        a1 = _line_alpha(yy, xx, cy, cx, angle, sigma, half_len, rng.uniform(0.55, 0.90))
+        a2 = _line_alpha(yy, xx, cy, cx, angle + np.pi / 2.0, sigma, half_len, rng.uniform(0.55, 0.90))
+        return np.maximum(a1, a2)
+    if cls == "DiagonalSmear":
+        angle = np.deg2rad(rng.uniform(35, 55))
+        return _line_alpha(yy, xx, cy, cx, angle, rng.uniform(4.0, 9.0),
+                           rng.uniform(70, 120), rng.uniform(0.45, 0.85))
+    if cls == "Starburst":
+        dy = yy - cy
+        dx = xx - cx
+        r = np.sqrt(dy * dy + dx * dx)
+        theta = np.arctan2(dy, dx)
+        alpha = np.exp(-(r * r) / (rng.uniform(7, 13) ** 2)) * rng.uniform(0.65, 0.95)
+        n_rays = int(rng.integers(8, 15))
+        th0 = rng.uniform(0, 2 * np.pi)
+        for i in range(n_rays):
+            ray_angle = th0 + 2 * np.pi * i / n_rays + rng.uniform(-0.04, 0.04)
+            dth = (theta - ray_angle + np.pi) % (2 * np.pi) - np.pi
+            d_perp = r * np.sin(dth)
+            forward = np.cos(dth) > 0
+            ray = np.exp(-(d_perp * d_perp) / (rng.uniform(2.0, 4.0) ** 2))
+            ray *= (r < rng.uniform(70, 105)) & forward
+            alpha = np.maximum(alpha, ray * rng.uniform(0.35, 0.80))
+        return alpha.astype(np.float32)
+    raise ValueError(f"unknown OOD class: {cls}")
+
+
+def _render_direct_chip(cls: str, rng: np.random.Generator):
+    base_u = rng.random((CHIP, CHIP))
+    arr = np.where(base_u < 0.83, 0, np.where(base_u < 0.98, 1, 2)).astype(np.uint8)
+    alpha = np.clip(_alpha_for_chip(cls, rng), 0.0, 1.0)
+    hit = rng.random((CHIP, CHIP)) < alpha
+    grade_u = rng.random((CHIP, CHIP))
+    defect = np.where(grade_u < 0.55, 2,
+                      np.where(grade_u < 0.82, 3,
+                               np.where(grade_u < 0.95, 4, 5))).astype(np.uint8)
+    arr = np.where(hit, defect, arr).astype(np.uint8)
+    return arr
+
+
+def generate_direct_class(cls: str, per_class: int, rng: random.Random, dst_root: Path = None):
+    dr = dst_root if dst_root is not None else DST_ROOT
+    dst_dir = dr / cls
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    existing = sorted(dst_dir.glob("*.png"))
+    n_have = len(existing)
+    if n_have >= per_class:
+        print(f"[OOD] {cls}: direct already has {n_have} >= {per_class}, skip")
+        return n_have
+
+    pal = _palette()
+    print(f"[OOD] {cls}: direct chip generation {n_have}/{per_class}")
+    for idx in range(n_have, per_class):
+        nrng = np.random.default_rng(rng.randrange(2**31 - 1))
+        arr = _render_direct_chip(cls, nrng)
+        out = Image.fromarray(arr, mode="P")
+        out.putpalette(pal)
+        out.save(dst_dir / f"{cls}_{idx:05d}.png", optimize=True)
+        if idx + 1 == per_class or (idx + 1) % max(1, per_class // 10) == 0:
+            print(f"[OOD] {cls}: direct {idx + 1}/{per_class}", flush=True)
+    return per_class
+
+
 def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Random,
                   src_root: Path = None, dst_root: Path = None):
     # Resolve src/dst roots explicitly. Caller passes via param OR sets module attrs.
@@ -50,8 +157,8 @@ def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Ra
 
     wafers = sorted(src_dir.glob("*.png"))
     if not wafers:
-        print(f"[OOD] {cls}: no wafer source")
-        return 0
+        print(f"[OOD] {cls}: no wafer source; generating direct chips")
+        return generate_direct_class(cls, per_class, rng, dr)
     print(f"[OOD] {cls}: {len(wafers)} wafers, target={per_class}, thresh={defect_thresh}")
 
     palette_bytes = None

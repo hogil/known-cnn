@@ -145,6 +145,11 @@ def ensure_ood_wafer_canvases(min_wafers=OOD_WAFERS_PER_CLASS):
 
 def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_root: Path):
     dst_dir = ensure_dir(dst_root / cls)
+    if hasattr(mod, "generate_direct_class"):
+        log(f"OOD {cls}: direct chip generation to {target}")
+        mod.generate_direct_class(cls, target, rng, dst_root)
+        return
+
     rounds = 0
     while count_pngs(dst_dir) < target:
         src_dir = ensure_dir(unknown_src / cls)
@@ -181,7 +186,6 @@ def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_
 
 def make_eval_sets():
     """Generate eval sets using gen_eval_set.py."""
-    ensure_ood_wafer_canvases()
     for en in EVAL_SIZES:
         master_eval_dir = DATA_ROOT / f"chip_multilabel_mega_eval_n{en}"
         local_eval_dir = OUT_BASE / f"eval_n{en}"
