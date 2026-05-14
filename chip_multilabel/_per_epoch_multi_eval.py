@@ -208,9 +208,10 @@ def format_compact(m: Dict) -> str:
              "bank_boundary+fork": "bb+fk", "bank_boundary+scratch": "bb+sc",
              "bank_boundary+scratch_rot": "bb+sr", "fork+scratch": "fk+sc",
              "fork+scratch_rot": "fk+sr", "scratch+scratch_rot": "sc+sr",
+             "Normal": "Norm", "Invalid": "Inv",
              "CenterDonut": "CD", "CrossScratch": "CS", "DiagonalSmear": "DS", "Starburst": "ST"}
-    pos_str = " ".join(f"{short[c]}={pcf[c]:.3f}" for c in POSITIVE if c in pcf)
-    far_str = " ".join(f"{short[c]}={pcfar[c]:.1f}" for c in (NEG_NI + NEG_OOD) if c in pcfar)
+    pos_str = " ".join(f"{short.get(c, c)}={pcf[c]:.3f}" for c in POSITIVE if c in pcf)
+    far_str = " ".join(f"{short.get(c, c)}={pcfar[c]:.1f}" for c in (NEG_NI + NEG_OOD) if c in pcfar)
     return (f"bit_F1={m['bit_F1']:.4f} FAR={m['total_far']:.2f}% "
             f"NI={m['ni_far']:.2f}% OOD={m['ood_far']:.2f}%\n"
             f"           pos_F1: {pos_str}\n"
