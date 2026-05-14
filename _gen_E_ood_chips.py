@@ -65,13 +65,8 @@ def extract_class(cls: str, per_class: int, defect_thresh: float, rng: random.Ra
         print(f"[OOD] {cls}: zero candidates — abort")
         return 0
     rng.shuffle(candidates)
-    if len(candidates) >= per_class:
-        pick = candidates[:per_class]
-    else:
-        # Replacement sampling: cycle through candidates to reach per_class.
-        # Some duplicates inevitable when wafer source < target.
-        print(f"[OOD] {cls}: replacement sampling ({len(candidates)} < {per_class})")
-        pick = [candidates[i % len(candidates)] for i in range(per_class)]
+    # 사용 가능한 만큼 저장 (per_class 보다 적으면 적은 대로)
+    pick = candidates[:per_class]
 
     saved = 0
     for idx, (wi, gy, gx) in enumerate((c[0], c[1], c[2]) for c in pick):
