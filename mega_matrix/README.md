@@ -111,17 +111,18 @@ bash mega_matrix/run.sh --report-only      # report 만 재생성
 - master pool 부족 시 `_synth_chips_only.py --per-class 200` 자동 호출
 
 ### Eval (per-class)
-- `gen_eval_set.py --per-defect N --per-normal N --include-triples` 자동 호출
+- `gen_eval_set.py --per-defect N --per-normal N --per-invalid N` 자동 호출
 - N ∈ {200, 2000, 20000}:
   - 4 single defect × N
-  - 5-6 × 2-combo × N
-  - 4 × 3-combo × N (참고용, paper metric 에서 제외)
-  - Normal × N, Invalid × N/4
+  - 6 × 2-combo × N
+  - Normal × N, Invalid × N
   - 4 OOD wafer pattern × N (CenterDonut, CrossScratch, DiagonalSmear, Starburst)
-- 총 chip 수: ~(4+5+4+1+0.25+4) × N = ~18N
-  - eval_n200: ~3.6K
-  - eval_n2000: ~36K
-  - eval_n20000: ~360K (★ generation ~1-2 hr)
+- OOD source canvas가 부족하면 `gen_data.py`가 `dist_apply._sample_canvas_gen`로 4 OOD class wafer canvas를 자동 생성
+  - 기본 50 wafer/class, `MEGA_OOD_WAFERS_PER_CLASS=<N>`로 override 가능
+- 총 chip 수: ~(4+6+1+1+4) × N = ~16N
+  - eval_n200: ~3.2K
+  - eval_n2000: ~32K
+  - eval_n20000: ~320K (★ generation ~1-2 hr)
 
 ## Selection criteria
 
@@ -231,6 +232,7 @@ bash mega_matrix/run_ddp.sh --gpus 4
 | GPU OOM (batch 2) | accum 16 으로 |
 | disk full (각 model 350 MB × 18 evals) | `rm -f epoch_*.pth` 자동 적용 |
 | `chip_multilabel.gen_eval_set` 실패 | classification_chips/ 가 가능 max 200/class 만 보유 — 더 큰 combo pool 필요 시 `_synth_multi_chips.py` 별도 호출 |
+| OOD class가 비어 있음 | 최신 `gen_data.py`는 OOD wafer canvas를 자동 생성. 부족하면 `MEGA_OOD_WAFERS_PER_CLASS`를 올려 재실행 |
 
 ## 폐쇄망 (closed-network) 서버 사용
 
@@ -278,6 +280,7 @@ bash mega_matrix/run_ddp.sh --gpus 4
 # run.sh / run_ddp.sh 가 mega_matrix/weights/*.pth 존재 시
 # --backbone-timm-weights <path> 자동 passthrough → HF download 안 함
 # pseudo_label.py 도 동일 적용
+# data/train/eval/OOD wafer canvas는 gen_data.py가 자동 생성
 ```
 
 ### 다른 backbone 추가하려면

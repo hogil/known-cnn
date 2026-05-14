@@ -32,7 +32,7 @@ try:
         SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
         CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
         pick_baseline_tier, pick_intensity_tier,
-        _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
+        rand_prefix, LT_OPTIONS, TM_OPTIONS,
     )
     from ._fq_metadata import add_synthetic_fq_to_json
 except ImportError:
@@ -42,7 +42,7 @@ except ImportError:
         SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
         CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
         pick_baseline_tier, pick_intensity_tier,
-        _wafer_inside_mask, rand_prefix, LT_OPTIONS, TM_OPTIONS,
+        rand_prefix, LT_OPTIONS, TM_OPTIONS,
     )
     from _fq_metadata import add_synthetic_fq_to_json
 
@@ -432,9 +432,17 @@ ALPHA_FN = {
 
 # ===================== Main render =====================
 
+def _canvas_wafer_inside_mask():
+    centers = (np.arange(GRID, dtype=np.float32) + 0.5) * CHIP
+    yy, xx = np.meshgrid(centers, centers, indexing='ij')
+    cy = cx = SIZE / 2.0
+    r = SIZE / 2.0
+    return ((yy - cy) ** 2 + (xx - cx) ** 2) <= (r ** 2)
+
+
 def render_canvas(class_name, seed):
     rng = np.random.default_rng(seed)
-    inside = _wafer_inside_mask()                       # 32x32
+    inside = _canvas_wafer_inside_mask()                # 32x32
     inside_pix = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)
 
     # 0. Round 29 v15: per-wafer tier (baseline noise + defect intensity + chip-inclusion τ)

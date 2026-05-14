@@ -43,6 +43,8 @@ def _sizes(env, default):
 TRAIN_SIZES = _sizes("MEGA_TRAIN_SIZES", [50, 100, 200])
 EVAL_SIZES = _sizes("MEGA_EVAL_SIZES", [200, 2000, 20000])
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
+OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
+OOD_WAFERS_PER_CLASS = int(os.environ.get("MEGA_OOD_WAFERS_PER_CLASS", "50"))
 MASTER_TRAIN = Path(os.environ.get("CLASSIFICATION_CHIPS_ROOT", str(DATA_ROOT / "classification_chips"))).resolve()
 
 
@@ -94,8 +96,39 @@ def make_train_subsets():
         log(f"train_n{tn} ready ({tn}/class × 4 = {tn*4} chips)")
 
 
+def ensure_ood_wafer_canvases():
+    """Ensure source wafer canvases exist for the 4 OOD eval classes."""
+    unknown_src = DATA_ROOT / "unknown"
+    unknown_src.mkdir(parents=True, exist_ok=True)
+    for cls in OOD_CLASSES:
+        cls_dir = unknown_src / cls
+        n_have = len(list(cls_dir.glob("*.png"))) if cls_dir.exists() else 0
+        if n_have >= OOD_WAFERS_PER_CLASS:
+            log(f"OOD wafer canvas {cls}: {n_have} ≥ {OOD_WAFERS_PER_CLASS}, skip")
+            continue
+        need = OOD_WAFERS_PER_CLASS - n_have
+        log(f"OOD wafer canvas {cls}: {n_have}/{OOD_WAFERS_PER_CLASS} — auto-generating {need}")
+        env = os.environ.copy()
+        env["WM811K_ROOT"] = str(DATA_ROOT)
+        env["WAFER_PNG_OUT_DIR"] = str(unknown_src)
+        env.setdefault("WAFER_JSON_OUT_DIR", str(PROJ_ROOT / "data" / "positions" / "unknown"))
+        cmd = [
+            sys.executable, "-u", "-X", "utf8", "-m", "dist_apply._sample_canvas_gen",
+            "--classes", cls,
+            "--n", str(need),
+        ]
+        subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT), env=env)
+        n_after = len(list(cls_dir.glob("*.png"))) if cls_dir.exists() else 0
+        if n_after < OOD_WAFERS_PER_CLASS:
+            raise RuntimeError(
+                f"OOD wafer canvas generation incomplete for {cls}: "
+                f"{n_after}/{OOD_WAFERS_PER_CLASS} under {cls_dir}"
+            )
+
+
 def make_eval_sets():
     """Generate eval sets using gen_eval_set.py."""
+    ensure_ood_wafer_canvases()
     for en in EVAL_SIZES:
         master_eval_dir = DATA_ROOT / f"chip_multilabel_mega_eval_n{en}"
         local_eval_dir = OUT_BASE / f"eval_n{en}"
@@ -106,7 +139,7 @@ def make_eval_sets():
             + ["bank_boundary+fork", "bank_boundary+scratch", "bank_boundary+scratch_rot",
                "fork+scratch", "fork+scratch_rot", "scratch+scratch_rot"]  # 6 2-combo
             + ["Normal", "Invalid"]
-            + ["CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst"]  # 4 OOD
+            + list(OOD_CLASSES)
         )
         missing_classes = [c for c in expected_classes
                            if not (local_eval_dir / c).exists()
@@ -120,8 +153,7 @@ def make_eval_sets():
 
         # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all have ≥ en chips.
         # If any class < en, gen_eval_set is monolithic and re-runs all 12 (limitation accepted).
-        base_classes = [c for c in expected_classes if c not in
-                        ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")]
+        base_classes = [c for c in expected_classes if c not in OOD_CLASSES]
         master_base_done = (master_eval_dir.exists() and all(
             (master_eval_dir / c).exists()
             and len(list((master_eval_dir / c).glob("*.png"))) >= en
@@ -152,38 +184,42 @@ def make_eval_sets():
         # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
         # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
         # Skip individual OOD class if already has PNGs.
-        ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
         unknown_src = DATA_ROOT / "unknown"
         ood_n = en
-        if unknown_src.exists():
-            try:
-                sys.path.insert(0, str(PROJ_ROOT))
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(
-                    "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
-                if spec and spec.loader:
-                    mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(mod)
-                    import random as _r
-                    rng = _r.Random(42)
-                    log(f"OOD src_root={unknown_src} dst_root={master_eval_dir}")
-                    for cls in ood_classes:
-                        ood_cdir = master_eval_dir / cls
-                        n_have = len(list(ood_cdir.glob("*.png"))) if ood_cdir.exists() else 0
-                        if n_have >= ood_n:
-                            log(f"OOD {cls} already {n_have} ≥ {ood_n}, skip")
-                            continue
-                        if n_have > 0:
-                            log(f"OOD {cls} have {n_have}, generating {ood_n - n_have} more (incremental)")
-                        try:
-                            mod.extract_class(cls, ood_n, 0.03, rng,
-                                              src_root=unknown_src, dst_root=master_eval_dir)
-                        except Exception as e:
-                            log(f"WARN OOD extract {cls}: {type(e).__name__}: {e}")
-            except Exception as e:
-                log(f"WARN OOD module load failed: {type(e).__name__}: {e}")
-        else:
-            log(f"WARN OOD source {unknown_src} missing — skipping OOD class extraction")
+        try:
+            sys.path.insert(0, str(PROJ_ROOT))
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
+            if spec and spec.loader:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                import random as _r
+                rng = _r.Random(42)
+                log(f"OOD src_root={unknown_src} dst_root={master_eval_dir}")
+                for cls in OOD_CLASSES:
+                    ood_cdir = master_eval_dir / cls
+                    n_have = len(list(ood_cdir.glob("*.png"))) if ood_cdir.exists() else 0
+                    if n_have >= ood_n:
+                        log(f"OOD {cls} already {n_have} ≥ {ood_n}, skip")
+                        continue
+                    if n_have > 0:
+                        log(f"OOD {cls} have {n_have}, generating {ood_n - n_have} more (incremental)")
+                    mod.extract_class(cls, ood_n, 0.03, rng,
+                                      src_root=unknown_src, dst_root=master_eval_dir)
+        except Exception as e:
+            raise RuntimeError(f"OOD extraction failed from {unknown_src}: {type(e).__name__}: {e}") from e
+
+        incomplete_ood = []
+        for cls in OOD_CLASSES:
+            cdir = master_eval_dir / cls
+            n_have = len(list(cdir.glob("*.png"))) if cdir.exists() else 0
+            if n_have <= 0:
+                incomplete_ood.append(f"{cls}({n_have})")
+        if incomplete_ood:
+            raise RuntimeError(
+                f"OOD eval classes missing after extraction under {master_eval_dir}: {incomplete_ood}"
+            )
 
         if not master_eval_dir.exists():
             log(f"WARN eval_n{en} not generated, skipping local copy")
