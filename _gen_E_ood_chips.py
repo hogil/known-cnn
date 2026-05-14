@@ -128,7 +128,7 @@ def generate_direct_class(cls: str, per_class: int, rng: random.Random, dst_root
         arr = _render_direct_chip(cls, nrng)
         out = Image.fromarray(arr, mode="P")
         out.putpalette(pal)
-        out.save(dst_dir / f"{cls}_{idx:05d}.png", optimize=True)
+        out.save(dst_dir / f"{cls}_{idx:05d}.png", optimize=False, compress_level=1)
         if idx + 1 == per_class or (idx + 1) % max(1, per_class // 10) == 0:
             print(f"[OOD] {cls}: direct {idx + 1}/{per_class}", flush=True)
     return per_class
