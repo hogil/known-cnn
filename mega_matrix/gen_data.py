@@ -45,6 +45,7 @@ EVAL_SIZES = _sizes("MEGA_EVAL_SIZES", [200, 2000, 20000])
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
 OOD_WAFERS_PER_CLASS = int(os.environ.get("MEGA_OOD_WAFERS_PER_CLASS", "50"))
+OOD_WAFER_ROOT = Path(os.environ.get("MEGA_OOD_WAFER_ROOT", str(OUT_BASE / "_ood_wafers"))).resolve()
 MASTER_TRAIN = Path(os.environ.get("CLASSIFICATION_CHIPS_ROOT", str(DATA_ROOT / "classification_chips"))).resolve()
 
 
@@ -56,11 +57,16 @@ def count_pngs(path: Path) -> int:
     return len(list(path.glob("*.png"))) if path.exists() else 0
 
 
+def ensure_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def ensure_master_pool(need=200):
     """Make sure classification_chips/ has ≥ need chips per class."""
     deficits = []
     for c in TRAIN_CLASSES:
-        d = MASTER_TRAIN / c
+        d = ensure_dir(MASTER_TRAIN / c)
         n = count_pngs(d)
         deficits.append(max(0, need - n))
         log(f"master {c}: {n} chips")
@@ -74,7 +80,7 @@ def ensure_master_pool(need=200):
         ]
         subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
     else:
-        log(f"master pool OK (min={min_avail} ≥ need={need})")
+        log(f"master pool OK (all classes ≥ {need})")
 
 
 def make_train_subsets():
@@ -104,9 +110,8 @@ def make_train_subsets():
 
 
 def ensure_ood_wafer_class(cls: str, min_wafers: int) -> int:
-    unknown_src = DATA_ROOT / "unknown"
-    unknown_src.mkdir(parents=True, exist_ok=True)
-    cls_dir = unknown_src / cls
+    ood_src = ensure_dir(OOD_WAFER_ROOT)
+    cls_dir = ensure_dir(ood_src / cls)
     n_have = count_pngs(cls_dir)
     if n_have >= min_wafers:
         log(f"OOD wafer canvas {cls}: {n_have} ≥ {min_wafers}, skip")
@@ -115,8 +120,8 @@ def ensure_ood_wafer_class(cls: str, min_wafers: int) -> int:
     log(f"OOD wafer canvas {cls}: {n_have}/{min_wafers} — auto-generating {need}")
     env = os.environ.copy()
     env["WM811K_ROOT"] = str(DATA_ROOT)
-    env["WAFER_PNG_OUT_DIR"] = str(unknown_src)
-    env.setdefault("WAFER_JSON_OUT_DIR", str(PROJ_ROOT / "data" / "positions" / "unknown"))
+    env["WAFER_PNG_OUT_DIR"] = str(ood_src)
+    env.setdefault("WAFER_JSON_OUT_DIR", str(OUT_BASE / "_ood_positions"))
     cmd = [
         sys.executable, "-u", "-X", "utf8", "-m", "dist_apply._sample_canvas_gen",
         "--classes", cls,
@@ -139,10 +144,10 @@ def ensure_ood_wafer_canvases(min_wafers=OOD_WAFERS_PER_CLASS):
 
 
 def fill_ood_eval_class(mod, cls: str, target: int, rng, unknown_src: Path, dst_root: Path):
-    dst_dir = dst_root / cls
+    dst_dir = ensure_dir(dst_root / cls)
     rounds = 0
     while count_pngs(dst_dir) < target:
-        src_dir = unknown_src / cls
+        src_dir = ensure_dir(unknown_src / cls)
         have_wafers = count_pngs(src_dir)
         if have_wafers <= 0:
             log(f"OOD {cls} source empty — auto-generating wafer canvases before extraction")
@@ -232,7 +237,7 @@ def make_eval_sets():
         # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
         # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
         # Skip individual OOD class if already has PNGs.
-        unknown_src = DATA_ROOT / "unknown"
+        unknown_src = ensure_dir(OOD_WAFER_ROOT)
         ood_n = en
         try:
             sys.path.insert(0, str(PROJ_ROOT))
