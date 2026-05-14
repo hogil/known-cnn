@@ -18,7 +18,22 @@ from pathlib import Path
 PROJ_ROOT = Path(__file__).parent.parent
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"
 OUT_BASE.mkdir(parents=True, exist_ok=True)
-DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
+
+
+def _resolve_data_root() -> Path:
+    env = os.environ.get("WM811K_ROOT")
+    if env:
+        return Path(env).resolve()
+    default = (PROJ_ROOT / "data" / "wm-811k").resolve()
+    # Fallback: if default missing classification_chips AND E:/data/images exists, use E:.
+    if not (default / "classification_chips").exists():
+        e = Path("E:/data/images")
+        if (e / "classification_chips").exists():
+            return e.resolve()
+    return default
+
+
+DATA_ROOT = _resolve_data_root()
 
 def _sizes(env, default):
     v = os.environ.get(env)
