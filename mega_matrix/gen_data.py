@@ -109,9 +109,9 @@ def make_eval_sets():
             # gen_eval_set doesn't synth OOD. Extract from wafer canvas if source dir exists.
             ood_classes = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
             unknown_src = DATA_ROOT / "unknown"
-            # OOD scale: match defect en (200/2000/20000). Cap at 10000 since
-            # Starburst source has only ~12 wafers × 1024 chips ≈ 12k available.
-            ood_n = min(en, 10000)
+            # OOD scale: match defect en (200/2000/20000) — no cap (replacement
+            # sampling fills if source candidates < en, e.g. Starburst 12k).
+            ood_n = en
             if unknown_src.exists():
                 try:
                     sys.path.insert(0, str(PROJ_ROOT))
