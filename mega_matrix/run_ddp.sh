@@ -88,9 +88,10 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Propagate to gen_data.py so it generates only the requested sizes
+# Propagate to gen_data.py + make_report.py so they generate / aggregate only the requested axes
 export MEGA_TRAIN_SIZES=$(echo "$TRAIN_SIZES_LIST" | tr ' ' ',')
 export MEGA_EVAL_SIZES=$(echo "$EVAL_SIZES_LIST" | tr ' ' ',')
+export MEGA_SELS=$(echo "$SEL_LIST" | tr ' ' ',')
 
 # Derive input img-size from backbone name pattern
 case "$BACKBONE" in

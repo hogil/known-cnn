@@ -112,24 +112,19 @@ def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path
 
     # ★ Primary metrics per CLAUDE.md absolute rule 260512:
     #   bit_F1 = positive (single+combo) macro F1; FAR split into NI / OOD / Total.
-    lines.append("## Results — paper metrics (CLAUDE.md 260512 absolute rule)\n")
-    lines.append("| cell | bit_F1 | NI_FAR | OOD_FAR | Total_FAR | sec |")
-    lines.append("|---|---|---|---|---|---|")
+    # 260521 — generic multi-label metrics (macro_f1 / micro_f1 / mAP / hamming /
+    # subset_acc / top1_11cls) removed entirely. They include Normal/Invalid as
+    # "all-zero positive class" and conflate defect detection with non-defect
+    # rejection, masking the real signal. bit_F1 + FAR split is the only metric.
+    lines.append("## Results — bit_F1 / FAR (CLAUDE.md 260512 absolute rule)\n")
+    lines.append("| cell | bit_F1 | NI_FAR | OOD_FAR | Total_FAR | T | sec |")
+    lines.append("|---|---|---|---|---|---|---|")
     for c in sorted(cells, key=lambda x: -paper[x.cell_id]["bit_F1"]):
         p = paper[c.cell_id]
         lines.append(
             f"| **{c.cell_id}** | {p['bit_F1']:.4f} | {p['NI_FAR']*100:.2f}% | "
-            f"{p['OOD_FAR']*100:.2f}% | {p['Total_FAR']*100:.2f}% | {c.elapsed_sec:.1f} |"
-        )
-
-    lines.append("\n## Results — generic multi-label metrics (secondary)\n")
-    lines.append("| cell | macro_f1 | micro_f1 | mAP | hamming | subset_acc | top1_11cls | T | ECE_pre | ECE_post |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|")
-    for c in sorted(cells, key=lambda x: -x.macro_f1):
-        lines.append(
-            f"| **{c.cell_id}** | {c.macro_f1:.4f} | {c.micro_f1:.4f} | {c.mAP:.4f} | "
-            f"{c.hamming_loss:.4f} | {c.subset_accuracy:.4f} | {c.top1_11class:.4f} | "
-            f"{c.temperature:.3f} | {c.ece_pre:.4f} | {c.ece_post:.4f} |"
+            f"{p['OOD_FAR']*100:.2f}% | {p['Total_FAR']*100:.2f}% | "
+            f"{c.temperature:.3f} | {c.elapsed_sec:.1f} |"
         )
     lines.append("\n## Best cell per-class F1\n")
     bp = paper[best_cell.cell_id]

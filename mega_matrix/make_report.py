@@ -35,9 +35,17 @@ REPORT_DIR.mkdir(parents=True, exist_ok=True)
 FIG_DIR = REPORT_DIR / "figs_mega"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
-TRAIN_NS = [50, 100, 200]
-EVAL_NS = ['200', '2000', '20000']
-SELS = ['f1', 'margin_max']
+# 260521 — sweep axes are env-overridable (run.sh / run_ddp.sh export
+# MEGA_TRAIN_SIZES / MEGA_EVAL_SIZES / MEGA_SELS to match the actual run).
+def _sizes_env(name, default):
+    v = os.environ.get(name)
+    if not v:
+        return default
+    return [x.strip() for x in v.replace(',', ' ').split() if x.strip()]
+
+TRAIN_NS = [int(x) for x in _sizes_env("MEGA_TRAIN_SIZES", ["50", "100", "200", "400"])]
+EVAL_NS = _sizes_env("MEGA_EVAL_SIZES", ["200", "2000", "20000"])
+SELS = _sizes_env("MEGA_SELS", ["f1", "margin_max"])
 
 
 def find_model_root(tn, sel):
@@ -468,15 +476,27 @@ def write_table_md(rows, fpath):
 
 
 def main():
+    print(f"[make_report] GROUP_DIR={GROUP_DIR}")
+    print(f"[make_report] sweep axes: TRAIN_NS={TRAIN_NS} EVAL_NS={EVAL_NS} SELS={SELS}")
+    print(f"[make_report] expected cells: {len(TRAIN_NS)*len(SELS)} train x {len(EVAL_NS)} eval = "
+          f"{len(TRAIN_NS)*len(SELS)*len(EVAL_NS)}")
     rows = collect_all()
-    print(f"Collected {len(rows)} eval results")
+    print(f"[make_report] Collected {len(rows)} eval results")
     if not rows:
-        print("ERROR: no eval results found.")
+        # Diagnostic: show what's in GROUP_DIR so user sees why scan failed
+        print(f"[make_report] ERROR: no eval results found under {GROUP_DIR}")
+        if GROUP_DIR.exists():
+            print(f"[make_report] GROUP_DIR contents:")
+            for p in sorted(GROUP_DIR.iterdir()):
+                print(f"   - {p.name}/")
+            print(f"[make_report] looking for: train<TN>_<SEL>/<inner_run>/eval_<EN>/stage1_*/preds_chip.parquet")
+        else:
+            print(f"[make_report] GROUP_DIR does not exist (run training first).")
         return
     fpath = REPORT_DIR / 'summary_mega_sweep.md'
     write_table_md(rows, fpath)
-    print(f"Report: {fpath}")
-    print(f"Figures: {FIG_DIR}/")
+    print(f"[make_report] Report: {fpath}")
+    print(f"[make_report] Figures: {FIG_DIR}/")
 
 
 if __name__ == '__main__':
