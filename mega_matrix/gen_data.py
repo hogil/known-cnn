@@ -110,7 +110,7 @@ def make_train_subsets():
 def fill_ood_eval_class(mod, cls: str, target: int, rng, dst_root: Path):
     dst_dir = ensure_dir(dst_root / cls)
     if not hasattr(mod, "generate_direct_class"):
-        raise RuntimeError("_gen_E_ood_chips.py missing generate_direct_class")
+        raise RuntimeError("mega_matrix.ood_chips missing generate_direct_class")
     n_have = count_pngs(dst_dir)
     if n_have < target:
         log(f"OOD {cls}: direct chip generation {n_have}/{target}")
@@ -175,13 +175,10 @@ def make_eval_sets():
         # gen_eval_set doesn't synth OOD, so generate 200x200 OOD chips directly.
         ood_n = en
         try:
-            sys.path.insert(0, str(PROJ_ROOT))
-            import importlib.util
-            spec = importlib.util.spec_from_file_location(
-                "_gen_E_ood_chips", str(PROJ_ROOT / "_gen_E_ood_chips.py"))
-            if spec and spec.loader:
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
+            # Relocated 260520: previously top-level _gen_E_ood_chips.py (since
+            # removed in top-level cleanup d12fb9c); now lives inside the pipeline.
+            from mega_matrix import ood_chips as mod  # type: ignore
+            if True:
                 import random as _r
                 rng = _r.Random(42)
                 log(f"OOD direct dst_root={master_eval_dir}")
