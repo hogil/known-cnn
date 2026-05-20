@@ -1548,7 +1548,10 @@ def main():
                         "val_bce": val_bce, "val_brier": val_brier,
                         "val_margin": val_margin, "val_f1_best_tau": val_f1_best_tau,
                         "lr": optim.param_groups[0]["lr"], "loss_active": active})
-        print(f"[ep {ep:02d}] loss={avg_loss:.4f} v_acc={val_acc:.4f} "
+        # 260520 - clearer label: "trainval" = 10% split of train_n{TN} (small),
+        # NOT the eval set. The [ep NN/eval @ ...] line below is the proper bit_F1/FAR signal.
+        print(f"[ep {ep:02d}/trainval N={len(val_samples)}] "
+              f"loss={avg_loss:.4f} v_acc={val_acc:.4f} "
               f"v_f1={val_f1:.4f} v_auroc={val_auroc:.4f} "
               f"v_bce={val_bce:.4f} v_brier={val_brier:.4f} "
               f"v_margin={val_margin:.4f} v_f1bτ={val_f1_best_tau:.4f} "
@@ -1569,7 +1572,10 @@ def main():
                     model.module if hasattr(model, "module") else model)
                 m = _mv_evaluate(eval_model, _mv_cache, device=str(device),
                                  threshold=0.5, batch_size=32, num_workers=0)
-                print(f"[ep {ep:02d}/multi] {_mv_format(m)}")
+                # 260520 - explicit label "eval @ <path> N=<count>" so log is unambiguous
+                _mv_path = args.multi_val_set
+                _mv_n = len(_mv_cache.get('paths', [])) if isinstance(_mv_cache, dict) else 0
+                print(f"[ep {ep:02d}/eval @ {_mv_path} N={_mv_n}] {_mv_format(m)}")
                 history[-1]["multi_val"] = {
                     "bit_F1": m["bit_F1"], "total_far": m["total_far"],
                     "ni_far": m["ni_far"], "ood_far": m["ood_far"],

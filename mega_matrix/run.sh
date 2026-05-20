@@ -185,12 +185,37 @@ train_one() {
         log "SKIP train ${TAG}: exists $OUT_ROOT"
         return 0
     fi
+    # 260520 - print actual chip counts for visibility at cell start
+    local TRAIN_ROOT="${DATA_BASE}/train_n${TN}"
+    local N_TRAIN_TOTAL=0
+    local N_CLASS=0
+    local CLASS_BREAK=""
+    if [ -d "$TRAIN_ROOT" ]; then
+        for cls in bank_boundary fork scratch scratch_rot; do
+            local n=$(ls "$TRAIN_ROOT/$cls"/*.png 2>/dev/null | wc -l)
+            N_TRAIN_TOTAL=$((N_TRAIN_TOTAL + n))
+            CLASS_BREAK="${CLASS_BREAK}${cls}=${n} "
+            [ "$n" -gt 0 ] && N_CLASS=$((N_CLASS + 1))
+        done
+    fi
+    # Multi-val set used per-epoch (smallest available eval_n*)
+    local MV_DESC=""
+    for cand in 200 2000 100 50 30 20 10 5; do
+        if [ -d "${DATA_BASE}/eval_n${cand}" ]; then
+            local mv_total=$(find "${DATA_BASE}/eval_n${cand}" -mindepth 2 -name "*.png" 2>/dev/null | wc -l)
+            local npc=$cand
+            [ "$npc" -gt 50 ] && npc=50
+            MV_DESC=" multi_val=eval_n${cand}(${mv_total} chips, ${npc}/class)"
+            break
+        fi
+    done
     log "TRAIN ${TAG} ($BACKBONE) batch=$BATCH_PER_GPU workers=$TRAIN_WORKERS"
+    log "  -> train_data: ${TRAIN_ROOT}"
+    log "  -> chips=${N_TRAIN_TOTAL} (${CLASS_BREAK}) across ${N_CLASS} class; 0.9/0.1 train/val split"
+    log "  -> epochs=${EPOCHS} sel=${SEL}${MV_DESC}"
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
-    # 260520 - bit_F1 / FAR every epoch (CLAUDE.md absolute rule 260512).
-    # Always enable multi-val on the smallest available eval set. Generic
-    # v_f1 on 4-chip val split is meaningless; multi-val provides real signal.
+    # 260520 - bit_F1 / FAR every epoch. Multi-val on smallest available eval set.
     MULTI_VAL_FLAG=""
     for cand in 200 2000 100 50 30 20 10 5; do
         if [ -d "${DATA_BASE}/eval_n${cand}" ]; then
@@ -255,7 +280,14 @@ eval_one() {
         log "SKIP eval train${TN}_${SEL} eval_${EN}: missing $EVAL_SET"
         return 0
     fi
+    # 260520 - print eval chip counts for visibility
+    local N_EVAL_TOTAL=$(find "$EVAL_SET" -mindepth 2 -name "*.png" 2>/dev/null | wc -l)
+    local N_EVAL_CLASS=$(find "$EVAL_SET" -mindepth 1 -maxdepth 1 -type d ! -name "_*" 2>/dev/null | wc -l)
     log "EVAL train${TN}_${SEL} eval_${EN} ($BACKBONE)"
+    log "  -> eval_set: ${EVAL_SET}"
+    log "  -> chips=${N_EVAL_TOTAL} across ${N_EVAL_CLASS} class (target ${EN}/class)"
+    log "  -> model: ${RUN}/best_model.pth"
+    log "  -> variants=I3,I7,I10,I13 (4 inference modes)"
     python -u -m chip_multilabel.run_stage1 \
         --model "${RUN}/best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
