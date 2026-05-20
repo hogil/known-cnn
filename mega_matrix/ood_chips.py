@@ -22,8 +22,11 @@ from PIL import Image
 CHIP = 200
 WAFER = 6400
 GRID = WAFER // CHIP   # 32
-SRC_ROOT = Path("D:/project/data/wm-811k/unknown")
-DST_ROOT = Path("E:/data/images/chip_multilabel_v15direct")
+# 260520 — module-level defaults removed; callers pass src_root / dst_root explicitly.
+# (mega_matrix.gen_data passes dst_root = DATA_ROOT/eval_nN. extract_class() optional path
+# only used in standalone main() — kept as None to force CLI arg.)
+SRC_ROOT: Path | None = None
+DST_ROOT: Path | None = None
 OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
 
 
@@ -215,14 +218,19 @@ def main():
     ap.add_argument("--defect-thresh", type=float, default=0.03,
                     help="min defect pixel ratio (default 0.03 = 3%)")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--src-root", type=Path, required=True,
+                    help="wafer-canvas source: <src>/<OOD_class>/*.png (6400x6400 palette)")
+    ap.add_argument("--dst-root", type=Path, required=True,
+                    help="output: <dst>/<OOD_class>/<class>_NNNN.png (200x200)")
     args = ap.parse_args()
 
     rng = random.Random(args.seed)
     total = 0
     for cls in OOD_CLASSES:
-        total += extract_class(cls, args.per_class, args.defect_thresh, rng)
+        total += extract_class(cls, args.per_class, args.defect_thresh, rng,
+                               src_root=args.src_root, dst_root=args.dst_root)
     print(f"[OOD] TOTAL {total} chips across {len(OOD_CLASSES)} classes")
-    print(f"[OUT] {DST_ROOT}")
+    print(f"[OUT] {args.dst_root}")
 
 
 if __name__ == "__main__":

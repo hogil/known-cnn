@@ -16,7 +16,7 @@
 #   bash mega_matrix/run_ddp.sh --gpus 4       # force 4 GPU
 #   bash mega_matrix/run_ddp.sh --skip-data    # skip data gen
 #   bash mega_matrix/run_ddp.sh --with-pseudo  # also run pseudo-label retrain
-#   bash mega_matrix/run_ddp.sh --data-base data/wm-811k
+#   bash mega_matrix/run_ddp.sh --data-base data/images
 #
 # NOTE: vanilla PyTorch single-GPU training per cell (NOT torch.distributed DDP).
 #       For true torchrun DDP inside one cell, trainer code needs modification
@@ -39,10 +39,9 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 
 OUT_BASE=outputs/_mega_matrix
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
-DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
-# Fallback: if explicit WM811K_ROOT not set AND default path missing AND E:/data/images exists,
-# use E:/data/images (Windows local workspace convention, 260514).
-if [ -z "$WM811K_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
+# 260520 — renamed env IMAGES_ROOT (was WM811K_ROOT) and default path data/images.
+DATA_BASE="${IMAGES_ROOT:-$PROJ_ROOT/data/images}"
+if [ -z "$IMAGES_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
     DATA_BASE="E:/data/images"
 fi
 
@@ -176,7 +175,7 @@ export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
 export MEGA_MODEL_BASE="$MODEL_BASE"
 export MEGA_BACKBONE="$BACKBONE"
 export MEGA_IMG_SIZE="$IMG_SIZE"
-export WM811K_ROOT="$DATA_BASE"
+export IMAGES_ROOT="$DATA_BASE"
 
 # ======================================================================
 # 1. Data generation (sequential, single CPU)
@@ -208,8 +207,8 @@ train_cell() {
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
     MULTI_VAL_FLAG=""
-    if [ -d "${OUT_BASE}/eval_n200" ]; then
-        MULTI_VAL_FLAG="--multi-val-set ${OUT_BASE}/eval_n200 --multi-val-n-per-class 50"
+    if [ -d "${DATA_BASE}/eval_n200" ]; then
+        MULTI_VAL_FLAG="--multi-val-set ${DATA_BASE}/eval_n200 --multi-val-n-per-class 50"
     fi
     TRAIN_RUN_STAMP="$TRAIN_STAMP" torchrun --standalone --nproc_per_node="$NGPU" \
         -m chip_multilabel._train_chip_variant \
@@ -218,7 +217,7 @@ train_cell() {
         --num-workers "$WORKERS_PER_RANK" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         $MULTI_VAL_FLAG \
-        --data-root "${OUT_BASE}/train_n${TN}" \
+        --data-root "${DATA_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-grid-dim 8 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
@@ -263,7 +262,7 @@ eval_cell() {
         log "SKIP eval train${TN}_${SEL} eval${EN}: exists $EVAL_OUT"
         return 0
     fi
-    local EVAL_SET="${OUT_BASE}/eval_n${EN}"
+    local EVAL_SET="${DATA_BASE}/eval_n${EN}"
     if [ ! -d "$EVAL_SET" ]; then
         log "SKIP eval train${TN}_${SEL} eval${EN}: missing $EVAL_SET"
         return 0

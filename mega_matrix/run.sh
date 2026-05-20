@@ -13,7 +13,7 @@
 #   bash mega_matrix/run.sh --skip-data         # data 이미 있을 때
 #   bash mega_matrix/run.sh --skip-train        # eval+report only
 #   bash mega_matrix/run.sh --with-pseudo       # also run pseudo-label retrain
-#   bash mega_matrix/run.sh --data-base data/wm-811k
+#   bash mega_matrix/run.sh --data-base data/images
 #   bash mega_matrix/run.sh --report-only       # only summary.md regen
 #
 # DDP: bash mega_matrix/run_ddp.sh --gpus N
@@ -32,12 +32,12 @@ export HF_HUB_DISABLE_TELEMETRY=1
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
-OUT_BASE=outputs/_mega_matrix    # shared train/eval data root
+OUT_BASE=outputs/_mega_matrix    # models + reports (per-run TS-prefixed GROUP)
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
-DATA_BASE="${WM811K_ROOT:-$PROJ_ROOT/data/wm-811k}"
-# Fallback: if explicit WM811K_ROOT not set AND default path missing AND E:/data/images exists,
-# use E:/data/images (Windows local workspace convention, 260514).
-if [ -z "$WM811K_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
+# 260520 — renamed env IMAGES_ROOT (was WM811K_ROOT) and default path data/images.
+DATA_BASE="${IMAGES_ROOT:-$PROJ_ROOT/data/images}"
+# Fallback: if default path missing classification_chips AND E:/data/images exists, use E:.
+if [ -z "$IMAGES_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
     DATA_BASE="E:/data/images"
 fi
 DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
@@ -135,7 +135,7 @@ export MEGA_GROUP_DIR="$GROUP_DIR"     # consumed by make_report.py
 export MEGA_MODEL_BASE="$MODEL_BASE"   # consumed by pseudo_label.py / make_report.py (legacy alias)
 export MEGA_BACKBONE="$BACKBONE"
 export MEGA_IMG_SIZE="$IMG_SIZE"
-export WM811K_ROOT="$DATA_BASE"
+export IMAGES_ROOT="$DATA_BASE"
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') [mega] $*" | tee -a "$LOG"
@@ -144,7 +144,7 @@ log() {
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
 CUTMIX_FORWARD_MULT=4  # complement + masked + n_groups=2 expands train forward batch up to 4x
-log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 workers=$TRAIN_WORKERS cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
+log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 workers=$TRAIN_WORKERS cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$IMAGES_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
 # Offline weights (closed-network) - .pth only.
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
@@ -189,15 +189,15 @@ train_one() {
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
     MULTI_VAL_FLAG=""
-    if [ $SMOKE -eq 0 ] && [ -d "${OUT_BASE}/eval_n200" ]; then
-        MULTI_VAL_FLAG="--multi-val-set ${OUT_BASE}/eval_n200 --multi-val-n-per-class 50"
+    if [ $SMOKE -eq 0 ] && [ -d "${DATA_BASE}/eval_n200" ]; then
+        MULTI_VAL_FLAG="--multi-val-set ${DATA_BASE}/eval_n200 --multi-val-n-per-class 50"
     fi
     TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs $EPOCHS --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$TRAIN_WORKERS" \
         --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
         $MULTI_VAL_FLAG \
-        --data-root "${OUT_BASE}/train_n${TN}" \
+        --data-root "${DATA_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-grid-dim 8 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
@@ -242,7 +242,7 @@ eval_one() {
         log "SKIP eval train${TN}_${SEL} eval_${EN}: exists $EVAL_OUT"
         return 0
     fi
-    local EVAL_SET="${OUT_BASE}/eval_n${EN}"
+    local EVAL_SET="${DATA_BASE}/eval_n${EN}"
     if [ ! -d "$EVAL_SET" ]; then
         log "SKIP eval train${TN}_${SEL} eval_${EN}: missing $EVAL_SET"
         return 0

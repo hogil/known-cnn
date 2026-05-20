@@ -21,11 +21,12 @@ OUT_BASE.mkdir(parents=True, exist_ok=True)
 
 
 def _resolve_data_root() -> Path:
-    env = os.environ.get("WM811K_ROOT")
+    # 260520 — renamed env IMAGES_ROOT (was WM811K_ROOT) and default path
+    # <project>/data/images (was data/wm-811k). E: fallback kept for local convenience.
+    env = os.environ.get("IMAGES_ROOT")
     if env:
         return Path(env).resolve()
-    default = (PROJ_ROOT / "data" / "wm-811k").resolve()
-    # Fallback: if default missing classification_chips AND E:/data/images exists, use E:.
+    default = (PROJ_ROOT / "data" / "images").resolve()
     if not (default / "classification_chips").exists():
         e = Path("E:/data/images")
         if (e / "classification_chips").exists():
@@ -83,7 +84,8 @@ def ensure_master_pool(need=200):
 
 def make_train_subsets():
     for tn in TRAIN_SIZES:
-        out_dir = OUT_BASE / f"train_n{tn}"
+        # 260520 — train subsets live under DATA_ROOT (was OUT_BASE workspace)
+        out_dir = DATA_ROOT / f"train_n{tn}"
         if out_dir.exists() and all(count_pngs(out_dir / c) >= tn for c in TRAIN_CLASSES):
             existing = len(list(out_dir.glob("*/*.png")))
             log(f"train_n{tn} complete ({existing} files, all classes ≥ {tn}), skip")
@@ -118,12 +120,11 @@ def fill_ood_eval_class(mod, cls: str, target: int, rng, dst_root: Path):
 
 
 def make_eval_sets():
-    """Generate eval sets using gen_eval_set.py."""
+    """Generate eval sets directly under DATA_ROOT/eval_n{N}/ (260520 - no master/local symlink dance)."""
     for en in EVAL_SIZES:
-        master_eval_dir = DATA_ROOT / f"chip_multilabel_mega_eval_n{en}"
-        local_eval_dir = OUT_BASE / f"eval_n{en}"
+        eval_dir = DATA_ROOT / f"eval_n{en}"
 
-        # Strict local skip: 16 expected classes must all exist with PNGs
+        # Strict skip: 16 expected classes must all exist with PNGs
         expected_classes = (
             ["bank_boundary", "fork", "scratch", "scratch_rot"]  # 4 single
             + ["bank_boundary+fork", "bank_boundary+scratch", "bank_boundary+scratch_rot",
@@ -132,40 +133,38 @@ def make_eval_sets():
             + list(OOD_CLASSES)
         )
         missing_classes = [c for c in expected_classes
-                           if not (local_eval_dir / c).exists()
-                           or len(list((local_eval_dir / c).glob("*.png"))) < en]
-        if local_eval_dir.exists() and not missing_classes:
-            n = len(list(local_eval_dir.glob("*/*.png")))
-            log(f"eval_n{en} local complete ({n} chips, all 16 classes ≥ {en}), skip")
+                           if not (eval_dir / c).exists()
+                           or len(list((eval_dir / c).glob("*.png"))) < en]
+        if eval_dir.exists() and not missing_classes:
+            n = len(list(eval_dir.glob("*/*.png")))
+            log(f"eval_n{en} complete ({n} chips, all 16 classes ≥ {en}), skip")
             continue
         if missing_classes:
-            log(f"eval_n{en} local missing classes: {missing_classes} - proceeding to gen/symlink")
+            log(f"eval_n{en} missing classes: {missing_classes} - proceeding to gen")
 
-        # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all have ≥ en chips.
-        # If any class < en, gen_eval_set is monolithic and re-runs all 12 (limitation accepted).
+        # gen_eval_set is monolithic; runs for all 12 base classes if any < en.
         base_classes = [c for c in expected_classes if c not in OOD_CLASSES]
-        master_base_done = (master_eval_dir.exists() and all(
-            (master_eval_dir / c).exists()
-            and len(list((master_eval_dir / c).glob("*.png"))) >= en
+        base_done = (eval_dir.exists() and all(
+            (eval_dir / c).exists()
+            and len(list((eval_dir / c).glob("*.png"))) >= en
             for c in base_classes))
-        if master_base_done:
-            log(f"master eval_n{en} base 12 classes all ≥ {en} chips, skip gen_eval_set")
+        if base_done:
+            log(f"eval_n{en} base 12 classes all ≥ {en} chips, skip gen_eval_set")
         else:
             partial_base = []
             for c in base_classes:
-                cd = master_eval_dir / c
+                cd = eval_dir / c
                 cnt = len(list(cd.glob("*.png"))) if cd.exists() else 0
                 if cnt < en:
                     partial_base.append(f"{c}({cnt}/{en})")
             log(f"generating eval_n{en} via gen_eval_set (partial base: {partial_base})...")
             cmd = [
                 sys.executable, "-u", "-X", "utf8", "-m", "chip_multilabel.gen_eval_set",
-                "--out-root", str(master_eval_dir),
+                "--out-root", str(eval_dir),
                 "--per-defect", str(en),
                 "--per-normal", str(en),
-                "--per-invalid", str(en),  # match defect scale (was en // 4, 260514 fix)
+                "--per-invalid", str(en),  # match defect scale
                 # NO --include-triples: absolute rule 260512 — positive = single + 2-combo only.
-                # 3-combo would inflate eval but is excluded from bit_F1 anyway by aggregator.
                 "--classification-chips-root", str(MASTER_TRAIN),
                 "--seed", "42",
             ]
@@ -173,56 +172,34 @@ def make_eval_sets():
 
         # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
         # gen_eval_set doesn't synth OOD, so generate 200x200 OOD chips directly.
-        ood_n = en
         try:
-            # Relocated 260520: previously top-level _gen_E_ood_chips.py (since
-            # removed in top-level cleanup d12fb9c); now lives inside the pipeline.
             from mega_matrix import ood_chips as mod  # type: ignore
-            if True:
-                import random as _r
-                rng = _r.Random(42)
-                log(f"OOD direct dst_root={master_eval_dir}")
-                for cls in OOD_CLASSES:
-                    ood_cdir = master_eval_dir / cls
-                    n_have = count_pngs(ood_cdir)
-                    if n_have >= ood_n:
-                        log(f"OOD {cls} already {n_have} ≥ {ood_n}, skip")
-                        continue
-                    fill_ood_eval_class(mod, cls, ood_n, rng, master_eval_dir)
+            import random as _r
+            rng = _r.Random(42)
+            log(f"OOD direct dst_root={eval_dir}")
+            for cls in OOD_CLASSES:
+                ood_cdir = eval_dir / cls
+                n_have = count_pngs(ood_cdir)
+                if n_have >= en:
+                    log(f"OOD {cls} already {n_have} ≥ {en}, skip")
+                    continue
+                fill_ood_eval_class(mod, cls, en, rng, eval_dir)
         except Exception as e:
             raise RuntimeError(f"OOD direct generation failed: {type(e).__name__}: {e}") from e
 
         incomplete_ood = []
         for cls in OOD_CLASSES:
-            cdir = master_eval_dir / cls
+            cdir = eval_dir / cls
             n_have = count_pngs(cdir)
-            if n_have < ood_n:
-                incomplete_ood.append(f"{cls}({n_have}/{ood_n})")
+            if n_have < en:
+                incomplete_ood.append(f"{cls}({n_have}/{en})")
         if incomplete_ood:
             raise RuntimeError(
-                f"OOD eval classes missing after extraction under {master_eval_dir}: {incomplete_ood}"
+                f"OOD eval classes missing after extraction under {eval_dir}: {incomplete_ood}"
             )
 
-        if not master_eval_dir.exists():
-            log(f"WARN eval_n{en} not generated, skipping local copy")
-            continue
-
-        # Symlink master → local subset folder
-        local_eval_dir.mkdir(parents=True, exist_ok=True)
-        for cdir in sorted(master_eval_dir.iterdir()):
-            if not cdir.is_dir() or cdir.name.startswith("_"):
-                continue
-            (local_eval_dir / cdir.name).mkdir(exist_ok=True)
-            for f in cdir.glob("*.png"):
-                tgt = local_eval_dir / cdir.name / f.name
-                if not tgt.exists():
-                    try:
-                        tgt.symlink_to(f)
-                    except (OSError, NotImplementedError):
-                        import shutil
-                        shutil.copy2(f, tgt)
-        n = len(list(local_eval_dir.glob("*/*.png")))
-        log(f"eval_n{en} prepared ({n} chips)")
+        n = len(list(eval_dir.glob("*/*.png")))
+        log(f"eval_n{en} ready ({n} chips)")
 
 
 def main():
@@ -240,15 +217,15 @@ def main():
     make_eval_sets()
 
     log("=== STAGE 1 DONE ===")
-    # Summary
+    # Summary (paths now live under DATA_ROOT, not OUT_BASE)
     for tn in TRAIN_SIZES:
-        d = OUT_BASE / f"train_n{tn}"
+        d = DATA_ROOT / f"train_n{tn}"
         n = len(list(d.glob("*/*.png"))) if d.exists() else 0
-        print(f"  train_n{tn}: {n} chips")
+        print(f"  train_n{tn}: {n} chips  ({d})")
     for en in EVAL_SIZES:
-        d = OUT_BASE / f"eval_n{en}"
+        d = DATA_ROOT / f"eval_n{en}"
         n = len(list(d.glob("*/*.png"))) if d.exists() else 0
-        print(f"  eval_n{en}:  {n} chips")
+        print(f"  eval_n{en}:  {n} chips  ({d})")
 
 
 if __name__ == "__main__":

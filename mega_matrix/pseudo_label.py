@@ -32,7 +32,7 @@ import torchvision.transforms as T
 
 PROJ_ROOT = Path(__file__).parent.parent
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"          # shared data root (train_n*, eval_n*)
-DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
+DATA_ROOT = Path(os.environ.get("IMAGES_ROOT", str(PROJ_ROOT / "data" / "images"))).resolve()
 # Per-backbone model namespace (set by run.sh / run_ddp.sh / run_all.sh via env)
 # Falls back to OUT_BASE for legacy single-backbone use
 MODEL_BASE = Path(os.environ.get("MEGA_MODEL_BASE", str(OUT_BASE)))

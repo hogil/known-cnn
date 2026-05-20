@@ -22,7 +22,7 @@
 #   bash mega_matrix/run_all.sh --gpus 4          # all backbones, DDP 4 GPU
 #   bash mega_matrix/run_all.sh --only convnext   # only backbones matching substring
 #   bash mega_matrix/run_all.sh --with-pseudo     # forward to inner script
-#   bash mega_matrix/run_all.sh --data-base data/wm-811k
+#   bash mega_matrix/run_all.sh --data-base data/images
 #   bash mega_matrix/run_all.sh --skip-data       # data already generated
 #
 # Data is generated ONCE (during first backbone) and reused (--skip-data
