@@ -456,8 +456,99 @@ def write_table_md(rows, fpath):
     plt.tight_layout()
     plt.savefig(FIG_DIR / 'scaling_curves.png', dpi=120)
     plt.close()
-    out.append("### Plot 3 — Train size scaling curves\n\n")
+    out.append("### Plot 3 — Train size scaling curves (all eval_n)\n\n")
     out.append("![scaling curves](figs_mega/scaling_curves.png)\n\n")
+
+    # ====== 260521 — user-requested 3 plots: val_f1 vs val_margin selection ======
+    # Plot 4: combined plot — bit_F1 + FAR, both selections (4 legend lines)
+    #   x = train_n, dual y-axis, one subplot per eval_n
+    fig, axes = plt.subplots(1, len(EVAL_NS), figsize=(6 * len(EVAL_NS), 5), squeeze=False)
+    for ax_idx, en in enumerate(EVAL_NS):
+        ax = axes[0, ax_idx]
+        ax_far = ax.twinx()
+        # bit_F1 lines (left axis, solid)
+        for sel, color in zip(SELS, ['tab:blue', 'tab:green']):
+            xs, ys = [], []
+            for tn in TRAIN_NS:
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                if r:
+                    xs.append(tn); ys.append(r['bit_F1'])
+            if xs:
+                ax.plot(xs, ys, marker='o', color=color, linestyle='-',
+                        label=f'bit_F1 (val_{sel})')
+        # FAR lines (right axis, dashed)
+        for sel, color in zip(SELS, ['tab:red', 'tab:orange']):
+            xs, ys = [], []
+            for tn in TRAIN_NS:
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                if r:
+                    xs.append(tn); ys.append(r['total_far'] * 100)
+            if xs:
+                ax_far.plot(xs, ys, marker='s', color=color, linestyle='--',
+                            label=f'Total_FAR % (val_{sel})')
+        ax.set_xlabel('train_n per class')
+        ax.set_ylabel('bit_F1', color='tab:blue')
+        ax_far.set_ylabel('Total_FAR (%)', color='tab:red')
+        ax.set_title(f'eval_n = {en}')
+        ax.grid(True, alpha=0.3)
+        # Combined legend (both axes)
+        h1, l1 = ax.get_legend_handles_labels()
+        h2, l2 = ax_far.get_legend_handles_labels()
+        ax.legend(h1 + h2, l1 + l2, fontsize=8, loc='center right')
+    plt.suptitle('bit_F1 + Total_FAR by val selection criterion (4 legends)')
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / 'combined_bit_far_by_sel.png', dpi=120)
+    plt.close()
+    out.append("### Plot 4 — bit_F1 + Total_FAR by selection (combined 4-legend)\n\n")
+    out.append("![combined](figs_mega/combined_bit_far_by_sel.png)\n\n")
+
+    # Plot 5: bit_F1 only — 2 lines per eval_n (val_f1 vs val_margin)
+    fig, axes = plt.subplots(1, len(EVAL_NS), figsize=(6 * len(EVAL_NS), 5), squeeze=False)
+    for ax_idx, en in enumerate(EVAL_NS):
+        ax = axes[0, ax_idx]
+        for sel, color in zip(SELS, ['tab:blue', 'tab:green']):
+            xs, ys = [], []
+            for tn in TRAIN_NS:
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                if r:
+                    xs.append(tn); ys.append(r['bit_F1'])
+            if xs:
+                ax.plot(xs, ys, marker='o', color=color, label=f'val_{sel}')
+        ax.set_xlabel('train_n per class')
+        ax.set_ylabel('bit_F1')
+        ax.set_title(f'eval_n = {en}')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9)
+    plt.suptitle('bit_F1 by selection criterion')
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / 'bit_F1_by_sel.png', dpi=120)
+    plt.close()
+    out.append("### Plot 5 — bit_F1 by selection (val_f1 vs val_margin)\n\n")
+    out.append("![bit_F1 by sel](figs_mega/bit_F1_by_sel.png)\n\n")
+
+    # Plot 6: Total_FAR only — 2 lines per eval_n (val_f1 vs val_margin)
+    fig, axes = plt.subplots(1, len(EVAL_NS), figsize=(6 * len(EVAL_NS), 5), squeeze=False)
+    for ax_idx, en in enumerate(EVAL_NS):
+        ax = axes[0, ax_idx]
+        for sel, color in zip(SELS, ['tab:red', 'tab:orange']):
+            xs, ys = [], []
+            for tn in TRAIN_NS:
+                r = next((r for r in rows if r['train_n'] == tn and r['selection'] == sel and r['eval_n'] == en), None)
+                if r:
+                    xs.append(tn); ys.append(r['total_far'] * 100)
+            if xs:
+                ax.plot(xs, ys, marker='s', color=color, label=f'val_{sel}')
+        ax.set_xlabel('train_n per class')
+        ax.set_ylabel('Total_FAR (%)')
+        ax.set_title(f'eval_n = {en}')
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=9)
+    plt.suptitle('Total_FAR by selection criterion')
+    plt.tight_layout()
+    plt.savefig(FIG_DIR / 'far_by_sel.png', dpi=120)
+    plt.close()
+    out.append("### Plot 6 — Total_FAR by selection (val_f1 vs val_margin)\n\n")
+    out.append("![FAR by sel](figs_mega/far_by_sel.png)\n\n")
 
     # ====== Footer ======
     out.append("\n## 8. Recipe (all cells)\n\n")
