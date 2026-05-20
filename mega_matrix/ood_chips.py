@@ -9,11 +9,16 @@ For each OOD class (CenterDonut/CrossScratch/DiagonalSmear/Starburst):
 - Save to E:\\data\\images\\chip_multilabel_v15direct\\<OOD_class>\\<class>_<idx:04d>.png
 
 Output palette preserved (8-bit colormap).
+
+260520 — parallel generate_direct_class via multiprocessing.Pool
+(default workers = os.cpu_count()).
 """
 from __future__ import annotations
 import argparse
+import os
 import random
 import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -114,7 +119,27 @@ def _render_direct_chip(cls: str, rng: np.random.Generator):
     return arr
 
 
-def generate_direct_class(cls: str, per_class: int, rng: random.Random, dst_root: Path = None):
+def _gen_one_ood_chip(args):
+    """Worker: render one OOD chip + save palette PNG.
+
+    args = (cls, idx, seed, pal_bytes, dst_dir_str)
+    Returns 1 on success, 0 if exists.
+    """
+    cls, idx, seed, pal, dst_dir_str = args
+    dst_dir = Path(dst_dir_str)
+    out_path = dst_dir / f"{cls}_{idx:05d}.png"
+    if out_path.exists():
+        return 0
+    nrng = np.random.default_rng(seed)
+    arr = _render_direct_chip(cls, nrng)
+    out = Image.fromarray(arr, mode="P")
+    out.putpalette(pal)
+    out.save(out_path, optimize=False, compress_level=1)
+    return 1
+
+
+def generate_direct_class(cls: str, per_class: int, rng: random.Random,
+                          dst_root: Path = None, n_workers: int = None):
     dr = dst_root if dst_root is not None else DST_ROOT
     dst_dir = dr / cls
     dst_dir.mkdir(parents=True, exist_ok=True)
@@ -125,15 +150,33 @@ def generate_direct_class(cls: str, per_class: int, rng: random.Random, dst_root
         return n_have
 
     pal = _palette()
-    print(f"[OOD] {cls}: direct chip generation {n_have}/{per_class}")
-    for idx in range(n_have, per_class):
-        nrng = np.random.default_rng(rng.randrange(2**31 - 1))
-        arr = _render_direct_chip(cls, nrng)
-        out = Image.fromarray(arr, mode="P")
-        out.putpalette(pal)
-        out.save(dst_dir / f"{cls}_{idx:05d}.png", optimize=False, compress_level=1)
-        if idx + 1 == per_class or (idx + 1) % max(1, per_class // 10) == 0:
-            print(f"[OOD] {cls}: direct {idx + 1}/{per_class}", flush=True)
+    if n_workers is None:
+        n_workers = max(1, (os.cpu_count() or 4) - 1)
+    todo = list(range(n_have, per_class))
+    print(f"[OOD] {cls}: direct chip generation {n_have}/{per_class} "
+          f"(workers={n_workers}, todo={len(todo)})", flush=True)
+
+    # Pre-draw seeds in main process so reproducibility holds across worker counts.
+    tasks = [(cls, idx, rng.randrange(2**31 - 1), pal, str(dst_dir)) for idx in todo]
+
+    if n_workers <= 1 or len(tasks) < 4:
+        # Serial fallback (avoid spawn overhead for tiny jobs)
+        done = n_have
+        step = max(1, per_class // 10)
+        for t in tasks:
+            _gen_one_ood_chip(t)
+            done += 1
+            if done == per_class or done % step == 0:
+                print(f"[OOD] {cls}: direct {done}/{per_class}", flush=True)
+        return per_class
+
+    done = n_have
+    step = max(1, per_class // 10)
+    with ProcessPoolExecutor(max_workers=n_workers) as exe:
+        for _ in exe.map(_gen_one_ood_chip, tasks, chunksize=max(1, len(tasks) // (n_workers * 4))):
+            done += 1
+            if done == per_class or done % step == 0:
+                print(f"[OOD] {cls}: direct {done}/{per_class}", flush=True)
     return per_class
 
 

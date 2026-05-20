@@ -16,13 +16,20 @@ Layout:
         manifest.csv
         _preview/<class_key>.png               # 16-grid preview (4x4)
         _rejected/<reason>/                    # sanity check failures
+
+260520 - per-class generation parallelized via ProcessPoolExecutor
+(default workers = os.cpu_count()). Worker = chip generation (CPU-bound
+numpy + PIL ops). Main thread = sanity check + save + manifest append
+(needs shared accepted/rejected counter state).
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import os
 import random
 import shutil
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -228,10 +235,44 @@ def _defect_strength(arr_rgb: np.ndarray) -> float:
     return float((not_white & not_grey).mean())
 
 
+# === Module-level workers for ProcessPoolExecutor (260520) ============
+# Each generates ONE raw chip candidate. Main thread does sanity_check +
+# save + manifest append (which requires shared accepted/rejected state).
+def _worker_make_single(args):
+    src_path, _seed = args
+    return _load_chip_rgb(Path(src_path))
+
+
+def _worker_make_combo2(args):
+    a_path, b_path, _seed = args
+    return _min_blend(_load_chip_rgb(Path(a_path)), _load_chip_rgb(Path(b_path)))
+
+
+def _worker_make_combo3(args):
+    a_path, b_path, c_path, _seed = args
+    return _min_blend_n([
+        _load_chip_rgb(Path(a_path)),
+        _load_chip_rgb(Path(b_path)),
+        _load_chip_rgb(Path(c_path)),
+    ])
+
+
+def _worker_make_normal(seed):
+    rng = np.random.default_rng(seed)
+    return _make_normal_chip(rng)
+
+
+def _worker_make_invalid(seed):
+    rng = np.random.default_rng(seed)
+    return _make_invalid_chip(rng)
+# =====================================================================
+
+
 def generate(out_root: Path, classification_chips_root: Path,
              per_defect: int, per_normal: int, per_invalid: int,
              seed: int, source_strength_pct: float = 100.0,
-             include_triples: bool = False) -> GenStats:
+             include_triples: bool = False,
+             n_workers: int = None) -> GenStats:
     """Class-specific N (260506 user directive — defect/normal/invalid different counts).
 
     per_defect:  applied to each of 10 defect classes (4 single + 6 combo)
@@ -248,6 +289,10 @@ def generate(out_root: Path, classification_chips_root: Path,
     accepted: Dict[str, int] = {}
     rejected: Dict[str, int] = {}
     manifest_rows: List[Dict] = []
+
+    if n_workers is None:
+        n_workers = max(1, (os.cpu_count() or 4) - 1)
+    print(f"[gen] CPU workers = {n_workers}", flush=True)
 
     src_chips: Dict[str, List[Path]] = {}
     for cls in SINGLE_KEYS:
@@ -318,78 +363,102 @@ def generate(out_root: Path, classification_chips_root: Path,
             print(f"[gen] {kind} {class_key}: {made}/{target} ({pct:.0f}%) attempts={attempts}",
                   flush=True)
 
-    # 1) single defects: resample with replacement (per_defect)
+    # Parallel chip-generation helper. Workers produce chip arrays/images;
+    # main thread does _record (sanity + save + manifest, needs shared state).
+    # Overshoot factor 1.5x to absorb rejection without re-dispatch round-trips.
+    def _run_class_parallel(kind, class_key, target, worker_fn, build_arg,
+                            base1_of=None, base2_of=None, base3_of=None,
+                            gen_method="generated"):
+        if target <= 0:
+            return
+        print(f"[gen] {kind} {class_key}: start target={target}", flush=True)
+        overshoot_factor = 1.5 if kind in ("single", "combo2", "combo3") else 1.05
+        n_tasks = int(target * overshoot_factor) + 4
+        tasks = [build_arg(rng) for _ in range(n_tasks)]
+        n_made = 0
+        attempts = 0
+        with ProcessPoolExecutor(max_workers=n_workers) as exe:
+            try:
+                chunk = max(1, n_tasks // (n_workers * 4))
+                for i, chip in enumerate(exe.map(worker_fn, tasks, chunksize=chunk)):
+                    attempts = i + 1
+                    base1 = base1_of(tasks[i]) if base1_of else ""
+                    base2 = base2_of(tasks[i]) if base2_of else ""
+                    base3 = base3_of(tasks[i]) if base3_of else ""
+                    if _record(class_key, chip, base1, base2, gen_method,
+                               base3_path=base3):
+                        n_made += 1
+                        _progress(kind, class_key, n_made, target, attempts)
+                        if n_made >= target:
+                            break
+            finally:
+                pass
+        if n_made < target:
+            # Rare: rejection rate too high — fall back to sequential top-up
+            print(f"[gen] {kind} {class_key}: top-up sequential "
+                  f"{n_made}/{target} attempts={attempts}", flush=True)
+            while n_made < target and attempts < target * 4:
+                attempts += 1
+                arg = build_arg(rng)
+                chip = worker_fn(arg)
+                base1 = base1_of(arg) if base1_of else ""
+                base2 = base2_of(arg) if base2_of else ""
+                base3 = base3_of(arg) if base3_of else ""
+                if _record(class_key, chip, base1, base2, gen_method,
+                           base3_path=base3):
+                    n_made += 1
+                    _progress(kind, class_key, n_made, target, attempts)
+
+    # 1) single defects (parallel CPU)
     for cls in SINGLE_KEYS:
-        print(f"[gen] single {cls}: start target={per_defect}", flush=True)
-        n_made = 0
-        attempts = 0
-        while n_made < per_defect and attempts < per_defect * 3:
-            attempts += 1
-            f = src_chips[cls][int(rng.integers(0, len(src_chips[cls])))]
-            arr = _load_chip_rgb(f)
-            if _record(cls, arr, str(f), "", "single_resample"):
-                n_made += 1
-                _progress("single", cls, n_made, per_defect, attempts)
+        def _build_single(r, cls=cls):
+            return (str(src_chips[cls][int(r.integers(0, len(src_chips[cls])))]),
+                    int(r.integers(0, 2**31 - 1)))
+        _run_class_parallel("single", cls, per_defect, _worker_make_single,
+                            _build_single,
+                            base1_of=lambda t: t[0],
+                            gen_method="single_resample")
 
-    # 2) 2-combos: min-blend (per_defect)
+    # 2) 2-combos (parallel CPU)
     for combo in COMBO_KEYS:
-        print(f"[gen] combo2 {combo}: start target={per_defect}", flush=True)
         a, b = combo.split("+")
-        n_made = 0
-        attempts = 0
-        while n_made < per_defect and attempts < per_defect * 3:
-            attempts += 1
-            fa = src_chips[a][int(rng.integers(0, len(src_chips[a])))]
-            fb = src_chips[b][int(rng.integers(0, len(src_chips[b])))]
-            arr_a = _load_chip_rgb(fa)
-            arr_b = _load_chip_rgb(fb)
-            blended = _min_blend(arr_a, arr_b)
-            if _record(combo, blended, str(fa), str(fb), "min_blend"):
-                n_made += 1
-                _progress("combo2", combo, n_made, per_defect, attempts)
+        def _build_c2(r, a=a, b=b):
+            return (str(src_chips[a][int(r.integers(0, len(src_chips[a])))]),
+                    str(src_chips[b][int(r.integers(0, len(src_chips[b])))]),
+                    int(r.integers(0, 2**31 - 1)))
+        _run_class_parallel("combo2", combo, per_defect, _worker_make_combo2,
+                            _build_c2,
+                            base1_of=lambda t: t[0],
+                            base2_of=lambda t: t[1],
+                            gen_method="min_blend")
 
-    # 2b) 3-combos (260508): N-way min-blend
+    # 2b) 3-combos (260508): parallel CPU N-way min-blend
     if include_triples:
         for combo in TRIPLE_COMBO_KEYS:
-            print(f"[gen] combo3 {combo}: start target={per_defect}", flush=True)
             a, b, c = combo.split("+")
-            n_made = 0
-            attempts = 0
-            while n_made < per_defect and attempts < per_defect * 3:
-                attempts += 1
-                fa = src_chips[a][int(rng.integers(0, len(src_chips[a])))]
-                fb = src_chips[b][int(rng.integers(0, len(src_chips[b])))]
-                fc = src_chips[c][int(rng.integers(0, len(src_chips[c])))]
-                arr_a = _load_chip_rgb(fa)
-                arr_b = _load_chip_rgb(fb)
-                arr_c = _load_chip_rgb(fc)
-                blended = _min_blend_n([arr_a, arr_b, arr_c])
-                if _record(combo, blended, str(fa), str(fb), "min_blend_n3",
-                           base3_path=str(fc)):
-                    n_made += 1
-                    _progress("combo3", combo, n_made, per_defect, attempts)
+            def _build_c3(r, a=a, b=b, c=c):
+                return (str(src_chips[a][int(r.integers(0, len(src_chips[a])))]),
+                        str(src_chips[b][int(r.integers(0, len(src_chips[b])))]),
+                        str(src_chips[c][int(r.integers(0, len(src_chips[c])))]),
+                        int(r.integers(0, 2**31 - 1)))
+            _run_class_parallel("combo3", combo, per_defect, _worker_make_combo3,
+                                _build_c3,
+                                base1_of=lambda t: t[0],
+                                base2_of=lambda t: t[1],
+                                base3_of=lambda t: t[2],
+                                gen_method="min_blend_n3")
 
-    # 3) normal (per_normal — typically larger to reflect real-env Normal prevalence)
-    print(f"[gen] normal Normal: start target={per_normal}", flush=True)
-    n_made = 0
-    attempts = 0
-    while n_made < per_normal:
-        attempts += 1
-        arr = _make_normal_chip(rng)
-        if _record("Normal", arr, "", "", "synth_baseline"):
-            n_made += 1
-            _progress("normal", "Normal", n_made, per_normal, attempts)
+    # 3) Normal (parallel CPU synth, no rejection sampling so overshoot ~1.05)
+    def _build_norm(r):
+        return int(r.integers(0, 2**31 - 1))
+    _run_class_parallel("normal", "Normal", per_normal, _worker_make_normal,
+                        _build_norm, gen_method="synth_baseline")
 
-    # 4) invalid (per_invalid)
-    print(f"[gen] invalid Invalid: start target={per_invalid}", flush=True)
-    n_made = 0
-    attempts = 0
-    while n_made < per_invalid:
-        attempts += 1
-        arr = _make_invalid_chip(rng)
-        if _record("Invalid", arr, "", "", "synth_invalid_white_border"):
-            n_made += 1
-            _progress("invalid", "Invalid", n_made, per_invalid, attempts)
+    # 4) Invalid (parallel CPU synth)
+    def _build_inv(r):
+        return int(r.integers(0, 2**31 - 1))
+    _run_class_parallel("invalid", "Invalid", per_invalid, _worker_make_invalid,
+                        _build_inv, gen_method="synth_invalid_white_border")
 
     # manifest + previews
     with open(out_root / "manifest.csv", "w", newline="", encoding="utf-8") as f:
@@ -427,6 +496,9 @@ def main() -> None:
                     help="DELETE existing out_root/ before generating (DANGEROUS — disabled by default)")
     ap.add_argument("--include-triples", action="store_true",
                     help="260508: also generate 4 3-combo classes (TRIPLE_COMBO_KEYS) → 14 class.")
+    ap.add_argument("--workers", type=int, default=None,
+                    help="CPU process workers (default os.cpu_count()-1). "
+                         "Set 1 to disable multiprocessing.")
     args = ap.parse_args()
 
     if args.per_class is not None:
@@ -448,7 +520,8 @@ def main() -> None:
     stats = generate(out_root, Path(args.classification_chips_root),
                      per_defect=per_defect, per_normal=per_normal, per_invalid=per_invalid,
                      seed=args.seed, source_strength_pct=args.source_strength_pct,
-                     include_triples=args.include_triples)
+                     include_triples=args.include_triples,
+                     n_workers=args.workers)
     total_acc = sum(stats.accepted.values())
     total_rej = sum(stats.rejected.values())
     print(f"\n[gen] accepted total: {total_acc}")

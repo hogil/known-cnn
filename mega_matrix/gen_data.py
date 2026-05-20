@@ -158,6 +158,7 @@ def make_eval_sets():
                 if cnt < en:
                     partial_base.append(f"{c}({cnt}/{en})")
             log(f"generating eval_n{en} via gen_eval_set (partial base: {partial_base})...")
+            workers = os.environ.get("GEN_WORKERS")
             cmd = [
                 sys.executable, "-u", "-X", "utf8", "-m", "chip_multilabel.gen_eval_set",
                 "--out-root", str(eval_dir),
@@ -168,6 +169,8 @@ def make_eval_sets():
                 "--classification-chips-root", str(MASTER_TRAIN),
                 "--seed", "42",
             ]
+            if workers:
+                cmd += ["--workers", str(workers)]
             subprocess.run(cmd, check=True, cwd=str(PROJ_ROOT))
 
         # OOD wafer-pattern chips (absolute rule 260512 — FAR group e):
