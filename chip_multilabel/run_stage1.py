@@ -74,22 +74,68 @@ def _save_errors_for_cell(cell: CellResult, out_root: Path, cap_per_type: int = 
         counts[et] = n + 1
 
 
+def _compute_paper_metrics_per_cell(cells: List[CellResult]) -> Dict[str, Dict]:
+    """260520 — Per CLAUDE.md absolute rule 260512, primary metrics are:
+      bit_F1   = positive (single + 2-combo) macro F1
+      NI_FAR   = Normal + Invalid chip-level FP rate
+      OOD_FAR  = wafer-pattern OOD chip-level FP rate
+      Total_FAR= (Normal + Invalid + OOD) chip-level FP rate
+    Compute via _bit_metrics.compute_bit_metrics on each cell's preds_rows."""
+    import pandas as pd
+    from ._bit_metrics import compute_bit_metrics
+    out: Dict[str, Dict] = {}
+    for c in cells:
+        if not c.preds_rows:
+            out[c.cell_id] = {"bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0}
+            continue
+        df_cell = pd.DataFrame(c.preds_rows)
+        try:
+            m = compute_bit_metrics(df_cell)
+            out[c.cell_id] = {
+                "bit_F1": m.get("macro_F1_defect_only", 0.0),
+                "NI_FAR": m.get("normal_invalid_chip_FAR", 0.0),
+                "OOD_FAR": m.get("ood_chip_FAR", 0.0),
+                "Total_FAR": m.get("chip_FAR", 0.0),
+            }
+        except Exception as e:
+            print(f"[stage1] WARN bit_metrics fail for {c.cell_id}: {type(e).__name__}: {e}")
+            out[c.cell_id] = {"bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0}
+    return out
+
+
 def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path) -> None:
     lines: List[str] = []
     lines.append(f"# Stage 1 — chip multi-label inference variant matrix\n")
     lines.append(f"**run dir**: `{out_root}`")
     lines.append(f"**ts**: {datetime.now().isoformat(timespec='seconds')}\n")
-    lines.append("## Results matrix\n")
-    lines.append("| cell | macro_f1 | micro_f1 | mAP | hamming | subset_acc | top1_11cls | T | ECE_pre | ECE_post | sec |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+    paper = _compute_paper_metrics_per_cell(cells)
+
+    # ★ Primary metrics per CLAUDE.md absolute rule 260512:
+    #   bit_F1 = positive (single+combo) macro F1; FAR split into NI / OOD / Total.
+    lines.append("## Results — paper metrics (CLAUDE.md 260512 absolute rule)\n")
+    lines.append("| cell | bit_F1 | NI_FAR | OOD_FAR | Total_FAR | sec |")
+    lines.append("|---|---|---|---|---|---|")
+    for c in sorted(cells, key=lambda x: -paper[x.cell_id]["bit_F1"]):
+        p = paper[c.cell_id]
+        lines.append(
+            f"| **{c.cell_id}** | {p['bit_F1']:.4f} | {p['NI_FAR']*100:.2f}% | "
+            f"{p['OOD_FAR']*100:.2f}% | {p['Total_FAR']*100:.2f}% | {c.elapsed_sec:.1f} |"
+        )
+
+    lines.append("\n## Results — generic multi-label metrics (secondary)\n")
+    lines.append("| cell | macro_f1 | micro_f1 | mAP | hamming | subset_acc | top1_11cls | T | ECE_pre | ECE_post |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
     for c in sorted(cells, key=lambda x: -x.macro_f1):
         lines.append(
             f"| **{c.cell_id}** | {c.macro_f1:.4f} | {c.micro_f1:.4f} | {c.mAP:.4f} | "
             f"{c.hamming_loss:.4f} | {c.subset_accuracy:.4f} | {c.top1_11class:.4f} | "
-            f"{c.temperature:.3f} | {c.ece_pre:.4f} | {c.ece_post:.4f} | {c.elapsed_sec:.1f} |"
+            f"{c.temperature:.3f} | {c.ece_pre:.4f} | {c.ece_post:.4f} |"
         )
     lines.append("\n## Best cell per-class F1\n")
-    lines.append(f"**{best_cell.cell_id}** macro_f1={best_cell.macro_f1:.4f}\n")
+    bp = paper[best_cell.cell_id]
+    lines.append(f"**{best_cell.cell_id}** bit_F1={bp['bit_F1']:.4f} "
+                 f"NI_FAR={bp['NI_FAR']*100:.2f}% OOD_FAR={bp['OOD_FAR']*100:.2f}% "
+                 f"Total_FAR={bp['Total_FAR']*100:.2f}%\n")
     lines.append("| class | F1 | threshold |")
     lines.append("|---|---|---|")
     for c in TRAIN_CLASSES:

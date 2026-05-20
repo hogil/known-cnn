@@ -207,9 +207,15 @@ train_cell() {
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
     MULTI_VAL_FLAG=""
-    if [ -d "${DATA_BASE}/eval_n200" ]; then
-        MULTI_VAL_FLAG="--multi-val-set ${DATA_BASE}/eval_n200 --multi-val-n-per-class 50"
-    fi
+    # 260520 - bit_F1 / FAR every epoch (CLAUDE.md absolute rule 260512).
+    for cand in 200 2000 100 50 30 20 10 5; do
+        if [ -d "${DATA_BASE}/eval_n${cand}" ]; then
+            npc=$cand
+            [ "$npc" -gt 50 ] && npc=50
+            MULTI_VAL_FLAG="--multi-val-set ${DATA_BASE}/eval_n${cand} --multi-val-n-per-class ${npc}"
+            break
+        fi
+    done
     TRAIN_RUN_STAMP="$TRAIN_STAMP" torchrun --standalone --nproc_per_node="$NGPU" \
         -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs $EPOCHS \
