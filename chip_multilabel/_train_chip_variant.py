@@ -40,6 +40,26 @@ from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
+try:
+    # Use tqdm.std explicitly to avoid tqdm.auto's IPython/notebook detection
+    # (which can stall on Windows + headless env when probing ipykernel).
+    from tqdm.std import tqdm as _tqdm
+    _HAS_TQDM = True
+except Exception:
+    _HAS_TQDM = False
+
+def _is_main_rank():
+    try:
+        import torch.distributed as _d
+        return (not _d.is_initialized()) or _d.get_rank() == 0
+    except Exception:
+        return True
+
+def _maybe_tqdm(iterable, **kw):
+    if _HAS_TQDM and _is_main_rank():
+        return _tqdm(iterable, **kw)
+    return iterable
+
 from .constants import DEFAULT_BACKBONE_CKPT, DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES, TRAIN_VARIANTS
 from .losses import BCEThenASL, build_loss
 
@@ -328,7 +348,7 @@ def evaluate(model, loader, device, num_classes: int):
     all_y_int = []   # for legacy val_acc compat
     all_mh = []      # multi-hot GT (defect: one-hot, Normal: zeros)
     all_probs = []   # sigmoid logits per-bit
-    for batch in loader:
+    for batch in _maybe_tqdm(loader, total=len(loader), desc="eval", leave=False, dynamic_ncols=True):
         if len(batch) == 4:
             x, y, mh, _tp = batch
             mh = mh.to(device, non_blocking=True)
@@ -599,13 +619,30 @@ def main():
                          "0.125 ≈ 12.5%% (8/64). Used only when --cutmix-mode=grid.")
     # 260508 — paired CutMix: 동일 rect 영역을 mask 한 paired sample 도 forward.
     # disentangle "mask location prior" from "actual content signal" (counterfactual augmentation).
-    ap.add_argument("--cutmix-pair", type=str, default="none", choices=["none", "masked"],
+    ap.add_argument("--cutmix-pair", type=str, default="none", choices=["none", "masked", "masked2"],
                     help="If 'masked', for each CutMix sample also produce a paired sample with "
                          "same rect masked (chip B 무관, fill=corner mean). Both forwarded; "
                          "loss = loss_mix + w * loss_masked. Forces model to read content "
-                         "rather than rely on mask-location prior. Single mode only.")
+                         "rather than rely on mask-location prior. Single mode only. "
+                         "If 'masked2' (260515), also produce a SECOND paired sample with the same "
+                         "rect masked on chip B (the cutmix paste source) → label = B only. "
+                         "Total 3 forwards per cutmix: mix + maskA + maskB. Trains model to be "
+                         "rect-position invariant for both A and B chips. Single mode only.")
     ap.add_argument("--cutmix-pair-loss-w", type=float, default=1.0,
                     help="Loss weight for the masked pair forward. default 1.0 (equal weight).")
+    # 260515 — mask sample target override (decouples mask target from main LS smoothing)
+    ap.add_argument("--cutmix-mask-pos-target", type=float, default=None,
+                    help="Override positive-bit target for mask A / mask B paired samples "
+                         "(default: use main loss LS / pos-target). Recommended: 0.7 to weaken "
+                         "mask-sample positive pull, reducing OOD over-activation.")
+    ap.add_argument("--cutmix-mask-neg-target", type=float, default=None,
+                    help="Override negative-bit target for mask paired samples (default: use main).")
+    # 260515 — raw target for mix sample (bypass LS / pos/neg smoothing, use mix_t as-is)
+    ap.add_argument("--cutmix-mix-raw-target", action="store_true",
+                    help="When set, cutmix MIX sample uses a raw BCE loss (no LS, no pos/neg "
+                         "rewriting). The mix_t built by --cutmix-ab-labels + --cutmix-other-label "
+                         "passes through unchanged. Used for asymmetric main/sub experiments where "
+                         "explicit target values (e.g., A=0.9, B=0.7, C/D=0.15) must be preserved.")
     ap.add_argument("--cutmix-pair-fill", type=str, default="corner",
                     choices=["corner", "white", "noise"],
                     help="Fill for the masked rect. 'corner' = chip's own top-left 8×8 mean "
@@ -835,6 +872,28 @@ def main():
         loss_fn, target_kind = build_loss(loss_name)
     loss_fn = loss_fn.to(device)
     print(f"[train] loss={loss_name} target_kind={target_kind}")
+    # 260515 — raw loss for cutmix mix sample (bypass LS / pos/neg, preserve mix_t)
+    loss_fn_mix_raw = None
+    if args.cutmix_mix_raw_target:
+        # build_loss with no smoothing kwargs → plain BCE
+        loss_fn_mix_raw, _ = build_loss(loss_name.split("(")[0])
+        loss_fn_mix_raw = loss_fn_mix_raw.to(device)
+        print(f"[train] cutmix MIX uses raw BCE (no LS/pos/neg smoothing)")
+    # 260515 — alternate loss for mask paired samples (override pos/neg target)
+    loss_fn_mask = None
+    if args.cutmix_mask_pos_target is not None or args.cutmix_mask_neg_target is not None:
+        mask_kw = dict(build_kw)
+        # remove ls / pos_target_per_bit / neg_target_per_bit so explicit pos/neg take precedence
+        mask_kw.pop("ls", None)
+        mask_kw.pop("pos_target_per_bit", None)
+        mask_kw.pop("neg_target_per_bit", None)
+        if args.cutmix_mask_pos_target is not None:
+            mask_kw["pos_target"] = float(args.cutmix_mask_pos_target)
+        if args.cutmix_mask_neg_target is not None:
+            mask_kw["neg_target"] = float(args.cutmix_mask_neg_target)
+        loss_fn_mask, _ = build_loss(loss_name.split("(")[0], **mask_kw)
+        loss_fn_mask = loss_fn_mask.to(device)
+        print(f"[train] mask paired loss override: pos={args.cutmix_mask_pos_target} neg={args.cutmix_mask_neg_target}")
     # 260515 — guard against silent-no-op CutMix when batch=1.
     # Bug: torch.randperm(1)=[0] → diff_class_mask all False → cutmix never applied,
     # config flags printed but ignored. Result: bit-identical weights across configs.
@@ -917,7 +976,9 @@ def main():
         running = 0.0
         nb = 0
         optim.zero_grad()
-        for step, batch in enumerate(train_loader):
+        _train_iter = _maybe_tqdm(train_loader, total=len(train_loader),
+                                  desc=f"ep {ep:02d} train", leave=False, dynamic_ncols=True)
+        for step, batch in enumerate(_train_iter):
             # 260508 — dataset returns 3-tuple (x, y, mh).  260509 — 4-tuple adds teacher_prob.
             if len(batch) == 4:
                 x, y, mh, teacher_prob = batch
@@ -931,6 +992,9 @@ def main():
             # 260508 paired CutMix: x_masked + tgt_masked tracked for dual forward
             x_masked = None
             tgt_masked = None
+            # 260515 masked2: optional second mask (B chip with rect masked → label=B)
+            x_masked2 = None
+            tgt_masked2 = None
             # 260509 KD: track whether cutmix actually applied (for --kd-skip-on-cutmix).
             # Set True inside CutMix branches when valid_mask.any() triggers.
             cutmix_applied = False
@@ -988,7 +1052,9 @@ def main():
 
                         H, W = x.size(-2), x.size(-1)
                         # 260508 paired CutMix: capture pre-mix copies + collect rects (all 3 modes)
-                        do_pair = (args.cutmix_pair == "masked")
+                        # 260515 masked2 also enables do_pair (super-set of masked)
+                        do_pair = (args.cutmix_pair in ("masked", "masked2"))
+                        do_pair2 = (args.cutmix_pair == "masked2")
                         if do_pair:
                             x_pre = x.clone()
                             tgt_pre = tgt.clone()
@@ -1338,8 +1404,14 @@ def main():
                                     tgt[bi, b] = 1.0 - lam
 
                         # 260508 paired: build x_masked from x_pre with same rects masked (all 3 modes)
+                        # 260515 masked2: ALSO build x_masked2 from x_pre[perm] (B chips) with same rects masked → label=B
                         if do_pair and any(len(r) > 0 for r in masked_rects):
                             pair_fill = args.cutmix_pair_fill
+                            # Capture B's pre-mix images BEFORE x_masked mutates x_pre
+                            if do_pair2:
+                                x_b_pre = x_pre[perm].clone()
+                                if pair_fill == "corner":
+                                    corner_per_chip2 = x_b_pre[:, :, :8, :8].mean(dim=(2, 3), keepdim=True)
                             x_masked_buf = x_pre   # already cloned
                             if pair_fill == "corner":
                                 corner_per_chip = x_pre[:, :, :8, :8].mean(dim=(2, 3), keepdim=True)
@@ -1360,19 +1432,44 @@ def main():
                                         x_masked_buf[bi, :, y0r:y1r, x0r:x1r] = corner_per_chip[bi]
                             x_masked = x_masked_buf
                             tgt_masked = tgt_pre
+                            # 260515 — apply same rect mask to B's pre-mix copies
+                            if do_pair2:
+                                for bi in range(bs):
+                                    for (y0r, y1r, x0r, x1r) in masked_rects[bi]:
+                                        hh, ww = y1r - y0r, x1r - x0r
+                                        if pair_fill == "noise":
+                                            x_b_pre[bi, :, y0r:y1r, x0r:x1r] = \
+                                                torch.randn(3, hh, ww, device=device) * 0.3
+                                        elif pair_fill == "white":
+                                            x_b_pre[bi, :, y0r:y1r, x0r:x1r] = \
+                                                white_norm.expand(3, hh, ww)
+                                        else:  # corner
+                                            x_b_pre[bi, :, y0r:y1r, x0r:x1r] = corner_per_chip2[bi]
+                                x_masked2 = x_b_pre
+                                tgt_masked2 = tgt_pre[perm]
                 tgt_used = tgt
             else:
                 tgt_used = y
             with torch.amp.autocast(device_type=device.type, enabled=device.type == "cuda"):
                 logits = model(x)
-                loss_main = loss_fn(logits, tgt_used)
+                # 260515 — if cutmix-mix-raw-target set AND we just did a cutmix forward, use raw loss
+                _lfn_main = loss_fn_mix_raw if (loss_fn_mix_raw is not None and cutmix_applied) else loss_fn
+                loss_main = _lfn_main(logits, tgt_used)
                 # 260508 paired CutMix: dual forward — masked counterpart
                 if x_masked is not None and tgt_masked is not None:
                     logits_masked = model(x_masked)
-                    loss_masked_pair = loss_fn(logits_masked, tgt_masked)
+                    # 260515 — use loss_fn_mask if set (mask-specific pos/neg target), else loss_fn
+                    _lfn = loss_fn_mask if loss_fn_mask is not None else loss_fn
+                    loss_masked_pair = _lfn(logits_masked, tgt_masked)
                     loss_pre_kd = loss_main + float(args.cutmix_pair_loss_w) * loss_masked_pair
                 else:
                     loss_pre_kd = loss_main
+                # 260515 masked2: third forward — B chip with same rect masked → label=B
+                if x_masked2 is not None and tgt_masked2 is not None:
+                    logits_masked2 = model(x_masked2)
+                    _lfn = loss_fn_mask if loss_fn_mask is not None else loss_fn
+                    loss_masked2_pair = _lfn(logits_masked2, tgt_masked2)
+                    loss_pre_kd = loss_pre_kd + float(args.cutmix_pair_loss_w) * loss_masked2_pair
                 # 260509 — KD distillation (Hinton 2015 + Yang 2023 multi-label per-class binary KL).
                 # Skip when: KD disabled, no teacher_prob available, batch shape mismatch
                 # (e.g., complement mode rebuilt x), or cutmix-skip flag triggered.
@@ -1406,6 +1503,8 @@ def main():
                 loss.backward()
             running += float(loss.item()) * args.accum
             nb += 1
+            if _HAS_TQDM and hasattr(_train_iter, "set_postfix"):
+                _train_iter.set_postfix(loss=f"{running/max(1, nb):.4f}", refresh=False)
             if (step + 1) % args.accum == 0 or (step + 1) == len(train_loader):
                 if scaler is not None:
                     scaler.unscale_(optim)

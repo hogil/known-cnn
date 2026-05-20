@@ -49,6 +49,7 @@ while [ $# -gt 0 ]; do
         --only=*) ONLY="${1#--only=}" ;;
         --gpus) shift; NGPU="$1" ;;
         --gpus=*) NGPU="${1#--gpus=}" ;;
+        --help|-h) head -30 "$0" | tail -26; exit 0 ;;
         *) FORWARD_ARGS+=("$1") ;;
     esac
     shift

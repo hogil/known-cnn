@@ -289,7 +289,7 @@ def main():
     log("Step 5b: also retrain with val_f1 for comparison")
     retrain_and_eval(pseudo_train, sel="f1")
 
-    log("=== STAGE 5 DONE — see model_pseudo_margin_max + model_pseudo_f1 ===")
+    log("=== STAGE 5 DONE - see model_pseudo_margin_max + model_pseudo_f1 ===")
 
 
 if __name__ == "__main__":

@@ -145,15 +145,32 @@ log() {
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
 log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER_GPU accum=1 workers_per_rank=$WORKERS_PER_RANK data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
 
-# Offline weights (closed-network) — .pth only
+# Offline weights (closed-network) - .pth only.
+# Only required for stages that init a fresh timm backbone (train, pseudo-label).
+# data / eval / report don't need it (eval loads best_model.pth from disk).
+BACKBONE_WEIGHTS_FLAG=""
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
+NEEDS_WEIGHTS=0
+# run_ddp.sh always runs Stage 2 (train) unconditionally - no --skip-train flag exists.
+# So weights are needed whenever this script is invoked normally (train) or pseudo.
+if [ ${DO_PSEUDO:-0} -eq 1 ]; then
+    NEEDS_WEIGHTS=1
+fi
+# Detect a "no-train" mode if user passed --skip-data --skip-eval --skip-report
+# but otherwise treat as needing weights (default behavior).
+if [ $DO_DATA -eq 1 ] || [ $DO_EVAL -eq 1 ] || [ $DO_REPORT -eq 1 ]; then
+    # If all three are 1 and pseudo is 0 we still run training; play safe and require.
+    NEEDS_WEIGHTS=1
+fi
 if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
-else
+elif [ $NEEDS_WEIGHTS -eq 1 ]; then
     log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
     log "closed-network mode forbids HF/timm download; create mega_matrix/weights/${BACKBONE}.pth first"
     exit 2
+else
+    log "SKIP weight check (no stage requires fresh backbone)"
 fi
 export BACKBONE_WEIGHTS_FLAG BACKBONE IMG_SIZE MODEL_BASE
 export MEGA_MODEL_BASE="$MODEL_BASE"

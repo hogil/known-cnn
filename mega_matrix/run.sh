@@ -90,21 +90,32 @@ case "$BACKBONE" in
     *)                      BATCH_PER_GPU=12 ;;
 esac
 
-# Smoke mode override: 1 cell × 1 epoch × tiny data × micro batch
+# Smoke mode override: tiny data × micro batch (env overrides allowed for
+# end-to-end smoke verification of full pipeline).
 if [ $SMOKE -eq 1 ]; then
-    BATCH_PER_GPU=2
-    EPOCHS=1
-    TRAIN_SIZES_LIST="10"
-    SEL_LIST="margin_max"
-    EVAL_SIZES_LIST="200"
+    BATCH_PER_GPU="${SMOKE_BATCH:-2}"
+    EPOCHS="${SMOKE_EPOCHS:-1}"
+    TRAIN_SIZES_LIST="${SMOKE_TRAIN_SIZES:-10}"
+    SEL_LIST="${SMOKE_SELS:-margin_max}"
+    EVAL_SIZES_LIST="${SMOKE_EVAL_SIZES:-200}"
     DO_PSEUDO=0
-    DO_REPORT=0
-    export MEGA_TRAIN_SIZES="10"
-    export MEGA_EVAL_SIZES="200"
+    # DO_REPORT honors user value (default 1) so 'all-stages run' smoke covers report too
+    export MEGA_TRAIN_SIZES="${TRAIN_SIZES_LIST// /,}"
+    export MEGA_EVAL_SIZES="${EVAL_SIZES_LIST// /,}"
 fi
 
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
 TRAIN_WORKERS="$TOTAL_CPU"
+# Smoke mode: cap DataLoader workers to avoid Windows paging-file blowout
+# (each worker re-imports torch via spawn; 16 workers * 1.5 GB = OOM on small page file).
+# Default SMOKE_WORKERS=0 (single-process loading) - safe everywhere.
+EXTRA_TRAIN_FLAGS=""
+if [ $SMOKE -eq 1 ]; then
+    TRAIN_WORKERS="${SMOKE_WORKERS:-0}"
+    # Smoke = local machine = small GPU = enable grad checkpointing to fit forward activations.
+    # ConvNeXtV2-base 384 + CutMix forward-mul 4 OOMs on 16 GB GPU under shared baseline (30-40% used).
+    EXTRA_TRAIN_FLAGS="--grad-checkpointing"
+fi
 
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
@@ -135,15 +146,24 @@ trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EX
 CUTMIX_FORWARD_MULT=4  # complement + masked + n_groups=2 expands train forward batch up to 4x
 log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 workers=$TRAIN_WORKERS cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$WM811K_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
-# Offline weights (closed-network) — .pth only
+# Offline weights (closed-network) - .pth only.
+# Only required for stages that init a fresh timm backbone (train, pseudo-label).
+# data / eval / report don't need it (eval loads best_model.pth from disk).
+BACKBONE_WEIGHTS_FLAG=""
 OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
+NEEDS_WEIGHTS=0
+if [ $DO_TRAIN -eq 1 ] || [ $DO_PSEUDO -eq 1 ]; then
+    NEEDS_WEIGHTS=1
+fi
 if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
-else
+elif [ $NEEDS_WEIGHTS -eq 1 ]; then
     log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
     log "closed-network mode forbids HF/timm download; create mega_matrix/weights/${BACKBONE}.pth first"
     exit 2
+else
+    log "SKIP weight check (no train/pseudo stage requested)"
 fi
 
 # ======================================================================
@@ -169,7 +189,7 @@ train_one() {
     set +e
     local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
     MULTI_VAL_FLAG=""
-    if [ -d "${OUT_BASE}/eval_n200" ]; then
+    if [ $SMOKE -eq 0 ] && [ -d "${OUT_BASE}/eval_n200" ]; then
         MULTI_VAL_FLAG="--multi-val-set ${OUT_BASE}/eval_n200 --multi-val-n-per-class 50"
     fi
     TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
@@ -182,6 +202,7 @@ train_one() {
         --cutmix-p 0.25 --cutmix-grid-dim 8 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
         --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
         $BACKBONE_WEIGHTS_FLAG \
+        $EXTRA_TRAIN_FLAGS \
         --out-root "$OUT_ROOT" --tag "${TAG}" \
         2>&1 | tee -a "$LOG"
     local TRAIN_RC=${PIPESTATUS[0]}

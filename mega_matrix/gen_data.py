@@ -93,7 +93,7 @@ def make_train_subsets():
             (out_dir / c).mkdir(exist_ok=True)
             n_have = count_pngs(out_dir / c)
             if n_have < tn:
-                log(f"train_n{tn}/{c}: {n_have}/{tn} — filling")
+                log(f"train_n{tn}/{c}: {n_have}/{tn} - filling")
             files = sorted((MASTER_TRAIN / c).glob("*.png"))
             for f in files[:tn]:
                 tgt = out_dir / c / f.name
@@ -139,7 +139,7 @@ def make_eval_sets():
             log(f"eval_n{en} local complete ({n} chips, all 16 classes ≥ {en}), skip")
             continue
         if missing_classes:
-            log(f"eval_n{en} local missing classes: {missing_classes} — proceeding to gen/symlink")
+            log(f"eval_n{en} local missing classes: {missing_classes} - proceeding to gen/symlink")
 
         # Skip gen_eval_set only if 12 base classes (4 single + 6 2-combo + Normal + Invalid) all have ≥ en chips.
         # If any class < en, gen_eval_set is monolithic and re-runs all 12 (limitation accepted).
