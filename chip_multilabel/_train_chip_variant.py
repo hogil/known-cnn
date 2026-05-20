@@ -1586,6 +1586,7 @@ def main():
             except Exception as e:
                 print(f"[multi-val] FAIL ep{ep}: {type(e).__name__}: {e}")
         save_state_dict = None
+        prev_best_ep = best_epoch
         if val_for_best > best_val_acc and ep >= args.best_from_epoch:
             best_val_acc = val_for_best
             best_epoch = ep
@@ -1605,6 +1606,9 @@ def main():
                 "grad_clip": args.grad_clip,
                 "drop_path_rate": args.drop_path_rate,
             }, out_dir / "best_model.pth")
+            # 260521 - explicit visibility: which epoch was selected, by which criterion
+            print(f"[train] UPDATE best_model.pth: ep{ep:02d} "
+                  f"val_{c}={val_for_best:.4f} (prev=ep{prev_best_ep:02d})", flush=True)
         # 260512 — --save-every-epoch: per-epoch ckpt for multi-label selection bug fix
         if args.save_every_epoch:
             if save_state_dict is None:

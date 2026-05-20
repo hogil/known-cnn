@@ -42,7 +42,7 @@ if [ -z "$IMAGES_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "
 fi
 DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
 SMOKE=0
-EPOCHS=20
+EPOCHS=30
 TRAIN_SIZES_LIST="50 100 200 400"
 SEL_LIST="f1 margin_max"
 EVAL_SIZES_LIST="200 2000 20000"

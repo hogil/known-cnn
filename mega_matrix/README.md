@@ -175,7 +175,7 @@ backbone: convnextv2_base.fcmae_ft_in22k_in1k_384
 img_size: 384
 variant: T7 (BCE+LS)
 ls: 0.30
-epochs: 10
+epochs: 30
 batch: 2
 accum: 8           # effective 16
 seed: 1
