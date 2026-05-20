@@ -16,6 +16,10 @@ import glob
 from pathlib import Path
 
 PROJ_ROOT = Path(__file__).parent.parent
+# Ensure project root is on sys.path so `from mega_matrix import ...` works
+# when this script is invoked as `python mega_matrix/gen_data.py`.
+if str(PROJ_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJ_ROOT))
 OUT_BASE = PROJ_ROOT / "outputs" / "_mega_matrix"
 OUT_BASE.mkdir(parents=True, exist_ok=True)
 
