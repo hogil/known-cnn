@@ -59,11 +59,24 @@ while [ $# -gt 0 ]; do
         --data-base=*) DATA_BASE="${1#--data-base=}" ;;
         --backbone) shift; BACKBONE="$1" ;;
         --backbone=*) BACKBONE="${1#--backbone=}" ;;
+        # 260521 — custom sweep axes (comma or space separated; pipe through tr to normalize)
+        --train-sizes) shift; TRAIN_SIZES_LIST=$(echo "$1" | tr ',' ' ') ;;
+        --train-sizes=*) TRAIN_SIZES_LIST=$(echo "${1#--train-sizes=}" | tr ',' ' ') ;;
+        --eval-sizes) shift; EVAL_SIZES_LIST=$(echo "$1" | tr ',' ' ') ;;
+        --eval-sizes=*) EVAL_SIZES_LIST=$(echo "${1#--eval-sizes=}" | tr ',' ' ') ;;
+        --sels) shift; SEL_LIST=$(echo "$1" | tr ',' ' ') ;;
+        --sels=*) SEL_LIST=$(echo "${1#--sels=}" | tr ',' ' ') ;;
+        --epochs) shift; EPOCHS="$1" ;;
+        --epochs=*) EPOCHS="${1#--epochs=}" ;;
         --smoke) SMOKE=1 ;;
-        --help|-h) head -20 "$0" | tail -16; exit 0 ;;
+        --help|-h) head -22 "$0" | tail -18; exit 0 ;;
     esac
     shift
 done
+
+# Propagate to gen_data.py so it generates only the requested sizes
+export MEGA_TRAIN_SIZES=$(echo "$TRAIN_SIZES_LIST" | tr ' ' ',')
+export MEGA_EVAL_SIZES=$(echo "$EVAL_SIZES_LIST" | tr ' ' ',')
 
 # Derive input img-size from backbone name pattern
 case "$BACKBONE" in
