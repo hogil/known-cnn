@@ -366,17 +366,35 @@ def generate(out_root: Path, classification_chips_root: Path,
     # Parallel chip-generation helper. Workers produce chip arrays/images;
     # main thread does _record (sanity + save + manifest, needs shared state).
     # Overshoot factor 1.5x to absorb rejection without re-dispatch round-trips.
+    # 260520 — force_serial=True skips ProcessPoolExecutor for workers whose
+    # spawn cost (heavy imports like torch via dist_apply._sample_gen) exceeds
+    # the synthesis time. Normal/Invalid synth is ~3-5ms/chip; serial wins.
     def _run_class_parallel(kind, class_key, target, worker_fn, build_arg,
                             base1_of=None, base2_of=None, base3_of=None,
-                            gen_method="generated"):
+                            gen_method="generated", force_serial=False):
         if target <= 0:
             return
-        print(f"[gen] {kind} {class_key}: start target={target}", flush=True)
+        print(f"[gen] {kind} {class_key}: start target={target}"
+              f"{' (serial)' if force_serial else f' (workers={n_workers})'}",
+              flush=True)
+        n_made = 0
+        attempts = 0
+        if force_serial or n_workers <= 1:
+            while n_made < target and attempts < target * 4:
+                attempts += 1
+                arg = build_arg(rng)
+                chip = worker_fn(arg)
+                base1 = base1_of(arg) if base1_of else ""
+                base2 = base2_of(arg) if base2_of else ""
+                base3 = base3_of(arg) if base3_of else ""
+                if _record(class_key, chip, base1, base2, gen_method,
+                           base3_path=base3):
+                    n_made += 1
+                    _progress(kind, class_key, n_made, target, attempts)
+            return
         overshoot_factor = 1.5 if kind in ("single", "combo2", "combo3") else 1.05
         n_tasks = int(target * overshoot_factor) + 4
         tasks = [build_arg(rng) for _ in range(n_tasks)]
-        n_made = 0
-        attempts = 0
         with ProcessPoolExecutor(max_workers=n_workers) as exe:
             try:
                 chunk = max(1, n_tasks // (n_workers * 4))
@@ -448,17 +466,21 @@ def generate(out_root: Path, classification_chips_root: Path,
                                 base3_of=lambda t: t[2],
                                 gen_method="min_blend_n3")
 
-    # 3) Normal (parallel CPU synth, no rejection sampling so overshoot ~1.05)
+    # 3) Normal (force serial — pure synth ~3-5ms/chip, dist_apply._sample_gen
+    #    import in workers triggers torch-DLL paging-file blowout on Windows
+    #    + serial is faster than spawn-overhead for N <= ~20K).
     def _build_norm(r):
         return int(r.integers(0, 2**31 - 1))
     _run_class_parallel("normal", "Normal", per_normal, _worker_make_normal,
-                        _build_norm, gen_method="synth_baseline")
+                        _build_norm, gen_method="synth_baseline",
+                        force_serial=True)
 
-    # 4) Invalid (parallel CPU synth)
+    # 4) Invalid (same force_serial reasoning as Normal)
     def _build_inv(r):
         return int(r.integers(0, 2**31 - 1))
     _run_class_parallel("invalid", "Invalid", per_invalid, _worker_make_invalid,
-                        _build_inv, gen_method="synth_invalid_white_border")
+                        _build_inv, gen_method="synth_invalid_white_border",
+                        force_serial=True)
 
     # manifest + previews
     with open(out_root / "manifest.csv", "w", newline="", encoding="utf-8") as f:
