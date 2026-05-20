@@ -2,7 +2,7 @@
 # =====================================================================
 # Mega matrix — run ALL backbones in weights/ folder sequentially
 #
-# Discovers every mega_matrix/weights/<name>.pth, then dispatches:
+# Discovers every weights/<name>.pth, then dispatches:
 #   - bash mega_matrix/run.sh        --backbone <name>     (single GPU, default)
 #   - bash mega_matrix/run_ddp.sh    --backbone <name>     (multi-GPU)
 #
@@ -39,7 +39,7 @@ export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
 
-WEIGHTS_DIR="mega_matrix/weights"
+WEIGHTS_DIR="weights"
 ONLY=""
 NGPU=0
 FORWARD_ARGS=()

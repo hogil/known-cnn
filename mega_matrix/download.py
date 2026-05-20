@@ -2,7 +2,7 @@
 Pretrained backbone weights checker/downloader (mega_matrix).
 
 기본값은 폐쇄망 안전 모드다. 최종 산출물은 항상
-mega_matrix/weights/{model_id}.pth 이다. HuggingFace/timm 다운로드는 인터넷
+<project_root>/weights/{model_id}.pth 이다. HuggingFace/timm 다운로드는 인터넷
 머신에서 명시적으로 --allow-download 를 준 경우에만 실행한다.
 
 - 항상 MODELS 목록 전부 시도. 1개 실패해도 나머지는 계속 진행.
@@ -10,7 +10,7 @@ mega_matrix/weights/{model_id}.pth 이다. HuggingFace/timm 다운로드는 인�
 - 학습/추론 코드는 항상 pretrained=False + weights/{model_name}.pth 로드
   (mega_matrix/run.sh 가 자동 --backbone-timm-weights passthrough).
 - 가중치 파일은 절대 git 에 올리지 않는다 (.gitignore 처리됨).
-- 폐쇄망 서버: 인터넷 머신에서 받아 mega_matrix/weights/ 폴더 통째로 FTP/scp.
+- 폐쇄망 서버: 인터넷 머신에서 받아 weights/ 폴더 통째로 FTP/scp.
 
 Usage:
     python mega_matrix/download.py             # verify/skip only, no network
@@ -46,7 +46,7 @@ from huggingface_hub import hf_hub_download
 import timm
 import torch
 
-WEIGHTS_DIR = Path(__file__).parent / "weights"
+WEIGHTS_DIR = Path(__file__).parent.parent / "weights"
 HF_SOURCE_FILENAMES = ("model.safetensors", "pytorch_model.bin", "model.bin")
 
 # HF / timm model id (파일명으로 그대로 사용)

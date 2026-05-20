@@ -149,7 +149,7 @@ log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
 # data / eval / report don't need it (eval loads best_model.pth from disk).
 BACKBONE_WEIGHTS_FLAG=""
-OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
+OFFLINE_WEIGHTS="weights/${BACKBONE}.pth"
 NEEDS_WEIGHTS=0
 # run_ddp.sh always runs Stage 2 (train) unconditionally - no --skip-train flag exists.
 # So weights are needed whenever this script is invoked normally (train) or pseudo.
@@ -166,8 +166,8 @@ if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
 elif [ $NEEDS_WEIGHTS -eq 1 ]; then
-    log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
-    log "closed-network mode forbids HF/timm download; create mega_matrix/weights/${BACKBONE}.pth first"
+    log "ERROR missing offline weights for $BACKBONE under weights/"
+    log "closed-network mode forbids HF/timm download; create weights/${BACKBONE}.pth first"
     exit 2
 else
     log "SKIP weight check (no stage requires fresh backbone)"

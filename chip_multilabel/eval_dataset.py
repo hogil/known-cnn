@@ -102,14 +102,42 @@ def discover_records(eval_root: str | Path) -> List[EvalRecord]:
 
 
 def _read_manifest(eval_root: Path) -> List[Dict[str, str]]:
+    """Read manifest.csv; fall back to filesystem walk if missing.
+
+    260520 — Fallback aligns with _per_epoch_multi_eval.load_multi_val
+    (commit 154b16b). When manifest.csv is absent (e.g., older eval_n*/
+    folders, ad-hoc eval sets, or in-progress generation), synthesize
+    rows from <eval_root>/<class_key>/*.png walks. Synthesized rows
+    leave 'defect_pixel_ratio' empty -> treated as 0.0 by strength filter,
+    which only matters if caller passes a non-zero strength_min.
+    """
     p = eval_root / "manifest.csv"
-    if not p.exists():
-        raise FileNotFoundError(f"manifest.csv not found at {p}. Regenerate via gen_eval_set.py.")
-    rows: List[Dict[str, str]] = []
-    with open(p, "r", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            rows.append(row)
-    return rows
+    if p.exists():
+        rows: List[Dict[str, str]] = []
+        with open(p, "r", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                rows.append(row)
+        return rows
+    # Fallback: synthesize rows by walking class subdirs
+    synth: List[Dict[str, str]] = []
+    for class_key in ALL_CLASS_KEYS:
+        cdir = eval_root / class_key
+        if not cdir.exists():
+            continue
+        for png in sorted(cdir.glob("*.png")):
+            synth.append({
+                "class_key": class_key,
+                "chip_path": str(png),
+                "defect_pixel_ratio": "",
+            })
+    if not synth:
+        raise FileNotFoundError(
+            f"manifest.csv not found at {p} AND no <class>/*.png subdirs walkable. "
+            f"Regenerate via gen_eval_set.py or check eval_root path."
+        )
+    print(f"[eval_dataset] WARN manifest.csv missing at {p}; "
+          f"synthesized {len(synth)} rows from filesystem walk", flush=True)
+    return synth
 
 
 def discover_records_runtime(

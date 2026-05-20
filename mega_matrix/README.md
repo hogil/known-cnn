@@ -237,10 +237,10 @@ bash mega_matrix/run_ddp.sh --gpus 4
 ## 폐쇄망 (closed-network) 서버 사용
 
 서버는 폐쇄망 기준이다. `run.sh`, `run_ddp.sh`, trainer, pseudo retrain은
-HF/timm 자동 다운로드를 시도하지 않는다. `mega_matrix/weights/` 안에 로컬 weight
+HF/timm 자동 다운로드를 시도하지 않는다. `weights/` 안에 로컬 weight
 파일이 없으면 즉시 실패한다.
 
-해결: 인터넷 머신에서 weight를 받아 `mega_matrix/weights/` 폴더 통째 서버에 복사.
+해결: 인터넷 머신에서 weight를 받아 `weights/` 폴더 통째 서버에 복사.
 
 ### Step 1. 인터넷 머신에서 weight 다운로드
 
@@ -250,7 +250,7 @@ python mega_matrix/download.py --allow-download                  # 모든 backbo
 python mega_matrix/download.py --allow-download --only convnext  # substring filter
 python mega_matrix/download.py --list                            # 목록 + timm registry 검증
 # 기본 `python mega_matrix/download.py` 는 verify/skip only; 네트워크 사용 안 함
-# → mega_matrix/weights/<backbone>.pth
+# → weights/<backbone>.pth
 ```
 
 기본 MODELS (`download.py` 안에 정의, `timm.list_models(pretrained=True)`로 검증):
@@ -269,7 +269,7 @@ python mega_matrix/download.py --list                            # 목록 + timm
 ### Step 2. 서버로 폴더 복사
 
 ```bash
-scp -r mega_matrix/weights/ user@server:/path/to/known-cnn/mega_matrix/
+scp -r weights/ user@server:/path/to/known-cnn/mega_matrix/
 # 또는 git LFS / rsync / USB
 ```
 
@@ -277,7 +277,7 @@ scp -r mega_matrix/weights/ user@server:/path/to/known-cnn/mega_matrix/
 
 ```bash
 bash mega_matrix/run_ddp.sh --gpus 4
-# run.sh / run_ddp.sh 가 mega_matrix/weights/*.pth 존재 시
+# run.sh / run_ddp.sh 가 weights/*.pth 존재 시
 # --backbone-timm-weights <path> 자동 passthrough → HF download 안 함
 # pseudo_label.py 도 동일 적용
 # data/train/eval/OOD wafer canvas는 gen_data.py가 자동 생성
@@ -299,7 +299,7 @@ MODELS = [
 ```bash
 python -m chip_multilabel._train_chip_variant \
     --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 \
-    --backbone-timm-weights mega_matrix/weights/convnextv2_base.fcmae_ft_in22k_in1k_384.pth \
+    --backbone-timm-weights weights/convnextv2_base.fcmae_ft_in22k_in1k_384.pth \
     (... 나머지 args)
 ```
 

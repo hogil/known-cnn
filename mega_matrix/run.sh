@@ -150,7 +150,7 @@ log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forwa
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
 # data / eval / report don't need it (eval loads best_model.pth from disk).
 BACKBONE_WEIGHTS_FLAG=""
-OFFLINE_WEIGHTS="mega_matrix/weights/${BACKBONE}.pth"
+OFFLINE_WEIGHTS="weights/${BACKBONE}.pth"
 NEEDS_WEIGHTS=0
 if [ $DO_TRAIN -eq 1 ] || [ $DO_PSEUDO -eq 1 ]; then
     NEEDS_WEIGHTS=1
@@ -159,8 +159,8 @@ if [ -f "$OFFLINE_WEIGHTS" ]; then
     BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
     log "offline weights: $OFFLINE_WEIGHTS"
 elif [ $NEEDS_WEIGHTS -eq 1 ]; then
-    log "ERROR missing offline weights for $BACKBONE under mega_matrix/weights/"
-    log "closed-network mode forbids HF/timm download; create mega_matrix/weights/${BACKBONE}.pth first"
+    log "ERROR missing offline weights for $BACKBONE under weights/"
+    log "closed-network mode forbids HF/timm download; create weights/${BACKBONE}.pth first"
     exit 2
 else
     log "SKIP weight check (no train/pseudo stage requested)"
