@@ -45,7 +45,7 @@ def _sizes(env, default):
     return [int(x) for x in v.split(",") if x.strip()] if v else default
 
 
-TRAIN_SIZES = _sizes("MEGA_TRAIN_SIZES", [50, 100, 200])
+TRAIN_SIZES = _sizes("MEGA_TRAIN_SIZES", [50, 100, 200, 400])
 EVAL_SIZES = _sizes("MEGA_EVAL_SIZES", [200, 2000, 20000])
 TRAIN_CLASSES = ["bank_boundary", "fork", "scratch", "scratch_rot"]
 OOD_CLASSES = ("CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
@@ -215,7 +215,7 @@ def main():
     log(f"classification chips: {MASTER_TRAIN}")
 
     log("=== STAGE 1A: ensure master train pool ===")
-    ensure_master_pool(need=200)
+    ensure_master_pool(need=max(TRAIN_SIZES))
 
     log("=== STAGE 1B: make train subsets ===")
     make_train_subsets()
