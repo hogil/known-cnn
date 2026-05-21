@@ -25,6 +25,7 @@
 #       different GPUs simultaneously, single GPU per cell.
 # =====================================================================
 set -e
+set -E
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -203,15 +204,14 @@ log() {
 }
 
 : > "$LOG"
-trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
+on_error() {
+    local rc=$?
+    local line="${1:-unknown}"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [ddp] EXIT_FAIL rc=$rc line=$line" | tee -a "$LOG"
+    exit "$rc"
+}
+trap 'on_error $LINENO' ERR
 log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER_GPU eval_batch=$EVAL_BATCH_SIZE accum=1 workers_per_rank=$WORKERS_PER_RANK eval_workers=$EVAL_WORKERS save_every_epoch=$SAVE_EVERY_EPOCH data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
-python - <<'PY' 2>&1 | tee -a "$LOG"
-import chip_multilabel.losses as losses
-missing = [name for name in ("BCEThenASL", "build_loss") if not hasattr(losses, name)]
-print(f"[preflight] losses={getattr(losses, '__file__', '<unknown>')}", flush=True)
-if missing:
-    raise SystemExit(f"[preflight] ERROR missing {missing} from chip_multilabel.losses")
-PY
 
 # Offline weights (closed-network) - .pth only.
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
