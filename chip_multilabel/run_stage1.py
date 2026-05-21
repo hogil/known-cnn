@@ -86,29 +86,99 @@ def _compute_paper_metrics_per_cell(cells: List[CellResult]) -> Dict[str, Dict]:
     out: Dict[str, Dict] = {}
     for c in cells:
         if not c.preds_rows:
-            out[c.cell_id] = {"bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0}
+            out[c.cell_id] = {
+                "bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0,
+                "per_bit_F1": {}, "per_class_FAR": {},
+            }
             continue
         df_cell = pd.DataFrame(c.preds_rows)
         try:
             m = compute_bit_metrics(df_cell)
             out[c.cell_id] = {
-                "bit_F1": m.get("macro_F1_defect_only", 0.0),
+                "bit_F1": m.get("macro_F1_positive", m.get("macro_F1_defect_only", 0.0)),
                 "NI_FAR": m.get("normal_invalid_chip_FAR", 0.0),
                 "OOD_FAR": m.get("ood_chip_FAR", 0.0),
                 "Total_FAR": m.get("chip_FAR", 0.0),
+                "per_bit_F1": {
+                    k: v.get("f1", 0.0)
+                    for k, v in m.get("per_bit_F1_positive", {}).items()
+                },
+                "per_class_FAR": {
+                    k: v.get("chip_FAR", 0.0)
+                    for k, v in m.get("per_class_FAR", {}).items()
+                },
+                "per_class_FAR_counts": {
+                    k: {
+                        "fp": v.get("FAR_chip_count", 0),
+                        "n": v.get("n_chips", 0),
+                        "chip_FAR": v.get("chip_FAR", 0.0),
+                        "bit_FAR": v.get("bit_FAR", 0.0),
+                    }
+                    for k, v in m.get("per_class_FAR", {}).items()
+                },
             }
         except Exception as e:
             print(f"[stage1] WARN bit_metrics fail for {c.cell_id}: {type(e).__name__}: {e}")
-            out[c.cell_id] = {"bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0}
+            out[c.cell_id] = {
+                "bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0,
+                "per_bit_F1": {}, "per_class_FAR": {},
+            }
     return out
 
 
-def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path) -> None:
+def _format_paper_metrics(p: Dict) -> str:
+    bit_short = {
+        "bank_boundary": "bb",
+        "fork": "fk",
+        "scratch": "sc",
+        "scratch_rot": "sr",
+    }
+    far_short = {
+        "Normal": "Norm",
+        "Invalid": "Inv",
+        "CenterDonut": "CD",
+        "CrossScratch": "CS",
+        "DiagonalSmear": "DS",
+        "Starburst": "ST",
+    }
+    per_bit = p.get("per_bit_F1", {})
+    per_far = p.get("per_class_FAR", {})
+    per_far_counts = p.get("per_class_FAR_counts", {})
+    bit_str = " ".join(
+        f"{bit_short.get(k, k)}={float(per_bit.get(k, 0.0)):.4f}"
+        for k in TRAIN_CLASSES
+    )
+    far_str = " ".join(
+        f"{far_short.get(k, k)}={float(per_far_counts.get(k, {}).get('chip_FAR', per_far.get(k, 0.0)))*100:.2f}%"
+        for k in ("Normal", "Invalid", "CenterDonut", "CrossScratch", "DiagonalSmear", "Starburst")
+        if k in per_far and int(per_far_counts.get(k, {}).get("n", 1)) > 0
+    )
+    return (
+        f"eval_bit_F1={p['bit_F1']:.4f} "
+        f"eval_FAR Total={p['Total_FAR']*100:.2f}% "
+        f"NI={p['NI_FAR']*100:.2f}% OOD={p['OOD_FAR']*100:.2f}%\n"
+        f"bit_F1_by_class: {bit_str}\n"
+        f"FAR_by_class: {far_str}"
+    )
+
+
+def _print_paper_metrics(prefix: str, p: Dict, suffix: str = "") -> None:
+    lines = _format_paper_metrics(p).splitlines()
+    if not lines:
+        return
+    print(f"{prefix}{lines[0]}{suffix}")
+    for line in lines[1:]:
+        print(f"[stage1]      {line}")
+
+
+def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path,
+                  paper: Dict[str, Dict] | None = None) -> None:
     lines: List[str] = []
     lines.append(f"# Stage 1 — chip multi-label inference variant matrix\n")
     lines.append(f"**run dir**: `{out_root}`")
     lines.append(f"**ts**: {datetime.now().isoformat(timespec='seconds')}\n")
-    paper = _compute_paper_metrics_per_cell(cells)
+    if paper is None:
+        paper = _compute_paper_metrics_per_cell(cells)
 
     # ★ Primary metrics per CLAUDE.md absolute rule 260512:
     #   bit_F1 = positive (single+combo) macro F1; FAR split into NI / OOD / Total.
@@ -117,28 +187,32 @@ def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path
     # "all-zero positive class" and conflate defect detection with non-defect
     # rejection, masking the real signal. bit_F1 + FAR split is the only metric.
     lines.append("## Results — bit_F1 / FAR (CLAUDE.md 260512 absolute rule)\n")
-    lines.append("| cell | bit_F1 | NI_FAR | OOD_FAR | Total_FAR | T | sec |")
-    lines.append("|---|---|---|---|---|---|---|")
+    lines.append("| cell | bit_F1 | NI_FAR | OOD_FAR | Total_FAR | sec |")
+    lines.append("|---|---|---|---|---|---|")
     for c in sorted(cells, key=lambda x: -paper[x.cell_id]["bit_F1"]):
         p = paper[c.cell_id]
         lines.append(
             f"| **{c.cell_id}** | {p['bit_F1']:.4f} | {p['NI_FAR']*100:.2f}% | "
             f"{p['OOD_FAR']*100:.2f}% | {p['Total_FAR']*100:.2f}% | "
-            f"{c.temperature:.3f} | {c.elapsed_sec:.1f} |"
+            f"{c.elapsed_sec:.1f} |"
         )
-    lines.append("\n## Best cell per-class F1\n")
+    lines.append("\n## Best cell per-class bit_F1 / FAR\n")
     bp = paper[best_cell.cell_id]
     lines.append(f"**{best_cell.cell_id}** bit_F1={bp['bit_F1']:.4f} "
                  f"NI_FAR={bp['NI_FAR']*100:.2f}% OOD_FAR={bp['OOD_FAR']*100:.2f}% "
                  f"Total_FAR={bp['Total_FAR']*100:.2f}%\n")
-    lines.append("| class | F1 | threshold |")
+    lines.append("| bit class | bit_F1 | threshold |")
     lines.append("|---|---|---|")
     for c in TRAIN_CLASSES:
-        lines.append(f"| {c} | {best_cell.per_class_f1.get(c, 0.0):.4f} | {best_cell.threshold_dict.get(c, 0.0):.4f} |")
+        lines.append(f"| {c} | {bp.get('per_bit_F1', {}).get(c, 0.0):.4f} | {best_cell.threshold_dict.get(c, 0.0):.4f} |")
+    lines.append("\n| negative class | FAR | FP/N |")
+    lines.append("|---|---|---|")
+    for c, v in bp.get("per_class_FAR_counts", {}).items():
+        lines.append(f"| {c} | {v.get('chip_FAR', 0.0)*100:.2f}% | {v.get('fp', 0)}/{v.get('n', 0)} |")
     lines.append("\n## Per-cell threshold dict\n")
     for c in cells:
         thr_str = " ".join(f"{k}={v:.3f}" for k, v in c.threshold_dict.items())
-        lines.append(f"- **{c.cell_id}** T={c.temperature:.3f}  thresh: {thr_str}")
+        lines.append(f"- **{c.cell_id}** thresh: {thr_str}")
     lines.append("\n## Files\n")
     lines.append("- `results_matrix.parquet` — 6 row matrix")
     lines.append("- `per_class_metrics.parquet` — per cell × per class")
@@ -162,6 +236,8 @@ def main() -> None:
                     help="comma-separated subset of inference variants (I0..I11)")
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--num-workers", type=int, default=0)
+    ap.add_argument("--forward-progress-every", type=int, default=10,
+                    help="print stage1 forward progress every N batches (0 = time-based only).")
     ap.add_argument("--device", default=None)
     ap.add_argument("--val-ratio", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=42)
@@ -252,10 +328,13 @@ def main() -> None:
     inv_mask, inv_score = _compute_invalid_masks(records)
     print(f"[stage1]   invalid detected pred={int(inv_mask.sum())} (gt={sum(r.is_invalid_gt for r in records)})")
 
-    print(f"[stage1] forward pass")
+    print(f"[stage1] forward pass batch={args.batch_size} workers={args.num_workers} "
+          f"N={len(ds)}")
     t0 = time.time()
     logits_full = forward_all_logits(model, ds, device, batch_size=args.batch_size,
-                                    num_workers=args.num_workers, tta=False)
+                                    num_workers=args.num_workers, tta=False,
+                                    progress_label="[stage1] forward",
+                                    progress_every=args.forward_progress_every)
     print(f"[stage1]   {logits_full.shape}  {time.time() - t0:.1f}s")
 
     cells: List[CellResult] = []
@@ -273,8 +352,15 @@ def main() -> None:
             invalid_score=inv_score,
             train_id="T0",
         )
-        print(f"[stage1]   {cell.cell_id}  macro_f1={cell.macro_f1:.4f}  top1_11={cell.top1_11class:.4f}  T={cell.temperature:.3f}  ({cell.elapsed_sec:.1f}s)")
+        paper_one = _compute_paper_metrics_per_cell([cell])[cell.cell_id]
+        _print_paper_metrics(
+            f"[stage1]   {cell.cell_id}  ",
+            paper_one,
+            suffix=f"  ({cell.elapsed_sec:.1f}s)",
+        )
         cells.append(cell)
+
+    paper_metrics = _compute_paper_metrics_per_cell(cells)
 
     # aggregate writes
     matrix_rows: List[Dict] = []
@@ -284,21 +370,18 @@ def main() -> None:
     error_rows: List[Dict] = []
     thresholds_payload: Dict[str, Dict] = {}
     for c in cells:
+        pm = paper_metrics[c.cell_id]
         matrix_rows.append({
             "cell_id": c.cell_id,
             "train_id": c.train_id,
             "inference_id": c.inference_id,
             "n_eval": c.n_eval,
-            "macro_f1": c.macro_f1,
-            "micro_f1": c.micro_f1,
-            "mAP": c.mAP,
-            "hamming_loss": c.hamming_loss,
-            "subset_accuracy": c.subset_accuracy,
-            "top1_11class": c.top1_11class,
-            "ece_pre": c.ece_pre,
-            "ece_post": c.ece_post,
-            "temperature": c.temperature,
-            "per_class_f1": json.dumps(c.per_class_f1),
+            "eval_bit_F1": pm["bit_F1"],
+            "eval_NI_FAR": pm["NI_FAR"],
+            "eval_OOD_FAR": pm["OOD_FAR"],
+            "eval_Total_FAR": pm["Total_FAR"],
+            "eval_per_bit_F1": json.dumps(pm.get("per_bit_F1", {})),
+            "eval_per_class_FAR": json.dumps(pm.get("per_class_FAR_counts", {})),
             "threshold_dict": json.dumps(c.threshold_dict),
             "elapsed_sec": c.elapsed_sec,
         })
@@ -307,7 +390,6 @@ def main() -> None:
         preds_rows.extend(c.preds_rows)
         error_rows.extend(c.error_rows)
         thresholds_payload[c.cell_id] = {
-            "temperature": c.temperature,
             "thresholds": c.threshold_dict,
             "invalid_white_ratio": 0.95,
         }
@@ -318,32 +400,51 @@ def main() -> None:
     write_preds_parquet(preds_rows, out_root / "preds_chip.parquet")
     write_errors(error_rows, out_root / "errors.parquet")
     write_thresholds_json(thresholds_payload, out_root / "thresholds.json")
+    with open(out_root / "bit_far_metrics.json", "w", encoding="utf-8") as f:
+        json.dump(paper_metrics, f, indent=2, ensure_ascii=False)
 
-    best = max(cells, key=lambda c: c.macro_f1)
-    print(f"\n[stage1] BEST cell: {best.cell_id}  macro_f1={best.macro_f1:.4f}  top1_11={best.top1_11class:.4f}")
+    best = max(cells, key=lambda c: (
+        paper_metrics[c.cell_id]["bit_F1"],
+        -paper_metrics[c.cell_id]["Total_FAR"],
+    ))
+    best_pm = paper_metrics[best.cell_id]
+    print("")
+    _print_paper_metrics(f"[stage1] BEST cell: {best.cell_id}  ", best_pm)
     _save_errors_for_cell(best, out_root, cap_per_type=args.error_cap)
 
     write_eval_summary({
         "run_dir": str(out_root),
         "ts": ts,
-        "model_meta": meta,
+        "model_meta": {k: v for k, v in meta.items() if k != "val_macro_f1"},
         "n_eval": len(eval_idx),
         "n_val": len(val_idx),
         "n_classes": 11,
         "stage1": {
             "best_cell_id": best.cell_id,
-            "best_macro_f1": best.macro_f1,
+            "best_eval_bit_F1": best_pm["bit_F1"],
+            "best_eval_NI_FAR": best_pm["NI_FAR"],
+            "best_eval_OOD_FAR": best_pm["OOD_FAR"],
+            "best_eval_Total_FAR": best_pm["Total_FAR"],
+            "best_eval_per_bit_F1": best_pm.get("per_bit_F1", {}),
+            "best_eval_per_class_FAR": best_pm.get("per_class_FAR_counts", {}),
             "all_cells": [
-                {"cell_id": c.cell_id, "macro_f1": c.macro_f1, "top1_11class": c.top1_11class,
-                 "temperature": c.temperature, "ece_pre": c.ece_pre, "ece_post": c.ece_post}
+                {"cell_id": c.cell_id,
+                 "eval_bit_F1": paper_metrics[c.cell_id]["bit_F1"],
+                 "eval_NI_FAR": paper_metrics[c.cell_id]["NI_FAR"],
+                 "eval_OOD_FAR": paper_metrics[c.cell_id]["OOD_FAR"],
+                 "eval_Total_FAR": paper_metrics[c.cell_id]["Total_FAR"],
+                 "eval_per_bit_F1": paper_metrics[c.cell_id].get("per_bit_F1", {}),
+                 "eval_per_class_FAR": paper_metrics[c.cell_id].get("per_class_FAR_counts", {})}
                 for c in cells
             ],
         },
-        "primary_metric": "macro_f1",
-        "primary_metric_value": best.macro_f1,
+        "primary_metric": "eval_bit_F1",
+        "primary_metric_value": best_pm["bit_F1"],
+        "secondary_metric": "eval_Total_FAR",
+        "secondary_metric_value": best_pm["Total_FAR"],
     }, out_root / "eval_summary.json")
 
-    _write_report(cells, best, out_root)
+    _write_report(cells, best, out_root, paper_metrics)
     print(f"\n[stage1] DONE — outputs at {out_root}")
     print(f"[stage1] report: {out_root / 'report.md'}")
 

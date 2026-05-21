@@ -68,18 +68,46 @@ I13_NORMAL_PROB_MAX = 0.55
 @torch.no_grad()
 def forward_all_logits(model: torch.nn.Module, ds: ChipEvalDataset, device: torch.device,
                       batch_size: int = 32, num_workers: int = 0,
-                      tta: bool = False) -> np.ndarray:
+                      tta: bool = False, progress_label: str | None = None,
+                      progress_every: int = 10) -> np.ndarray:
     """Returns logits_full: (N, num_classes_full=5)."""
-    loader = DataLoader(ds, batch_size=batch_size, num_workers=num_workers, shuffle=False)
+    loader = DataLoader(
+        ds, batch_size=batch_size, num_workers=num_workers, shuffle=False,
+        pin_memory=(device.type == "cuda"),
+        persistent_workers=(num_workers > 0),
+    )
     parts: List[np.ndarray] = []
     use_amp = device.type == "cuda"
     autocast = torch.amp.autocast if hasattr(torch.amp, "autocast") else torch.cuda.amp.autocast
-    for x, _ in loader:
+    total_batches = len(loader)
+    t0 = time.time()
+    last_print = t0
+    if progress_label:
+        print(f"{progress_label} start N={len(ds)} batch={batch_size} "
+              f"workers={num_workers} batches={total_batches}", flush=True)
+    for bi, (x, _) in enumerate(loader, start=1):
+        if progress_label and bi == 1:
+            print(f"{progress_label} first batch loaded", flush=True)
         x = x.to(device, non_blocking=True)
         if not tta:
             with autocast(device_type=device.type, enabled=use_amp):
                 out = model(x)
             parts.append(out.detach().float().cpu().numpy())
+            if progress_label:
+                now = time.time()
+                should_print = (
+                    bi == 1 or bi == total_batches
+                    or (progress_every > 0 and bi % progress_every == 0)
+                    or (now - last_print) >= 30.0
+                )
+                if should_print:
+                    done = min(bi * batch_size, len(ds))
+                    rate = done / max(now - t0, 1e-6)
+                    remain = max(len(ds) - done, 0) / max(rate, 1e-6)
+                    print(f"{progress_label} {done}/{len(ds)} chips "
+                          f"({bi}/{total_batches} batches) "
+                          f"{rate:.1f} chip/s eta={remain:.0f}s", flush=True)
+                    last_print = now
             continue
         # TTA 4 views
         accum = None
@@ -93,6 +121,21 @@ def forward_all_logits(model: torch.nn.Module, ds: ChipEvalDataset, device: torc
             o = out.detach().float().cpu().numpy()
             accum = o if accum is None else accum + o
         parts.append(accum / 4.0)
+        if progress_label:
+            now = time.time()
+            should_print = (
+                bi == 1 or bi == total_batches
+                or (progress_every > 0 and bi % progress_every == 0)
+                or (now - last_print) >= 30.0
+            )
+            if should_print:
+                done = min(bi * batch_size, len(ds))
+                rate = done / max(now - t0, 1e-6)
+                remain = max(len(ds) - done, 0) / max(rate, 1e-6)
+                print(f"{progress_label} {done}/{len(ds)} chips "
+                      f"({bi}/{total_batches} batches) "
+                      f"{rate:.1f} chip/s eta={remain:.0f}s", flush=True)
+                last_print = now
     return np.concatenate(parts, axis=0)
 
 

@@ -9,17 +9,31 @@ import glob
 import ast
 import math
 import os
+import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from chip_multilabel._bit_metrics import compute_bit_metrics
 
 
 BITS = ['bank_boundary', 'fork', 'scratch', 'scratch_rot']
 SHORT = {'bank_boundary': 'bb', 'fork': 'fk', 'scratch': 'sc', 'scratch_rot': 'sr'}
+SEL_LABEL = {'f1': 'val_f1', 'margin_max': 'val_margin'}
+SEL_ALIAS = {
+    'f1': 'f1',
+    'val_f1': 'f1',
+    'margin': 'margin_max',
+    'val_margin': 'margin_max',
+    'margin_max': 'margin_max',
+}
 
 # OUT_BASE / MODEL_BASE = the GROUP folder for this run (TS-prefixed)
 # Group dir convention: $OUT_BASE/<TS>_<backbone>/
@@ -43,9 +57,19 @@ def _sizes_env(name, default):
         return default
     return [x.strip() for x in v.replace(',', ' ').split() if x.strip()]
 
+
+def _sels_env(name, default):
+    out = []
+    for raw in _sizes_env(name, default):
+        sel = SEL_ALIAS.get(raw, raw)
+        if sel not in out:
+            out.append(sel)
+    return out
+
+
 TRAIN_NS = [int(x) for x in _sizes_env("MEGA_TRAIN_SIZES", ["50", "100", "200", "400"])]
 EVAL_NS = _sizes_env("MEGA_EVAL_SIZES", ["200", "2000", "20000"])
-SELS = _sizes_env("MEGA_SELS", ["f1", "margin_max"])
+SELS = _sels_env("MEGA_SELS", ["f1", "margin_max"])
 
 
 def find_model_root(tn, sel):
@@ -78,7 +102,7 @@ def metric_one_eval(eval_dir, cell='T0__I13'):
     """Return dict with bit_F1, Total FAR, per-class F1, per-group prob stats."""
     pchip = Path(eval_dir) / 'preds_chip.parquet'
     thr_path = Path(eval_dir) / 'thresholds.json'
-    if not pchip.exists() or not thr_path.exists():
+    if not pchip.exists():
         return None
     df = pd.read_parquet(pchip)
     sub = df[df['cell_id'] == cell].copy()
@@ -91,43 +115,35 @@ def metric_one_eval(eval_dir, cell='T0__I13'):
 
     pos = sub[sub['group'].isin(['single', '2-combo'])]
     neg = sub[sub['group'].apply(lambda g: g in ['Normal', 'Invalid'] or g.startswith('OOD_'))]
+    ni_sub = sub[sub['group'].isin(['Normal', 'Invalid'])]
+    ood_sub = sub[sub['group'].apply(lambda g: g.startswith('OOD_'))]
 
-    thr = json.load(open(thr_path))[cell]['thresholds']
+    bit_metrics = compute_bit_metrics(sub)
+    per_bit = {
+        b: float(bit_metrics.get('per_bit_F1_positive', {}).get(b, {}).get('f1', float('nan')))
+        for b in BITS
+    }
+    bit_F1 = float(bit_metrics.get('macro_F1_positive', float('nan')))
+    far = float(bit_metrics.get('chip_FAR', 0.0))
+    ni_far = float(bit_metrics.get('normal_invalid_chip_FAR', 0.0))
+    ood_far_total = float(bit_metrics.get('ood_chip_FAR', 0.0))
 
-    # Per-bit F1 (positive group, absolute rule)
-    per_bit = {}
-    f1_list = []
-    for b in BITS:
-        if len(pos) == 0:
-            per_bit[b] = float('nan')
-            continue
-        gt = pos['true_labels'].apply(lambda l: int(b in l)).values
-        pred = (pos[f'prob_{b}'].values >= thr[b]).astype(int)
-        per_bit[b] = float(f1_score(gt, pred, zero_division=0))
-        f1_list.append(per_bit[b])
-    bit_F1 = float(np.mean(f1_list)) if f1_list else float('nan')
-
-    # Total FAR (negative groups)
-    fp = int(neg['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(neg) else 0
-    far = fp / max(len(neg), 1)
-
-    # Split: NI (Normal + Invalid) vs OOD (wafer-pattern OOD only)
-    ni_mask = sub['group'].isin(['Normal', 'Invalid'])
-    ood_mask = sub['group'].apply(lambda g: g.startswith('OOD_'))
-    ni_sub = sub[ni_mask]
-    ood_sub = sub[ood_mask]
-    ni_fp = int(ni_sub['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(ni_sub) else 0
-    ood_fp = int(ood_sub['pred_labels'].apply(lambda x: len(x) > 0).sum()) if len(ood_sub) else 0
-    ni_far = ni_fp / max(len(ni_sub), 1)
-    ood_far_total = ood_fp / max(len(ood_sub), 1)
-
-    # Per-OOD class FAR (kept for per-class breakdown table)
+    # Per-negative-class FAR (kept for class breakdown table). OOD keys keep the
+    # legacy OOD_ prefix used by the existing markdown table.
     ood_far = {}
-    for grp in sub['group'].unique():
-        if grp.startswith('OOD_') or grp in ['Normal', 'Invalid']:
-            ssub = sub[sub['group'] == grp]
-            fp_g = int(ssub['pred_labels'].apply(lambda x: len(x) > 0).sum())
-            ood_far[grp] = (fp_g, len(ssub), fp_g / max(len(ssub), 1))
+    for cls, stat in bit_metrics.get('per_class_FAR', {}).items():
+        key = f'OOD_{cls}' if cls not in ('Normal', 'Invalid') else cls
+        fp_g = int(stat.get('FAR_chip_count', 0))
+        n_g = int(stat.get('n_chips', 0))
+        if n_g == 0:
+            continue
+        rate = float(stat.get('chip_FAR', 0.0))
+        ood_far[key] = (fp_g, n_g, rate)
+
+    if thr_path.exists():
+        thr = json.load(open(thr_path, encoding='utf-8')).get(cell, {}).get('thresholds', {})
+    else:
+        thr = {}
 
     # Per-group active/inactive prob stats
     prob_stats = {}
@@ -150,6 +166,7 @@ def metric_one_eval(eval_dir, cell='T0__I13'):
         'n_ni': len(ni_sub),
         'n_ood': len(ood_sub),
         'per_bit_F1': per_bit,
+        'per_class_FAR': ood_far,
         'ood_far': ood_far,
         'prob_stats': prob_stats,
         'thresholds': thr,
@@ -182,15 +199,105 @@ def collect_all():
                     'train_n': tn,
                     'selection': sel,
                     'eval_n': en,
+                    'run_dir': str(run),
+                    'eval_dir': str(eval_dir),
+                    'cell': 'T0__I13',
                     **m,
                 })
     return rows
 
 
+def expected_result_keys():
+    return {(tn, sel, str(en)) for tn in TRAIN_NS for sel in SELS for en in EVAL_NS}
+
+
+def result_key(row):
+    return (int(row['train_n']), str(row['selection']), str(row['eval_n']))
+
+
+def missing_result_keys(rows):
+    found = {result_key(r) for r in rows}
+    missing = expected_result_keys() - found
+    return sorted(missing, key=lambda x: (x[0], x[1], x[2]))
+
+
+def missing_required_selections():
+    required = {'f1', 'margin_max'}
+    return sorted(required - set(SELS))
+
+
+def expected_plot_names(rows):
+    names = [
+        'bit_F1_heatmap.png',
+        'total_far_heatmap.png',
+        'ni_far_heatmap.png',
+        'ood_far_heatmap.png',
+        'scaling_curves.png',
+        'combined_bit_far_by_sel.png',
+        'bit_F1_by_sel.png',
+        'far_by_sel.png',
+    ]
+    if paired_selection_rows(rows):
+        names.insert(0, 'best_model_eval_by_selection.png')
+    return names
+
+
+def assert_expected_plots(rows):
+    missing = []
+    for name in expected_plot_names(rows):
+        path = FIG_DIR / name
+        if not path.exists() or path.stat().st_size <= 0:
+            missing.append(path)
+    if missing:
+        print("[make_report] ERROR: missing plot files:")
+        for path in missing:
+            print(f"   - {path}")
+        raise SystemExit(1)
+
+
+def sel_label(sel: str) -> str:
+    return SEL_LABEL.get(sel, f"val_{sel}")
+
+
+def paired_selection_rows(rows):
+    """Side-by-side val_f1 vs val_margin eval metrics for every condition."""
+    out = []
+    left = 'f1'
+    right = 'margin_max'
+    for tn in TRAIN_NS:
+        for en in EVAL_NS:
+            r_f1 = next((r for r in rows if r['train_n'] == tn
+                         and r['selection'] == left and r['eval_n'] == en), None)
+            r_mg = next((r for r in rows if r['train_n'] == tn
+                         and r['selection'] == right and r['eval_n'] == en), None)
+            if not (r_f1 or r_mg):
+                continue
+            out.append({
+                'train_n': tn,
+                'eval_n': en,
+                'val_f1': r_f1,
+                'val_margin': r_mg,
+            })
+    return out
+
+
+def format_pct(v) -> str:
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return "NA"
+    return f"{float(v) * 100:.2f}%"
+
+
+def format_float(v) -> str:
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return "NA"
+    return f"{float(v):.4f}"
+
+
 def write_table_md(rows, fpath):
     out = []
-    out.append("# Mega Matrix Sweep — `train {50/100/200}` × `eval {200/2000/20000}` × `selection {val_f1, val_margin}`\n")
-    out.append("Run date: 2026-05-13\n")
+    out.append("# Mega Matrix Sweep - best-model eval bit_F1 / FAR\n")
+    out.append(f"Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    out.append(f"Sweep axes: train={TRAIN_NS}, eval={EVAL_NS}, selection={[sel_label(s) for s in SELS]}\n")
     out.append("\n")
 
     # ====== Section A: Method explanation ======
@@ -221,18 +328,41 @@ def write_table_md(rows, fpath):
 4. Gate threshold coupling — paper deployment must report gate value
 """)
 
+    # ====== Section A2: User-requested final selection table ======
+    out.append("\n## 2. Best-model eval performance - val_f1 vs val_margin\n\n")
+    out.append("Each row evaluates the trained `best_model.pth` selected by the listed validation criterion. Metrics are from cell `T0__I13` and use eval bit_F1 plus chip-level FAR.\n\n")
+    out.append("| train_n | eval_n | val_f1 eval bit_F1 | val_f1 eval FAR | val_f1 NI FAR | val_f1 OOD FAR | val_margin eval bit_F1 | val_margin eval FAR | val_margin NI FAR | val_margin OOD FAR | d bit_F1 | d FAR |\n")
+    out.append("|---|---|---|---|---|---|---|---|---|---|---|---|\n")
+    for pr in paired_selection_rows(rows):
+        r_f1 = pr['val_f1']
+        r_mg = pr['val_margin']
+        f1_bit = r_f1['bit_F1'] if r_f1 else None
+        mg_bit = r_mg['bit_F1'] if r_mg else None
+        f1_far = r_f1['total_far'] if r_f1 else None
+        mg_far = r_mg['total_far'] if r_mg else None
+        d_bit = (mg_bit - f1_bit) if (r_f1 and r_mg) else None
+        d_far = (mg_far - f1_far) if (r_f1 and r_mg) else None
+        out.append(
+            f"| {pr['train_n']} | {pr['eval_n']} | "
+            f"{format_float(f1_bit)} | {format_pct(f1_far)} | "
+            f"{format_pct(r_f1['ni_far'] if r_f1 else None)} | {format_pct(r_f1['ood_far_total'] if r_f1 else None)} | "
+            f"{format_float(mg_bit)} | {format_pct(mg_far)} | "
+            f"{format_pct(r_mg['ni_far'] if r_mg else None)} | {format_pct(r_mg['ood_far_total'] if r_mg else None)} | "
+            f"{format_float(d_bit)} | {format_pct(d_far)} |\n"
+        )
+
     # ====== Section B: Main results table ======
-    out.append("\n## 2. Main results matrix\n")
+    out.append("\n## 3. Main results matrix\n")
     out.append("\n**Metric definitions**:\n")
-    out.append("- `bit_F1` = absolute rule: macro-F1 over (single + 2-combo) positive bits (threshold per-bit auto-tuned)\n")
-    out.append("- `Total FAR` = (Normal + Invalid + OOD) chips with non-empty pred_labels / total negatives\n")
+    out.append("- `bit_F1` = absolute rule: macro-F1 over (single + 2-combo) positive bits, using final `pred_labels`\n")
+    out.append("- `Total FAR` = (Normal + Invalid + OOD) chips with non-empty defect `pred_labels` / total negatives\n")
     out.append("- Cell `T0__I13` selected (entropy gate + Invalid heuristic, paper SOTA cell)\n\n")
 
     out.append("\n| train n | selection | eval n | n_pos | n_neg | bit_F1 | Total FAR | NI FAR | OOD FAR | bb F1 | fork F1 | sc F1 | sr F1 |\n")
     out.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
     for r in rows:
         out.append(
-            f"| {r['train_n']} | {r['selection']} | {r['eval_n']} | "
+            f"| {r['train_n']} | {sel_label(r['selection'])} | {r['eval_n']} | "
             f"{r['n_pos']} | {r['n_neg']} | "
             f"**{r['bit_F1']:.4f}** | **{r['total_far']*100:.2f}%** | "
             f"{r['ni_far']*100:.2f}% | {r['ood_far_total']*100:.2f}% | "
@@ -243,12 +373,13 @@ def write_table_md(rows, fpath):
         )
 
     # ====== Section C: val_f1 vs val_margin side-by-side ======
-    out.append("\n## 3. `val_f1` vs `val_margin` direct comparison (per train_n, fixed eval=2000)\n\n")
+    compare_eval = '2000' if '2000' in EVAL_NS else (EVAL_NS[-1] if EVAL_NS else '')
+    out.append(f"\n## 4. `val_f1` vs `val_margin` direct comparison (per train_n, fixed eval={compare_eval})\n\n")
     out.append("\n| train_n | bit_F1 (val_f1) | bit_F1 (val_margin) | Δ | FAR (val_f1) | FAR (val_margin) | Δ FAR |\n")
     out.append("|---|---|---|---|---|---|---|\n")
     for tn in TRAIN_NS:
-        r_f1 = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'f1' and r['eval_n'] == '2000'), None)
-        r_mg = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'margin_max' and r['eval_n'] == '2000'), None)
+        r_f1 = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'f1' and r['eval_n'] == compare_eval), None)
+        r_mg = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'margin_max' and r['eval_n'] == compare_eval), None)
         if r_f1 and r_mg:
             d_bit = r_mg['bit_F1'] - r_f1['bit_F1']
             d_far = r_mg['total_far'] - r_f1['total_far']
@@ -259,11 +390,11 @@ def write_table_md(rows, fpath):
             )
 
     # ====== Section D: Per-OOD class FAR breakdown ======
-    out.append("\n## 4. Per-class FAR breakdown (val_margin, eval=2000)\n\n")
+    out.append(f"\n## 5. Per-class FAR breakdown (val_margin, eval={compare_eval})\n\n")
     out.append("\n| train_n | Normal | Invalid | CenterDonut | CrossScratch | DiagonalSmear | Starburst |\n")
     out.append("|---|---|---|---|---|---|---|\n")
     for tn in TRAIN_NS:
-        r = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'margin_max' and r['eval_n'] == '2000'), None)
+        r = next((r for r in rows if r['train_n'] == tn and r['selection'] == 'margin_max' and r['eval_n'] == compare_eval), None)
         if not r:
             continue
         cells = []
@@ -276,8 +407,9 @@ def write_table_md(rows, fpath):
         out.append(f"| {tn} | " + " | ".join(cells) + " |\n")
 
     # ====== Section E: Per-defect class detail ======
-    out.append("\n## 5. Per-defect group prob distribution (val_margin, train=200, eval=2000)\n\n")
-    r_main = next((r for r in rows if r['train_n'] == 200 and r['selection'] == 'margin_max' and r['eval_n'] == '2000'), None)
+    detail_train = 200 if 200 in TRAIN_NS else (TRAIN_NS[-1] if TRAIN_NS else 0)
+    out.append(f"\n## 6. Per-defect group prob distribution (val_margin, train={detail_train}, eval={compare_eval})\n\n")
+    r_main = next((r for r in rows if r['train_n'] == detail_train and r['selection'] == 'margin_max' and r['eval_n'] == compare_eval), None)
     if r_main:
         ps = r_main['prob_stats']
         out.append("| group | n | bb_pos | bb_neg | fk_pos | fk_neg | sc_pos | sc_neg | sr_pos | sr_neg |\n")
@@ -296,8 +428,8 @@ def write_table_md(rows, fpath):
                        f"{fmt('sr_pos')} | {fmt('sr_neg')} |\n")
 
     # ====== Section F: Analysis ======
-    out.append("\n## 6. Analysis\n\n")
-    out.append("### 6.1 Selection criterion impact\n")
+    out.append("\n## 7. Analysis\n\n")
+    out.append("### 7.1 Selection criterion impact\n")
     if rows:
         f1_avg_bit = np.mean([r['bit_F1'] for r in rows if r['selection'] == 'f1'])
         mg_avg_bit = np.mean([r['bit_F1'] for r in rows if r['selection'] == 'margin_max'])
@@ -306,7 +438,7 @@ def write_table_md(rows, fpath):
         out.append(f"- avg bit_F1: val_f1={f1_avg_bit:.4f} vs val_margin={mg_avg_bit:.4f} ({(mg_avg_bit - f1_avg_bit):+.4f})\n")
         out.append(f"- avg Total FAR: val_f1={f1_avg_far*100:.2f}% vs val_margin={mg_avg_far*100:.2f}% ({(mg_avg_far - f1_avg_far)*100:+.2f}%)\n")
 
-    out.append("\n### 6.2 Train data scaling\n")
+    out.append("\n### 7.2 Train data scaling\n")
     for sel in SELS:
         out.append(f"\n**{sel}**:\n")
         for tn in TRAIN_NS:
@@ -316,7 +448,7 @@ def write_table_md(rows, fpath):
                 avg_far = np.mean([r['total_far'] for r in rs])
                 out.append(f"  - train={tn}: bit_F1={avg_bit:.4f}, FAR={avg_far*100:.2f}%\n")
 
-    out.append("\n### 6.3 Eval size impact (statistical power)\n")
+    out.append("\n### 7.3 Eval size impact (statistical power)\n")
     for en in EVAL_NS:
         rs = [r for r in rows if r['eval_n'] == en]
         if rs:
@@ -324,7 +456,38 @@ def write_table_md(rows, fpath):
             out.append(f"  - eval={en}: avg bit_F1={avg_bit:.4f} (n_pos={rs[0]['n_pos']}, n_neg={rs[0]['n_neg']})\n")
 
     # ====== Section G: Plots ======
-    out.append("\n## 7. Plots\n\n")
+    out.append("\n## 8. Plots\n\n")
+
+    # Plot 0: explicit final val_f1 vs val_margin best-model eval performance.
+    pairs = paired_selection_rows(rows)
+    if pairs:
+        x = np.arange(len(pairs))
+        labels = [f"t{p['train_n']}\ne{p['eval_n']}" for p in pairs]
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(max(10, len(pairs) * 0.75), 8), sharex=True)
+        for key, label, color in [('val_f1', 'val_f1 best_model', 'tab:blue'),
+                                  ('val_margin', 'val_margin best_model', 'tab:green')]:
+            ys = [p[key]['bit_F1'] if p[key] else np.nan for p in pairs]
+            ax1.plot(x, ys, marker='o', label=label, color=color)
+        for key, label, color in [('val_f1', 'val_f1 best_model', 'tab:red'),
+                                  ('val_margin', 'val_margin best_model', 'tab:orange')]:
+            ys = [p[key]['total_far'] * 100 if p[key] else np.nan for p in pairs]
+            ax2.plot(x, ys, marker='s', label=label, color=color)
+        ax1.set_ylabel('eval bit_F1')
+        ax1.set_title('Best-model eval bit_F1 by validation selection')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(fontsize=9)
+        ax2.set_ylabel('eval Total FAR (%)')
+        ax2.set_xlabel('condition (train_n / eval_n)')
+        ax2.set_title('Best-model eval FAR by validation selection')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend(fontsize=9)
+        ax2.set_xticks(x)
+        ax2.set_xticklabels(labels, rotation=0)
+        plt.tight_layout()
+        plt.savefig(FIG_DIR / 'best_model_eval_by_selection.png', dpi=120)
+        plt.close()
+        out.append("### Plot 0 - Best-model eval bit_F1/FAR by validation selection\n\n")
+        out.append("![best-model eval by selection](figs_mega/best_model_eval_by_selection.png)\n\n")
 
     # Plot 1: bit_F1 heatmap (3 train × 3 eval, separate per selection)
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -551,7 +714,7 @@ def write_table_md(rows, fpath):
     out.append("![FAR by sel](figs_mega/far_by_sel.png)\n\n")
 
     # ====== Footer ======
-    out.append("\n## 8. Recipe (all cells)\n\n")
+    out.append("\n## 9. Recipe (all cells)\n\n")
     out.append("```\n")
     out.append("backbone: convnextv2_base.fcmae_ft_in22k_in1k_384\n")
     out.append("variant T7 (BCE+LS=0.30)  epochs 10  batch 2 accum 8 seed 1\n")
@@ -566,11 +729,42 @@ def write_table_md(rows, fpath):
     return out
 
 
+def print_final_selection_summary(rows):
+    pairs = paired_selection_rows(rows)
+    if not pairs:
+        print("[make_report] final selection table: no val_f1/val_margin pairs found")
+        return
+    print("[make_report] final val_f1 vs val_margin best_model eval performance (cell=T0__I13)")
+    print("[make_report] train eval | val_f1 bit_F1/FAR | val_margin bit_F1/FAR | d_bit_F1 d_FAR")
+    for p in pairs:
+        r_f1 = p['val_f1']
+        r_mg = p['val_margin']
+        f1_bit = r_f1['bit_F1'] if r_f1 else None
+        mg_bit = r_mg['bit_F1'] if r_mg else None
+        f1_far = r_f1['total_far'] if r_f1 else None
+        mg_far = r_mg['total_far'] if r_mg else None
+        d_bit = (mg_bit - f1_bit) if (r_f1 and r_mg) else None
+        d_far = (mg_far - f1_far) if (r_f1 and r_mg) else None
+        print("[make_report] "
+              f"t{p['train_n']} e{p['eval_n']} | "
+              f"{format_float(f1_bit)}/{format_pct(f1_far)} | "
+              f"{format_float(mg_bit)}/{format_pct(mg_far)} | "
+              f"{format_float(d_bit)} {format_pct(d_far)}")
+
+
 def main():
     print(f"[make_report] GROUP_DIR={GROUP_DIR}")
     print(f"[make_report] sweep axes: TRAIN_NS={TRAIN_NS} EVAL_NS={EVAL_NS} SELS={SELS}")
     print(f"[make_report] expected cells: {len(TRAIN_NS)*len(SELS)} train x {len(EVAL_NS)} eval = "
           f"{len(TRAIN_NS)*len(SELS)*len(EVAL_NS)}")
+    missing_sels = missing_required_selections()
+    if missing_sels:
+        print("[make_report] ERROR: final report requires both val_f1 and val_margin selections.")
+        print(f"[make_report] missing selections: {[sel_label(s) for s in missing_sels]}")
+        print("[make_report] Refusing f1-only or margin-only summary. Set MEGA_ALLOW_SINGLE_SELECTION=1 only for debugging.")
+        if os.environ.get("MEGA_ALLOW_SINGLE_SELECTION", "0") != "1":
+            raise SystemExit(1)
+        print("[make_report] WARN: MEGA_ALLOW_SINGLE_SELECTION=1, writing single-selection debug summary.")
     rows = collect_all()
     print(f"[make_report] Collected {len(rows)} eval results")
     if not rows:
@@ -583,9 +777,20 @@ def main():
             print(f"[make_report] looking for: train<TN>_<SEL>/<inner_run>/eval_<EN>/stage1_*/preds_chip.parquet")
         else:
             print(f"[make_report] GROUP_DIR does not exist (run training first).")
-        return
+        raise SystemExit(1)
+    missing = missing_result_keys(rows)
+    if missing:
+        print("[make_report] ERROR: incomplete eval results; missing cells:")
+        for tn, sel, en in missing:
+            print(f"   - train{tn}_{sel}/<inner_run>/eval_{en}/stage1_*/preds_chip.parquet")
+        print("[make_report] Refusing to write a partial summary. Set MEGA_ALLOW_PARTIAL_REPORT=1 only for debugging.")
+        if os.environ.get("MEGA_ALLOW_PARTIAL_REPORT", "0") != "1":
+            raise SystemExit(1)
+        print("[make_report] WARN: MEGA_ALLOW_PARTIAL_REPORT=1, writing partial summary anyway.")
     fpath = REPORT_DIR / 'summary_mega_sweep.md'
     write_table_md(rows, fpath)
+    assert_expected_plots(rows)
+    print_final_selection_summary(rows)
     print(f"[make_report] Report: {fpath}")
     print(f"[make_report] Figures: {FIG_DIR}/")
 

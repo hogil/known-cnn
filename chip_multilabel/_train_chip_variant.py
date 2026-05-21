@@ -22,6 +22,7 @@ except Exception:
 import argparse
 import json
 import os
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -59,6 +60,34 @@ def _maybe_tqdm(iterable, **kw):
     if _HAS_TQDM and _is_main_rank():
         return _tqdm(iterable, **kw)
     return iterable
+
+
+def _atomic_torch_save(payload, path: Path) -> None:
+    """Write torch checkpoint without exposing a partial final file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
+    try:
+        torch.save(payload, tmp)
+        os.replace(tmp, path)
+    except Exception as e:
+        try:
+            usage = shutil.disk_usage(path.parent)
+            free_gb = usage.free / (1024 ** 3)
+            total_gb = usage.total / (1024 ** 3)
+            print(f"[save] FAIL path={path} tmp={tmp} "
+                  f"disk_free={free_gb:.1f}GB/{total_gb:.1f}GB "
+                  f"error={type(e).__name__}: {e}", flush=True)
+        except Exception:
+            print(f"[save] FAIL path={path} tmp={tmp} "
+                  f"error={type(e).__name__}: {e}", flush=True)
+        raise
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+
 
 from .constants import DEFAULT_BACKBONE_CKPT, DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES, TRAIN_VARIANTS
 from .losses import BCEThenASL, build_loss
@@ -963,6 +992,28 @@ def main():
 
     scaler = torch.amp.GradScaler() if device.type == "cuda" else None
 
+    _mv_cache = None
+    if args.multi_val_set:
+        try:
+            from ._per_epoch_multi_eval import load_multi_val as _mv_load
+            _mv_cache = _mv_load(args.multi_val_set,
+                                 n_per_class=args.multi_val_n_per_class,
+                                 seed=args.seed, img_size=img_size)
+            print(f"[before epoch 1] train N={len(train_samples)} "
+                  f"trainval N={len(val_samples)} "
+                  f"eval N={len(_mv_cache['paths'])} "
+                  f"eval_set={args.multi_val_set} "
+                  f"eval_cap={args.multi_val_n_per_class}/class")
+        except Exception as e:
+            print(f"[before epoch 1] train N={len(train_samples)} "
+                  f"trainval N={len(val_samples)} eval N=LOAD_FAIL "
+                  f"eval_set={args.multi_val_set} "
+                  f"error={type(e).__name__}: {e}")
+            raise
+    else:
+        print(f"[before epoch 1] train N={len(train_samples)} "
+              f"trainval N={len(val_samples)} eval N=0 eval_set=None")
+
     history = []
     best_val_acc = float("-inf")
     best_epoch = -1
@@ -1559,13 +1610,6 @@ def main():
         # Optional: per-epoch class-level F1 + FAR on a multi-label val set
         if args.multi_val_set:
             try:
-                if "_mv_cache" not in locals() and "_mv_cache" not in globals():
-                    from ._per_epoch_multi_eval import load_multi_val as _mv_load
-                    _mv_cache = _mv_load(args.multi_val_set,
-                                         n_per_class=args.multi_val_n_per_class,
-                                         seed=args.seed, img_size=img_size)
-                    print(f"[multi-val] loaded {len(_mv_cache['paths'])} chips from "
-                          f"{args.multi_val_set} ({args.multi_val_n_per_class}/class)")
                 from ._per_epoch_multi_eval import evaluate as _mv_evaluate
                 from ._per_epoch_multi_eval import format_compact as _mv_format
                 eval_model = ema.module if ema is not None else (
@@ -1590,31 +1634,32 @@ def main():
         if val_for_best > best_val_acc and ep >= args.best_from_epoch:
             best_val_acc = val_for_best
             best_epoch = ep
-            save_state_dict = (ema.module.state_dict() if ema is not None
-                                else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
-            torch.save({
-                "model": save_state_dict,
-                "classes": list(TRAIN_CLASSES),
-                "img_size": img_size,
-                "backbone": backbone,
-                "val_acc": float(val_acc),
-                "epoch": ep,
-                "variant": args.variant,
-                "loss_name": loss_name,
-                "ema_decay": args.ema_decay,
-                "warmup_epochs": args.warmup_epochs,
-                "grad_clip": args.grad_clip,
-                "drop_path_rate": args.drop_path_rate,
-            }, out_dir / "best_model.pth")
-            # 260521 - explicit visibility: which epoch was selected, by which criterion
-            print(f"[train] UPDATE best_model.pth: ep{ep:02d} "
-                  f"val_{c}={val_for_best:.4f} (prev=ep{prev_best_ep:02d})", flush=True)
+            if _is_main_rank():
+                save_state_dict = (ema.module.state_dict() if ema is not None
+                                    else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
+                _atomic_torch_save({
+                    "model": save_state_dict,
+                    "classes": list(TRAIN_CLASSES),
+                    "img_size": img_size,
+                    "backbone": backbone,
+                    "val_acc": float(val_acc),
+                    "epoch": ep,
+                    "variant": args.variant,
+                    "loss_name": loss_name,
+                    "ema_decay": args.ema_decay,
+                    "warmup_epochs": args.warmup_epochs,
+                    "grad_clip": args.grad_clip,
+                    "drop_path_rate": args.drop_path_rate,
+                }, out_dir / "best_model.pth")
+                # 260521 - explicit visibility: which epoch was selected, by which criterion
+                print(f"[train] UPDATE best_model.pth: ep{ep:02d} "
+                      f"val_{c}={val_for_best:.4f} (prev=ep{prev_best_ep:02d})", flush=True)
         # 260512 — --save-every-epoch: per-epoch ckpt for multi-label selection bug fix
-        if args.save_every_epoch:
+        if args.save_every_epoch and _is_main_rank():
             if save_state_dict is None:
                 save_state_dict = (ema.module.state_dict() if ema is not None
                                 else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
-            torch.save({
+            _atomic_torch_save({
                 "model": save_state_dict,
                 "classes": list(TRAIN_CLASSES),
                 "img_size": img_size,
@@ -1624,6 +1669,8 @@ def main():
                 "variant": args.variant,
                 "loss_name": loss_name,
             }, out_dir / f"epoch_{ep:02d}_model.pth")
+        if _ddp:
+            dist.barrier()
 
     elapsed = time.time() - t_total
     print(f"[train] DONE  best_val_acc={best_val_acc:.4f} @ ep{best_epoch}  elapsed={elapsed:.1f}s")
@@ -1631,51 +1678,54 @@ def main():
     # 260506 — also save final-epoch model. val_acc (4-way single-class) often saturates
     # at ep1 for multi-hot training (e.g., sc+sr CutMix), causing best_model.pth to be
     # under-trained. final_epoch_model.pth captures end-of-training weights for comparison.
-    final_state = (ema.module.state_dict() if ema is not None
-                   else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
-    torch.save({
-        "model": final_state,
-        "classes": list(TRAIN_CLASSES),
-        "img_size": img_size,
-        "backbone": backbone,
-        "val_acc": float(val_acc),
-        "epoch": args.epochs,
-        "variant": args.variant,
-        "loss_name": loss_name,
-        "ema_decay": args.ema_decay,
-        "warmup_epochs": args.warmup_epochs,
-        "grad_clip": args.grad_clip,
-        "drop_path_rate": args.drop_path_rate,
-    }, out_dir / "final_epoch_model.pth")
-    print(f"[train] saved final_epoch_model.pth (ep{args.epochs}, val_acc={val_acc:.4f})")
-
-    with open(out_dir / "history.json", "w", encoding="utf-8") as f:
-        json.dump(history, f, indent=2)
-    with open(out_dir / "train_summary.json", "w", encoding="utf-8") as f:
-        json.dump({
+    if _is_main_rank():
+        final_state = (ema.module.state_dict() if ema is not None
+                       else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
+        _atomic_torch_save({
+            "model": final_state,
+            "classes": list(TRAIN_CLASSES),
+            "img_size": img_size,
+            "backbone": backbone,
+            "val_acc": float(val_acc),
+            "epoch": args.epochs,
             "variant": args.variant,
             "loss_name": loss_name,
-            "best_val_acc": best_val_acc,
-            "best_epoch": best_epoch,
-            "final_val_acc": float(val_acc),
-            "final_epoch": args.epochs,
-            "epochs": args.epochs,
-            "elapsed_sec": elapsed,
-            "n_train": len(train_samples),
-            "n_val": len(val_samples),
-            "ts": ts,
-            "out_dir": str(out_dir),
-            "no_normal": bool(args.no_normal),
-            "ls": (None if args.ls is None else float(args.ls)),
-            "cutmix_p": float(args.cutmix_p),
-            "cutmix_mode": str(args.cutmix_mode),
-            "cutmix_rect": float(args.cutmix_rect),
-            "cutmix_n_patches": int(args.cutmix_n_patches),
-            "cutmix_total_ratio": float(args.cutmix_total_ratio),
-            "cutmix_discount": float(args.cutmix_discount),
-            "cutmix_alpha": float(args.cutmix_alpha),
-            "pos_weight": (None if args.pos_weight is None else str(args.pos_weight)),
-        }, f, indent=2)
+            "ema_decay": args.ema_decay,
+            "warmup_epochs": args.warmup_epochs,
+            "grad_clip": args.grad_clip,
+            "drop_path_rate": args.drop_path_rate,
+        }, out_dir / "final_epoch_model.pth")
+        print(f"[train] saved final_epoch_model.pth (ep{args.epochs}, val_acc={val_acc:.4f})")
+
+        with open(out_dir / "history.json", "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+        with open(out_dir / "train_summary.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "variant": args.variant,
+                "loss_name": loss_name,
+                "best_val_acc": best_val_acc,
+                "best_epoch": best_epoch,
+                "final_val_acc": float(val_acc),
+                "final_epoch": args.epochs,
+                "epochs": args.epochs,
+                "elapsed_sec": elapsed,
+                "n_train": len(train_samples),
+                "n_val": len(val_samples),
+                "ts": ts,
+                "out_dir": str(out_dir),
+                "no_normal": bool(args.no_normal),
+                "ls": (None if args.ls is None else float(args.ls)),
+                "cutmix_p": float(args.cutmix_p),
+                "cutmix_mode": str(args.cutmix_mode),
+                "cutmix_rect": float(args.cutmix_rect),
+                "cutmix_n_patches": int(args.cutmix_n_patches),
+                "cutmix_total_ratio": float(args.cutmix_total_ratio),
+                "cutmix_discount": float(args.cutmix_discount),
+                "cutmix_alpha": float(args.cutmix_alpha),
+                "pos_weight": (None if args.pos_weight is None else str(args.pos_weight)),
+            }, f, indent=2)
+    if _ddp:
+        dist.barrier()
 
 
 if __name__ == "__main__":

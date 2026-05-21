@@ -36,6 +36,7 @@ NON_DEFECT_GT_CLASSES = ("Normal", "Invalid") + WAFER_PATTERN_KEYS  # 6 classes 
 # 260508 — bug fix: TRIPLE_COMBO_KEYS 누락 발견. 4 3-class combo (b+f+sc, b+f+sr, b+sc+sr, f+sc+sr)
 # 가 per_class_all 카운트에서 빠져 19C bb F1 0.7339 (실제 0.9928) 같은 환영값 발생. 사용자 directive 정정.
 DEFECT_GT_CLASSES = SINGLE_KEYS + COMBO_KEYS + TRIPLE_COMBO_KEYS + OOD_OVERLAY_KEYS  # 18 classes
+POSITIVE_GT_CLASSES = SINGLE_KEYS + COMBO_KEYS  # paper-main positive chips: 4 single + 6 two-combo
 
 # 260507 — split NON_DEFECT_GT into 3 groups (analyst Cycle A Step 1)
 #   normal_invalid: ('Normal', 'Invalid')           ★ paper main (real-env target)
@@ -44,6 +45,17 @@ DEFECT_GT_CLASSES = SINGLE_KEYS + COMBO_KEYS + TRIPLE_COMBO_KEYS + OOD_OVERLAY_K
 NORMAL_INVALID_GT = ("Normal", "Invalid")
 NORMAL_ONLY_GT = ("Normal",)
 OOD_GT = WAFER_PATTERN_KEYS
+
+
+def _binary_f1(gt_c: np.ndarray, pred_c: np.ndarray) -> Tuple[int, int, int, int, float, float, float]:
+    tp = int(((gt_c == 1) & (pred_c == 1)).sum())
+    fp = int(((gt_c == 0) & (pred_c == 1)).sum())
+    fn = int(((gt_c == 1) & (pred_c == 0)).sum())
+    tn = int(((gt_c == 0) & (pred_c == 0)).sum())
+    prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+    return tp, fp, fn, tn, prec, rec, f1
 
 
 def class_key_to_bits(class_key: str) -> np.ndarray:
@@ -103,6 +115,7 @@ def compute_bit_metrics(df: pd.DataFrame) -> Dict:
     pred_bits = np.zeros((n, len(TRAIN_CLASSES)), dtype=np.int8)
     is_non_defect_gt = np.zeros(n, dtype=bool)
     is_defect_gt = np.zeros(n, dtype=bool)
+    is_positive_gt = np.zeros(n, dtype=bool)
 
     for i, row in enumerate(df.itertuples(index=False)):
         ck = str(row.class_key)
@@ -112,19 +125,15 @@ def compute_bit_metrics(df: pd.DataFrame) -> Dict:
             is_non_defect_gt[i] = True
         if ck in DEFECT_GT_CLASSES:
             is_defect_gt[i] = True
+        if ck in POSITIVE_GT_CLASSES:
+            is_positive_gt[i] = True
 
     # Per-class binary F1 over ALL chips (defect + non-defect)
     per_class: Dict[str, Dict[str, float]] = {}
     for ci, c in enumerate(TRAIN_CLASSES):
         gt_c = gt_bits[:, ci]
         pred_c = pred_bits[:, ci]
-        tp = int(((gt_c == 1) & (pred_c == 1)).sum())
-        fp = int(((gt_c == 0) & (pred_c == 1)).sum())
-        fn = int(((gt_c == 1) & (pred_c == 0)).sum())
-        tn = int(((gt_c == 0) & (pred_c == 0)).sum())
-        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+        tp, fp, fn, tn, prec, rec, f1 = _binary_f1(gt_c, pred_c)
         per_class[c] = {
             "tp": tp, "fp": fp, "fn": fn, "tn": tn,
             "precision": round(prec, 4), "recall": round(rec, 4),
@@ -269,12 +278,7 @@ def compute_bit_metrics(df: pd.DataFrame) -> Dict:
         for ci, c in enumerate(TRAIN_CLASSES):
             gt_c = gt_def[:, ci]
             pred_c = pred_def[:, ci]
-            tp = int(((gt_c == 1) & (pred_c == 1)).sum())
-            fp = int(((gt_c == 0) & (pred_c == 1)).sum())
-            fn = int(((gt_c == 1) & (pred_c == 0)).sum())
-            prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-            rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+            tp, fp, fn, _tn, prec, rec, f1 = _binary_f1(gt_c, pred_c)
             per_class_def_only[c] = {
                 "tp": tp, "fp": fp, "fn": fn,
                 "precision": round(prec, 4), "recall": round(rec, 4), "f1": round(f1, 4),
@@ -282,15 +286,63 @@ def compute_bit_metrics(df: pd.DataFrame) -> Dict:
     cf1_def_only = float(np.mean([per_class_def_only[c]["f1"]
                                   for c in TRAIN_CLASSES])) if per_class_def_only else 0.0
 
+    # Paper-main positive-only bit F1: 4 single + 6 two-combo chips.
+    # This intentionally excludes 3-combo and OOD-overlay diagnostics.
+    n_positive = int(is_positive_gt.sum())
+    per_bit_positive: Dict[str, Dict[str, float]] = {}
+    if n_positive > 0:
+        gt_pos = gt_bits[is_positive_gt]
+        pred_pos = pred_bits[is_positive_gt]
+        for ci, c in enumerate(TRAIN_CLASSES):
+            gt_c = gt_pos[:, ci]
+            pred_c = pred_pos[:, ci]
+            tp, fp, fn, _tn, prec, rec, f1 = _binary_f1(gt_c, pred_c)
+            per_bit_positive[c] = {
+                "tp": tp, "fp": fp, "fn": fn,
+                "precision": round(prec, 4), "recall": round(rec, 4), "f1": round(f1, 4),
+            }
+    cf1_positive = float(np.mean([per_bit_positive[c]["f1"]
+                                  for c in TRAIN_CLASSES])) if per_bit_positive else 0.0
+
+    # Per-negative-class FAR: chip-level FP rate for each non-defect class.
+    per_class_far: Dict[str, Dict[str, float]] = {}
+    for ck in NORMAL_INVALID_GT + OOD_GT:
+        mask = np.array([str(row.class_key) == ck for row in df.itertuples(index=False)],
+                        dtype=bool)
+        n_sub = int(mask.sum())
+        if n_sub == 0:
+            per_class_far[ck] = {
+                "bit_FAR": 0.0, "chip_FAR": 0.0,
+                "FAR_chip_count": 0, "FAR_bit_count": 0,
+                "FAR_total_bits": 0, "n_chips": 0,
+            }
+            continue
+        sub_pred = pred_bits[mask]
+        fp_b = int((sub_pred == 1).sum())
+        tot_b = 4 * n_sub
+        chip_w = int((sub_pred.sum(axis=1) > 0).sum())
+        per_class_far[ck] = {
+            "bit_FAR": round(fp_b / tot_b, 4) if tot_b > 0 else 0.0,
+            "chip_FAR": round(chip_w / n_sub, 4),
+            "FAR_chip_count": chip_w,
+            "FAR_bit_count": fp_b,
+            "FAR_total_bits": tot_b,
+            "n_chips": n_sub,
+        }
+
     return {
         "n_total_chips": int(n),
         "n_defect_gt": n_def,
+        "n_positive_gt": n_positive,
         "n_non_defect_gt": n_non_def,
         "per_class_all": per_class,
         "per_class_defect_only": per_class_def_only,
+        "per_bit_F1_positive": per_bit_positive,
+        "per_class_FAR": per_class_far,
         # ★ paper main — macro F1 = CF1 (Wang 2016 / Chen 2019 명칭)
         "macro_F1": round(cf1, 4),
         "macro_F1_defect_only": round(cf1_def_only, 4),
+        "macro_F1_positive": round(cf1_positive, 4),
         # micro F1 = OF1 (overall F1)
         "micro_F1": round(of1, 4),
         # FAR (legacy bundled — Normal+Invalid+5 OOD)
@@ -353,6 +405,8 @@ def main():
         metrics = compute_bit_metrics(df_cell)
         out[cell] = metrics
         print(f"\n=== {cell} ===")
+        print(f"  eval bit_F1 (positive 4+6) = {metrics['macro_F1_positive']:.4f}  "
+              f"(n={metrics['n_positive_gt']})")
         print(f"  macro F1 (= CF1)           = {metrics['macro_F1']:.4f}  ★ paper main")
         print(f"  macro F1 (defect chips)    = {metrics['macro_F1_defect_only']:.4f}")
         print(f"  micro F1 (= OF1)           = {metrics['micro_F1']:.4f}")
@@ -374,6 +428,17 @@ def main():
                   f"over_fire={ovl['over_fire_rate']:.4f}  "
                   f"partial={ovl['partial_1bit_rate']:.4f}  miss={ovl['miss_rate']:.4f}  "
                   f"(n={ovl['n_chips']})")
+        print(f"  eval bit_F1 by class:")
+        for c in TRAIN_CLASSES:
+            pc = metrics.get("per_bit_F1_positive", {}).get(c, {})
+            print(f"    {c:14s}  F1={pc.get('f1', 0.0):.4f}  "
+                  f"P={pc.get('precision', 0.0):.4f}  R={pc.get('recall', 0.0):.4f}  "
+                  f"TP={pc.get('tp', 0)}  FP={pc.get('fp', 0)}  FN={pc.get('fn', 0)}")
+        print(f"  eval FAR by class:")
+        for c, pc in metrics.get("per_class_FAR", {}).items():
+            print(f"    {c:14s}  chip_FAR={pc.get('chip_FAR', 0.0):.4f}  "
+                  f"({pc.get('FAR_chip_count', 0)}/{pc.get('n_chips', 0)} chips)  "
+                  f"bit_FAR={pc.get('bit_FAR', 0.0):.4f}")
         print(f"  per-class F1 (all chips):")
         for c in TRAIN_CLASSES:
             pc = metrics["per_class_all"][c]

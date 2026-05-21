@@ -29,6 +29,9 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
+if [ -z "${CUDA_VISIBLE_DEVICES:-}" ] && [ -n "${CUDA_VISIBLE_DEVICE:-}" ]; then
+    export CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICE"
+fi
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
@@ -68,6 +71,12 @@ while [ $# -gt 0 ]; do
         --sels=*) SEL_LIST=$(echo "${1#--sels=}" | tr ',' ' ') ;;
         --epochs) shift; EPOCHS="$1" ;;
         --epochs=*) EPOCHS="${1#--epochs=}" ;;
+        # 260521 — small-GPU overrides (default batch table assumes H100 80GB server)
+        --batch) shift; BATCH_OVERRIDE="$1" ;;
+        --batch=*) BATCH_OVERRIDE="${1#--batch=}" ;;
+        --eval-batch) shift; EVAL_BATCH_OVERRIDE="$1" ;;
+        --eval-batch=*) EVAL_BATCH_OVERRIDE="${1#--eval-batch=}" ;;
+        --grad-ckpt) FORCE_GRAD_CKPT=1 ;;
         --smoke) SMOKE=1 ;;
         --help|-h) head -22 "$0" | tail -18; exit 0 ;;
     esac
@@ -110,12 +119,13 @@ if [ $SMOKE -eq 1 ]; then
     BATCH_PER_GPU="${SMOKE_BATCH:-2}"
     EPOCHS="${SMOKE_EPOCHS:-1}"
     TRAIN_SIZES_LIST="${SMOKE_TRAIN_SIZES:-10}"
-    SEL_LIST="${SMOKE_SELS:-margin_max}"
+    SEL_LIST="${SMOKE_SELS:-f1 margin_max}"
     EVAL_SIZES_LIST="${SMOKE_EVAL_SIZES:-200}"
     DO_PSEUDO=0
     # DO_REPORT honors user value (default 1) so 'all-stages run' smoke covers report too
     export MEGA_TRAIN_SIZES="${TRAIN_SIZES_LIST// /,}"
     export MEGA_EVAL_SIZES="${EVAL_SIZES_LIST// /,}"
+    export MEGA_SELS="${SEL_LIST// /,}"
 fi
 
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
@@ -126,10 +136,44 @@ TRAIN_WORKERS="$TOTAL_CPU"
 EXTRA_TRAIN_FLAGS=""
 if [ $SMOKE -eq 1 ]; then
     TRAIN_WORKERS="${SMOKE_WORKERS:-0}"
-    # Smoke = local machine = small GPU = enable grad checkpointing to fit forward activations.
-    # ConvNeXtV2-base 384 + CutMix forward-mul 4 OOMs on 16 GB GPU under shared baseline (30-40% used).
     EXTRA_TRAIN_FLAGS="--grad-checkpointing"
 fi
+# 260521 — --grad-ckpt CLI override (works in non-smoke mode too for small GPU)
+if [ "${FORCE_GRAD_CKPT:-0}" -eq 1 ]; then
+    EXTRA_TRAIN_FLAGS="--grad-checkpointing"
+fi
+# 260521 — --batch CLI override (replaces the H100 default batch table)
+if [ -n "${BATCH_OVERRIDE:-}" ]; then
+    BATCH_PER_GPU="$BATCH_OVERRIDE"
+fi
+EVAL_BATCH_SIZE="${EVAL_BATCH_OVERRIDE:-${EVAL_BATCH_SIZE:-$BATCH_PER_GPU}}"
+EVAL_WORKERS="${EVAL_WORKERS:-0}"
+SAVE_EVERY_EPOCH="${SAVE_EVERY_EPOCH:-0}"
+SAVE_EVERY_EPOCH_FLAG=""
+if [ "$SAVE_EVERY_EPOCH" = "1" ]; then
+    SAVE_EVERY_EPOCH_FLAG="--save-every-epoch"
+fi
+
+normalize_sel_list() {
+    local out=""
+    for raw in "$@"; do
+        local sel="$raw"
+        case "$sel" in
+            val_f1) sel="f1" ;;
+            margin|val_margin) sel="margin_max" ;;
+        esac
+        if [[ " $out " != *" $sel "* ]]; then
+            out="${out}${out:+ }${sel}"
+        fi
+    done
+    echo "$out"
+}
+SEL_LIST="$(normalize_sel_list $SEL_LIST)"
+if [ "${MEGA_ALLOW_SINGLE_SELECTION:-0}" != "1" ]; then
+    [[ " $SEL_LIST " == *" f1 "* ]] || SEL_LIST="f1 ${SEL_LIST}"
+    [[ " $SEL_LIST " == *" margin_max "* ]] || SEL_LIST="${SEL_LIST} margin_max"
+fi
+export MEGA_SELS=$(echo "$SEL_LIST" | tr ' ' ',')
 
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
@@ -158,7 +202,7 @@ log() {
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [mega] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
 CUTMIX_FORWARD_MULT=4  # complement + masked + n_groups=2 expands train forward batch up to 4x
-log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 workers=$TRAIN_WORKERS cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$IMAGES_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
+log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU eval_batch=$EVAL_BATCH_SIZE effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 train_workers=$TRAIN_WORKERS eval_workers=$EVAL_WORKERS save_every_epoch=$SAVE_EVERY_EPOCH cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$IMAGES_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
 # Offline weights (closed-network) - .pth only.
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
@@ -242,7 +286,8 @@ train_one() {
     TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
         --variant T7 --ls 0.30 --epochs $EPOCHS --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$TRAIN_WORKERS" \
-        --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
+        --lr 1e-4 --no-normal --val-criterion ${SEL} \
+        $SAVE_EVERY_EPOCH_FLAG \
         $MULTI_VAL_FLAG \
         --data-root "${DATA_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
@@ -300,12 +345,14 @@ eval_one() {
     log "EVAL train${TN}_${SEL} eval_${EN} ($BACKBONE)"
     log "  -> eval_set: ${EVAL_SET}"
     log "  -> chips=${N_EVAL_TOTAL} across ${N_EVAL_CLASS} class (target ${EN}/class)"
+    log "  -> batch=${EVAL_BATCH_SIZE} workers=${EVAL_WORKERS}"
     log "  -> model: ${RUN}/best_model.pth"
     log "  -> variants=I3,I7,I10,I13 (4 inference modes)"
     python -u -m chip_multilabel.run_stage1 \
         --model "${RUN}/best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
         --variants I3,I7,I10,I13 --n-per-class 99999 \
+        --batch-size "$EVAL_BATCH_SIZE" --num-workers "$EVAL_WORKERS" \
         --strength-min 0.0 --strength-max 1.0 --seed 42 \
         2>&1 | tee -a "$LOG" || log "EVAL_FAIL train${TN}_${SEL} eval_${EN}"
 }
@@ -335,7 +382,32 @@ fi
 if [ $DO_REPORT -eq 1 ]; then
     log "=== STAGE 5: report ==="
     python -u -X utf8 mega_matrix/make_report.py 2>&1 | tee -a "$LOG"
+    REPORT_PATH="${GROUP_DIR}/summary_mega_sweep.md"
+    if [ ! -s "$REPORT_PATH" ]; then
+        log "REPORT_FAIL missing report: $REPORT_PATH"
+        exit 1
+    fi
+    REQUIRED_PLOTS=(
+        bit_F1_heatmap.png
+        total_far_heatmap.png
+        ni_far_heatmap.png
+        ood_far_heatmap.png
+        scaling_curves.png
+        combined_bit_far_by_sel.png
+        bit_F1_by_sel.png
+        far_by_sel.png
+    )
+    if [[ " $SEL_LIST " == *" f1 "* && " $SEL_LIST " == *" margin_max "* ]]; then
+        REQUIRED_PLOTS=(best_model_eval_by_selection.png "${REQUIRED_PLOTS[@]}")
+    fi
+    for plot in "${REQUIRED_PLOTS[@]}"; do
+        PLOT_PATH="${GROUP_DIR}/figs_mega/${plot}"
+        if [ ! -s "$PLOT_PATH" ]; then
+            log "REPORT_FAIL missing plot: $PLOT_PATH"
+            exit 1
+        fi
+    done
 fi
 
 log "ALL DONE"
-echo "-> docs/chip-multilabel/manager_report/summary_mega_sweep.md" | tee -a "$LOG"
+echo "-> ${GROUP_DIR}/summary_mega_sweep.md" | tee -a "$LOG"

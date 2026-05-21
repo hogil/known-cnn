@@ -35,6 +35,9 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export HF_HUB_DISABLE_TELEMETRY=1
+if [ -z "${CUDA_VISIBLE_DEVICES:-}" ] && [ -n "${CUDA_VISIBLE_DEVICE:-}" ]; then
+    export CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICE"
+fi
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 OUT_BASE=outputs/_mega_matrix
@@ -73,6 +76,8 @@ while [ $# -gt 0 ]; do
         --gpus=*) NGPU="${1#--gpus=}" ;;
         --backbone) shift; BACKBONE="$1" ;;
         --backbone=*) BACKBONE="${1#--backbone=}" ;;
+        --eval-batch) shift; EVAL_BATCH_OVERRIDE="$1" ;;
+        --eval-batch=*) EVAL_BATCH_OVERRIDE="${1#--eval-batch=}" ;;
         # 260521 — custom sweep axes (comma or space separated)
         --train-sizes) shift; TRAIN_SIZES_LIST=$(echo "$1" | tr ',' ' ') ;;
         --train-sizes=*) TRAIN_SIZES_LIST=$(echo "${1#--train-sizes=}" | tr ',' ' ') ;;
@@ -125,17 +130,59 @@ if [ $SMOKE -eq 1 ]; then
     BATCH_PER_GPU=2
     EPOCHS=1
     TRAIN_SIZES_LIST="10"
-    SEL_LIST="margin_max"
+    SEL_LIST="f1 margin_max"
     EVAL_SIZES_LIST="200"
     DO_PSEUDO=0
     DO_REPORT=0
     export MEGA_TRAIN_SIZES="10"
     export MEGA_EVAL_SIZES="200"
+    export MEGA_SELS="f1,margin_max"
 fi
 
 # DataLoader workers: use full logical CPU count per rank.
 TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
 WORKERS_PER_RANK="$TOTAL_CPU"
+EVAL_BATCH_SIZE="${EVAL_BATCH_OVERRIDE:-${EVAL_BATCH_SIZE:-$BATCH_PER_GPU}}"
+EVAL_WORKERS="${EVAL_WORKERS:-0}"
+SAVE_EVERY_EPOCH="${SAVE_EVERY_EPOCH:-0}"
+SAVE_EVERY_EPOCH_FLAG=""
+if [ "$SAVE_EVERY_EPOCH" = "1" ]; then
+    SAVE_EVERY_EPOCH_FLAG="--save-every-epoch"
+fi
+
+GPU_IDS=()
+if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
+    IFS=',' read -ra GPU_IDS <<< "$CUDA_VISIBLE_DEVICES"
+    if [ "$NGPU" -gt "${#GPU_IDS[@]}" ]; then
+        NGPU="${#GPU_IDS[@]}"
+    fi
+else
+    for ((i=0; i<NGPU; i++)); do
+        GPU_IDS+=("$i")
+    done
+fi
+[ "$NGPU" -lt 1 ] && NGPU=1
+
+normalize_sel_list() {
+    local out=""
+    for raw in "$@"; do
+        local sel="$raw"
+        case "$sel" in
+            val_f1) sel="f1" ;;
+            margin|val_margin) sel="margin_max" ;;
+        esac
+        if [[ " $out " != *" $sel "* ]]; then
+            out="${out}${out:+ }${sel}"
+        fi
+    done
+    echo "$out"
+}
+SEL_LIST="$(normalize_sel_list $SEL_LIST)"
+if [ "${MEGA_ALLOW_SINGLE_SELECTION:-0}" != "1" ]; then
+    [[ " $SEL_LIST " == *" f1 "* ]] || SEL_LIST="f1 ${SEL_LIST}"
+    [[ " $SEL_LIST " == *" margin_max "* ]] || SEL_LIST="${SEL_LIST} margin_max"
+fi
+export MEGA_SELS=$(echo "$SEL_LIST" | tr ' ' ',')
 
 RUN_STAMP=$(date +%Y%m%d_%H%M%S)
 LOG_BACKBONE="${BACKBONE//\//_}"
@@ -156,7 +203,7 @@ log() {
 
 : > "$LOG"
 trap 'rc=$?; if [ $rc -ne 0 ]; then echo "$(date "+%Y-%m-%d %H:%M:%S") [ddp] EXIT_FAIL rc=$rc line=$LINENO" | tee -a "$LOG"; fi' EXIT
-log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER_GPU accum=1 workers_per_rank=$WORKERS_PER_RANK data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
+log "start backbone=$BACKBONE img=$IMG_SIZE N_GPU=$NGPU batch_per_gpu=$BATCH_PER_GPU eval_batch=$EVAL_BATCH_SIZE accum=1 workers_per_rank=$WORKERS_PER_RANK eval_workers=$EVAL_WORKERS save_every_epoch=$SAVE_EVERY_EPOCH data_base=$DATA_BASE data=$DO_DATA eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT"
 
 # Offline weights (closed-network) - .pth only.
 # Only required for stages that init a fresh timm backbone (train, pseudo-label).
@@ -235,7 +282,8 @@ train_cell() {
         --variant T7 --ls 0.30 --epochs $EPOCHS \
         --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
         --num-workers "$WORKERS_PER_RANK" \
-        --lr 1e-4 --no-normal --val-criterion ${SEL} --save-every-epoch \
+        --lr 1e-4 --no-normal --val-criterion ${SEL} \
+        $SAVE_EVERY_EPOCH_FLAG \
         $MULTI_VAL_FLAG \
         --data-root "${DATA_BASE}/train_n${TN}" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
@@ -287,11 +335,12 @@ eval_cell() {
         log "SKIP eval train${TN}_${SEL} eval${EN}: missing $EVAL_SET"
         return 0
     fi
-    log "GPU${GPU} EVAL train${TN}_${SEL} eval${EN} ($BACKBONE)"
+    log "GPU${GPU} EVAL train${TN}_${SEL} eval${EN} ($BACKBONE) batch=${EVAL_BATCH_SIZE} workers=${EVAL_WORKERS}"
     CUDA_VISIBLE_DEVICES=$GPU python -u -m chip_multilabel.run_stage1 \
         --model "${RUN}/best_model.pth" \
         --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
         --variants I3,I7,I10,I13 --n-per-class 99999 \
+        --batch-size "$EVAL_BATCH_SIZE" --num-workers "$EVAL_WORKERS" \
         --strength-min 0.0 --strength-max 1.0 --seed 42 \
         2>&1 | tee -a "${LOG}.gpu${GPU}" || log "EVAL_FAIL train${TN}_${SEL} eval${EN}"
 }
@@ -304,7 +353,8 @@ if [ $DO_EVAL -eq 1 ]; then
     for TN in $TRAIN_SIZES_LIST; do
         for SEL in $SEL_LIST; do
             for EN in $EVAL_SIZES_LIST; do
-                GPU=$((IDX % NGPU))
+                GPU_SLOT=$((IDX % NGPU))
+                GPU="${GPU_IDS[$GPU_SLOT]}"
                 eval_cell $GPU $TN $SEL $EN &
                 PIDS+=($!)
                 IDX=$((IDX+1))
@@ -334,6 +384,32 @@ fi
 if [ $DO_REPORT -eq 1 ]; then
     log "=== STAGE 5: report ==="
     python -u -X utf8 mega_matrix/make_report.py 2>&1 | tee -a "$LOG"
+    REPORT_PATH="${GROUP_DIR}/summary_mega_sweep.md"
+    if [ ! -s "$REPORT_PATH" ]; then
+        log "REPORT_FAIL missing report: $REPORT_PATH"
+        exit 1
+    fi
+    REQUIRED_PLOTS=(
+        bit_F1_heatmap.png
+        total_far_heatmap.png
+        ni_far_heatmap.png
+        ood_far_heatmap.png
+        scaling_curves.png
+        combined_bit_far_by_sel.png
+        bit_F1_by_sel.png
+        far_by_sel.png
+    )
+    if [[ " $SEL_LIST " == *" f1 "* && " $SEL_LIST " == *" margin_max "* ]]; then
+        REQUIRED_PLOTS=(best_model_eval_by_selection.png "${REQUIRED_PLOTS[@]}")
+    fi
+    for plot in "${REQUIRED_PLOTS[@]}"; do
+        PLOT_PATH="${GROUP_DIR}/figs_mega/${plot}"
+        if [ ! -s "$PLOT_PATH" ]; then
+            log "REPORT_FAIL missing plot: $PLOT_PATH"
+            exit 1
+        fi
+    done
 fi
 
 log "ALL DONE"
+echo "-> ${GROUP_DIR}/summary_mega_sweep.md" | tee -a "$LOG"

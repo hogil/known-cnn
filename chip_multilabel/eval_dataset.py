@@ -246,4 +246,4 @@ def stratified_val_eval_split(records: List[EvalRecord], val_ratio: float = 0.2,
         n_val = min(n_val, len(idxs_arr) - 1) if len(idxs_arr) > 1 else 0
         val_idx.extend(idxs_arr[:n_val].tolist())
         eval_idx.extend(idxs_arr[n_val:].tolist())
-    return np.array(sorted(val_idx)), np.array(sorted(eval_idx))
+    return np.array(sorted(val_idx), dtype=np.int64), np.array(sorted(eval_idx), dtype=np.int64)
