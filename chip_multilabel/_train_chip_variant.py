@@ -90,21 +90,20 @@ def _atomic_torch_save(payload, path: Path) -> None:
 
 
 from .constants import DEFAULT_BACKBONE_CKPT, DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES, TRAIN_VARIANTS
-try:
-    from .losses import BCEThenASL, build_loss
-except ImportError as e:
-    import importlib
-    _losses = importlib.import_module(f"{__package__}.losses")
+from . import losses as _losses
+
+build_loss = getattr(_losses, "build_loss", None)
+if build_loss is None:
     _losses_file = getattr(_losses, "__file__", "<unknown>")
     _available = [name for name in (
         "AsymmetricLoss", "BCEMultiHot", "BCEThenASL", "CEWithSmoothing",
         "CESoftLabel", "FocalLoss", "SigmoidFocalLoss", "build_loss",
     ) if hasattr(_losses, name)]
     raise ImportError(
-        f"{e}. Loaded losses module from {_losses_file}; "
-        f"available symbols={_available}. Make sure the server pulled the latest "
-        "repo and PYTHONPATH points to this checkout."
-    ) from e
+        f"chip_multilabel.losses has no build_loss. Loaded losses module from "
+        f"{_losses_file}; available symbols={_available}. Make sure the server "
+        "pulled the latest repo and PYTHONPATH points to this checkout."
+    )
 
 VARIANT_TO_LOSS = {
     "T0": "ce_ls01",  # iter 12 (260506) — pure CE baseline alias (use with --ls 0.0 + --cutmix-p 0)
@@ -1036,7 +1035,7 @@ def main():
         if train_sampler is not None:
             train_sampler.set_epoch(ep)
         model.train()
-        if isinstance(loss_fn, BCEThenASL):
+        if hasattr(loss_fn, "set_epoch"):
             loss_fn.set_epoch(ep - 1)
         running = 0.0
         nb = 0
