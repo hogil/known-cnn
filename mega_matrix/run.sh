@@ -243,6 +243,60 @@ fi
 # ======================================================================
 # Stage 2: training (6 cells = 3 train_n × 2 selection)
 # ======================================================================
+validate_train_data() {
+    local TRAIN_ROOT=$1
+    local TN=$2
+    local EXPECTED_CLASSES=(bank_boundary fork scratch scratch_rot)
+
+    if [ ! -d "$TRAIN_ROOT" ]; then
+        log "TRAIN_DATA_FAIL missing train root: $TRAIN_ROOT"
+        return 1
+    fi
+
+    local unexpected=()
+    local d cls
+    for d in "$TRAIN_ROOT"/*; do
+        [ -d "$d" ] || continue
+        cls=$(basename "$d")
+        case "$cls" in
+            bank_boundary|fork|scratch|scratch_rot|_*) ;;
+            *) unexpected+=("$cls") ;;
+        esac
+    done
+    if [ ${#unexpected[@]} -gt 0 ]; then
+        log "TRAIN_DATA_FAIL unexpected class dirs under $TRAIN_ROOT: ${unexpected[*]}"
+        log "  -> expected only: ${EXPECTED_CLASSES[*]}"
+        return 1
+    fi
+
+    local missing=()
+    local total=0
+    local breakdown=""
+    local n
+    for cls in "${EXPECTED_CLASSES[@]}"; do
+        if [ -d "$TRAIN_ROOT/$cls" ]; then
+            n=$(find "$TRAIN_ROOT/$cls" -maxdepth 1 -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
+        else
+            n=0
+        fi
+        total=$((total + n))
+        breakdown="${breakdown}${cls}=${n} "
+        if [ "$n" -lt "$TN" ]; then
+            missing+=("$cls=$n/$TN")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        log "TRAIN_DATA_FAIL insufficient class data under $TRAIN_ROOT: ${missing[*]}"
+        log "  -> class_counts: ${breakdown}"
+        return 1
+    fi
+
+    TRAIN_DATA_TOTAL=$total
+    TRAIN_DATA_CLASS_N=${#EXPECTED_CLASSES[@]}
+    TRAIN_DATA_CLASS_BREAK="$breakdown"
+    return 0
+}
+
 train_one() {
     local TN=$1; local SEL=$2
     local TAG="train${TN}_${SEL}"
@@ -253,17 +307,10 @@ train_one() {
     fi
     # 260520 - print actual chip counts for visibility at cell start
     local TRAIN_ROOT="${DATA_BASE}/train_n${TN}"
-    local N_TRAIN_TOTAL=0
-    local N_CLASS=0
-    local CLASS_BREAK=""
-    if [ -d "$TRAIN_ROOT" ]; then
-        for cls in bank_boundary fork scratch scratch_rot; do
-            local n=$(ls "$TRAIN_ROOT/$cls"/*.png 2>/dev/null | wc -l)
-            N_TRAIN_TOTAL=$((N_TRAIN_TOTAL + n))
-            CLASS_BREAK="${CLASS_BREAK}${cls}=${n} "
-            [ "$n" -gt 0 ] && N_CLASS=$((N_CLASS + 1))
-        done
-    fi
+    validate_train_data "$TRAIN_ROOT" "$TN" || return 1
+    local N_TRAIN_TOTAL="$TRAIN_DATA_TOTAL"
+    local N_CLASS="$TRAIN_DATA_CLASS_N"
+    local CLASS_BREAK="$TRAIN_DATA_CLASS_BREAK"
     # Multi-val set used per-epoch (smallest available eval_n*)
     local MV_DESC=""
     for cand in 200 2000 100 50 30 20 10 5; do

@@ -213,6 +213,8 @@ def collect_samples(root: Path, include_normal: bool = True,
         mh = np.zeros(len(TRAIN_CLASSES), dtype=np.uint8)
         mh[ci] = 1
         files = sorted(d.glob("*.png"))
+        if not files:
+            raise FileNotFoundError(f"no PNG chips for required class '{cname}' under {d}")
         if max_per_class_defect is not None and len(files) > max_per_class_defect:
             idx = rng_def.choice(len(files), size=max_per_class_defect, replace=False)
             files = [files[i] for i in sorted(idx)]

@@ -257,6 +257,60 @@ fi
 # ======================================================================
 # 2. Training — distribute 6 cells across $NGPU GPUs
 # ======================================================================
+validate_train_data() {
+    local TRAIN_ROOT=$1
+    local TN=$2
+    local EXPECTED_CLASSES=(bank_boundary fork scratch scratch_rot)
+
+    if [ ! -d "$TRAIN_ROOT" ]; then
+        log "TRAIN_DATA_FAIL missing train root: $TRAIN_ROOT"
+        return 1
+    fi
+
+    local unexpected=()
+    local d cls
+    for d in "$TRAIN_ROOT"/*; do
+        [ -d "$d" ] || continue
+        cls=$(basename "$d")
+        case "$cls" in
+            bank_boundary|fork|scratch|scratch_rot|_*) ;;
+            *) unexpected+=("$cls") ;;
+        esac
+    done
+    if [ ${#unexpected[@]} -gt 0 ]; then
+        log "TRAIN_DATA_FAIL unexpected class dirs under $TRAIN_ROOT: ${unexpected[*]}"
+        log "  -> expected only: ${EXPECTED_CLASSES[*]}"
+        return 1
+    fi
+
+    local missing=()
+    local total=0
+    local breakdown=""
+    local n
+    for cls in "${EXPECTED_CLASSES[@]}"; do
+        if [ -d "$TRAIN_ROOT/$cls" ]; then
+            n=$(find "$TRAIN_ROOT/$cls" -maxdepth 1 -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
+        else
+            n=0
+        fi
+        total=$((total + n))
+        breakdown="${breakdown}${cls}=${n} "
+        if [ "$n" -lt "$TN" ]; then
+            missing+=("$cls=$n/$TN")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        log "TRAIN_DATA_FAIL insufficient class data under $TRAIN_ROOT: ${missing[*]}"
+        log "  -> class_counts: ${breakdown}"
+        return 1
+    fi
+
+    TRAIN_DATA_TOTAL=$total
+    TRAIN_DATA_CLASS_N=${#EXPECTED_CLASSES[@]}
+    TRAIN_DATA_CLASS_BREAK="$breakdown"
+    return 0
+}
+
 # 6 cells:
 #   (50, f1)         (50, margin_max)
 #   (100, f1)        (100, margin_max)
@@ -271,6 +325,10 @@ train_cell() {
         return 0
     fi
     log "TRAIN ${TAG} ($BACKBONE) NGPU=$NGPU batch_per_gpu=$BATCH_PER_GPU workers_per_rank=$WORKERS_PER_RANK"
+    local TRAIN_ROOT="${DATA_BASE}/train_n${TN}"
+    validate_train_data "$TRAIN_ROOT" "$TN" || return 1
+    log "  -> train_data: ${TRAIN_ROOT}"
+    log "  -> chips=${TRAIN_DATA_TOTAL} (${TRAIN_DATA_CLASS_BREAK}) across ${TRAIN_DATA_CLASS_N} class; 0.9/0.1 train/val split"
     # True torchrun DDP: each rank sees --batch as its OWN batch (per-rank).
     # effective global batch = BATCH_PER_GPU * NGPU
     set +e
