@@ -157,7 +157,7 @@ def _format_paper_metrics(p: Dict) -> str:
         f"eval_bit_F1={p['bit_F1']:.4f} "
         f"eval_FAR Total={p['Total_FAR']*100:.2f}% "
         f"NI={p['NI_FAR']*100:.2f}% OOD={p['OOD_FAR']*100:.2f}%\n"
-        f"bit_F1_by_class: {bit_str}\n"
+        f"bit_F1_by_bit: {bit_str}\n"
         f"FAR_by_class: {far_str}"
     )
 

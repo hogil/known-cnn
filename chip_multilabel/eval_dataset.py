@@ -117,6 +117,26 @@ def _read_manifest(eval_root: Path) -> List[Dict[str, str]]:
         with open(p, "r", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 rows.append(row)
+        present = {row.get("class_key", "") for row in rows}
+        added = 0
+        for class_key in ALL_CLASS_KEYS:
+            if class_key in present:
+                continue
+            cdir = eval_root / class_key
+            if not cdir.exists():
+                continue
+            for png in sorted(cdir.glob("*.png")):
+                if not png.is_file():
+                    continue
+                rows.append({
+                    "class_key": class_key,
+                    "chip_path": str(png),
+                    "defect_pixel_ratio": "",
+                })
+                added += 1
+        if added > 0:
+            print(f"[eval_dataset] WARN manifest.csv at {p} missed class folders; "
+                  f"added {added} rows from filesystem walk", flush=True)
         return rows
     # Fallback: synthesize rows by walking class subdirs
     synth: List[Dict[str, str]] = []

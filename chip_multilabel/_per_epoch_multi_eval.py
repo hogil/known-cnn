@@ -69,6 +69,7 @@ def load_multi_val(eval_root: str, n_per_class: int = 50, seed: int = 42,
     root = Path(eval_root)
     rng = np.random.default_rng(seed)
     rows_by_class: Dict[str, List[str]] = {}
+    all_classes = list(POSITIVE) + list(NEG_NI) + list(NEG_OOD)
     manifest = root / "manifest.csv"
     if manifest.exists():
         with open(manifest, "r", encoding="utf-8") as f:
@@ -78,6 +79,20 @@ def load_multi_val(eval_root: str, n_per_class: int = 50, seed: int = 42,
                 if not (ck and cp and Path(cp).exists()):
                     continue
                 rows_by_class.setdefault(ck, []).append(cp)
+        added = 0
+        for ck in all_classes:
+            if rows_by_class.get(ck):
+                continue
+            cdir = root / ck
+            if not cdir.exists():
+                continue
+            paths = [str(png) for png in sorted(cdir.glob("*.png")) if png.is_file()]
+            if paths:
+                rows_by_class[ck] = paths
+                added += len(paths)
+        if added > 0:
+            print(f"[multi-val] WARN manifest missing some eval classes; "
+                  f"added {added} chips from class folders under {root}", flush=True)
     else:
         # Fallback: walk subdirs (manifest-less mega_matrix eval_n200/2000/20000)
         for cdir in sorted(root.iterdir()):
@@ -91,7 +106,6 @@ def load_multi_val(eval_root: str, n_per_class: int = 50, seed: int = 42,
             raise FileNotFoundError(
                 f"no manifest.csv and no <class>/*.png subdirs at {root}")
 
-    all_classes = list(POSITIVE) + list(NEG_NI) + list(NEG_OOD)
     paths, class_keys = [], []
     for ck in all_classes:
         rs = rows_by_class.get(ck, [])
@@ -153,17 +167,22 @@ def evaluate(model: torch.nn.Module, val_cache: Dict, device: str,
             bit_f1_per_bit.append(0.0)
     bit_F1 = float(np.mean(bit_f1_per_bit)) if bit_f1_per_bit else 0.0
 
-    # Per-class F1 (positive classes only) — per-bit macro restricted to that class_key chips
+    # Per-positive-class active-bit F1. Average only the bits active in that
+    # class_key; averaging all 4 bits would cap perfect single classes at 0.25.
     per_class_f1: Dict[str, float] = {}
+    per_class_exact: Dict[str, float] = {}
     for ck in POSITIVE:
         m = class_keys == ck
         if m.sum() == 0:
             per_class_f1[ck] = float("nan")
+            per_class_exact[ck] = float("nan")
             continue
+        active_bits = np.where(_class_key_to_bits(ck) == 1)[0]
         f1s = []
-        for i in range(len(BITS)):
+        for i in active_bits:
             f1s.append(_f1(gt[m, i], pred[m, i]))
         per_class_f1[ck] = float(np.mean(f1s))
+        per_class_exact[ck] = float((gt[m] == pred[m]).all(axis=1).mean())
 
     # Per-class FAR (negative classes — FP if any bit predicted)
     per_class_far: Dict[str, float] = {}
@@ -192,6 +211,7 @@ def evaluate(model: torch.nn.Module, val_cache: Dict, device: str,
         "ni_far": ni_far,
         "ood_far": ood_far,
         "per_class_f1": per_class_f1,
+        "per_class_exact": per_class_exact,
         "per_class_far": per_class_far,
         "per_bit_f1": dict(zip(BITS, bit_f1_per_bit)),
         "n_pos": int(pos_mask.sum()),
@@ -204,6 +224,7 @@ def format_compact(m: Dict) -> str:
     pcf = m["per_class_f1"]
     pcfar = m["per_class_far"]
     pbf = m["per_bit_f1"]
+    pce = m.get("per_class_exact", {})
     # 10 positive classes short codes
     short = {"bank_boundary": "bb", "fork": "fk", "scratch": "sc", "scratch_rot": "sr",
              "bank_boundary+fork": "bb+fk", "bank_boundary+scratch": "bb+sc",
@@ -211,11 +232,16 @@ def format_compact(m: Dict) -> str:
              "fork+scratch_rot": "fk+sr", "scratch+scratch_rot": "sc+sr",
              "Normal": "Norm", "Invalid": "Inv",
              "CenterDonut": "CD", "CrossScratch": "CS", "DiagonalSmear": "DS", "Starburst": "ST"}
-    pos_str = " ".join(f"{short.get(c, c)}={pcf[c]:.3f}" for c in POSITIVE if c in pcf)
-    bit_str = " ".join(f"{short.get(c, c)}={pbf[c]:.3f}" for c in BITS if c in pbf)
-    far_str = " ".join(f"{short.get(c, c)}={pcfar[c]:.1f}" for c in (NEG_NI + NEG_OOD) if c in pcfar)
+    def _fmt(v, nd=3):
+        return "NA" if np.isnan(float(v)) else f"{float(v):.{nd}f}"
+
+    pos_str = " ".join(f"{short.get(c, c)}={_fmt(pcf[c])}" for c in POSITIVE if c in pcf)
+    exact_str = " ".join(f"{short.get(c, c)}={_fmt(pce[c])}" for c in POSITIVE if c in pce)
+    bit_str = " ".join(f"{short.get(c, c)}={_fmt(pbf[c])}" for c in BITS if c in pbf)
+    far_str = " ".join(f"{short.get(c, c)}={_fmt(pcfar[c], 1)}" for c in (NEG_NI + NEG_OOD) if c in pcfar)
     return (f"bit_F1={m['bit_F1']:.4f} FAR={m['total_far']:.2f}% "
             f"NI={m['ni_far']:.2f}% OOD={m['ood_far']:.2f}%\n"
-            f"           bit_F1_by_class: {bit_str}\n"
-            f"           pos_F1: {pos_str}\n"
+            f"           bit_F1_by_bit: {bit_str}\n"
+            f"           pos_active_F1: {pos_str}\n"
+            f"           pos_exact: {exact_str}\n"
             f"           neg_FAR(%): {far_str}")

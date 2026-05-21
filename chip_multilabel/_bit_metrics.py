@@ -428,7 +428,7 @@ def main():
                   f"over_fire={ovl['over_fire_rate']:.4f}  "
                   f"partial={ovl['partial_1bit_rate']:.4f}  miss={ovl['miss_rate']:.4f}  "
                   f"(n={ovl['n_chips']})")
-        print(f"  eval bit_F1 by class:")
+        print(f"  eval bit_F1 by bit:")
         for c in TRAIN_CLASSES:
             pc = metrics.get("per_bit_F1_positive", {}).get(c, {})
             print(f"    {c:14s}  F1={pc.get('f1', 0.0):.4f}  "

@@ -1637,6 +1637,7 @@ def main():
                     "bit_F1": m["bit_F1"], "total_far": m["total_far"],
                     "ni_far": m["ni_far"], "ood_far": m["ood_far"],
                     "per_class_f1": m["per_class_f1"],
+                    "per_class_exact": m.get("per_class_exact", {}),
                     "per_class_far": m["per_class_far"],
                     "per_bit_f1": m["per_bit_f1"],
                 }
