@@ -90,7 +90,21 @@ def _atomic_torch_save(payload, path: Path) -> None:
 
 
 from .constants import DEFAULT_BACKBONE_CKPT, DEFAULT_CLASSIFICATION_CHIPS, TRAIN_CLASSES, TRAIN_VARIANTS
-from .losses import BCEThenASL, build_loss
+try:
+    from .losses import BCEThenASL, build_loss
+except ImportError as e:
+    import importlib
+    _losses = importlib.import_module(f"{__package__}.losses")
+    _losses_file = getattr(_losses, "__file__", "<unknown>")
+    _available = [name for name in (
+        "AsymmetricLoss", "BCEMultiHot", "BCEThenASL", "CEWithSmoothing",
+        "CESoftLabel", "FocalLoss", "SigmoidFocalLoss", "build_loss",
+    ) if hasattr(_losses, name)]
+    raise ImportError(
+        f"{e}. Loaded losses module from {_losses_file}; "
+        f"available symbols={_available}. Make sure the server pulled the latest "
+        "repo and PYTHONPATH points to this checkout."
+    ) from e
 
 VARIANT_TO_LOSS = {
     "T0": "ce_ls01",  # iter 12 (260506) — pure CE baseline alias (use with --ls 0.0 + --cutmix-p 0)
