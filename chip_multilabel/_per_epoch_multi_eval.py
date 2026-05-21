@@ -221,11 +221,8 @@ def evaluate(model: torch.nn.Module, val_cache: Dict, device: str,
 
 def format_compact(m: Dict) -> str:
     """One-line compact summary for [ep NN] printout."""
-    pcf = m["per_class_f1"]
     pcfar = m["per_class_far"]
     pbf = m["per_bit_f1"]
-    pce = m.get("per_class_exact", {})
-    # 10 positive classes short codes
     short = {"bank_boundary": "bb", "fork": "fk", "scratch": "sc", "scratch_rot": "sr",
              "bank_boundary+fork": "bb+fk", "bank_boundary+scratch": "bb+sc",
              "bank_boundary+scratch_rot": "bb+sr", "fork+scratch": "fk+sc",
@@ -235,13 +232,9 @@ def format_compact(m: Dict) -> str:
     def _fmt(v, nd=3):
         return "NA" if np.isnan(float(v)) else f"{float(v):.{nd}f}"
 
-    pos_str = " ".join(f"{short.get(c, c)}={_fmt(pcf[c])}" for c in POSITIVE if c in pcf)
-    exact_str = " ".join(f"{short.get(c, c)}={_fmt(pce[c])}" for c in POSITIVE if c in pce)
     bit_str = " ".join(f"{short.get(c, c)}={_fmt(pbf[c])}" for c in BITS if c in pbf)
     far_str = " ".join(f"{short.get(c, c)}={_fmt(pcfar[c], 1)}" for c in (NEG_NI + NEG_OOD) if c in pcfar)
     return (f"bit_F1={m['bit_F1']:.4f} FAR={m['total_far']:.2f}% "
             f"NI={m['ni_far']:.2f}% OOD={m['ood_far']:.2f}%\n"
             f"           bit_F1_by_bit: {bit_str}\n"
-            f"           pos_active_F1: {pos_str}\n"
-            f"           pos_exact: {exact_str}\n"
             f"           neg_FAR(%): {far_str}")

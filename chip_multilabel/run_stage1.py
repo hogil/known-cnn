@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Stage 1 orchestrator: existing chip backbone + 6 inference variants -> matrix.
+"""Eval orchestrator: existing chip backbone + requested inference variant(s).
 
 Outputs:
-    <out_root>/stage1_<TS>/
+    <out_root>/eval_<TS>/
         results_matrix.parquet            # 6 rows
         per_class_metrics.parquet
         confusion_11class.parquet
@@ -23,7 +23,9 @@ except Exception:
     pass
 
 import argparse
+import ast
 import json
+import re
 import shutil
 import time
 from datetime import datetime
@@ -44,6 +46,28 @@ from .parquet_io import (write_confusion, write_errors, write_eval_summary,
                         write_results_matrix, write_thresholds_json)
 
 
+def _safe_error_name(s: str) -> str:
+    s = str(s or "None").strip() or "None"
+    return re.sub(r"[^A-Za-z0-9_.+-]+", "-", s)
+
+
+def _error_prob(row: Dict) -> float:
+    try:
+        probs = ast.literal_eval(str(row.get("per_class_probs", "{}")))
+        if not isinstance(probs, dict):
+            return 0.0
+    except Exception:
+        return 0.0
+    pred = str(row.get("pred_class_key", ""))
+    if pred and pred not in {"Normal", "Invalid"}:
+        labels = [x for x in pred.split("+") if x]
+        vals = [float(probs[x]) for x in labels if x in probs]
+        if vals:
+            return max(vals)
+    vals = [float(v) for v in probs.values()] if probs else []
+    return max(vals) if vals else 0.0
+
+
 def _save_errors_for_cell(cell: CellResult, out_root: Path, cap_per_type: int = 200) -> None:
     counts: Dict[str, int] = {}
     for row in cell.error_rows:
@@ -54,9 +78,22 @@ def _save_errors_for_cell(cell: CellResult, out_root: Path, cap_per_type: int = 
         src = Path(row["chip_path"])
         if not src.exists():
             continue
-        dst_dir = out_root / "errors" / cell.cell_id / et
+        true_name = _safe_error_name(row.get("true_class_key", "None"))
+        pred_name = _safe_error_name(row.get("pred_class_key", "None"))
+        pair_name = f"{true_name}_{pred_name}"
+        prob = _error_prob(row)
+        dst_dir = out_root / "errors" / cell.cell_id / pair_name
         dst_dir.mkdir(parents=True, exist_ok=True)
-        dst = dst_dir / src.name
+        stem = f"{pair_name}_{prob:.4f}"
+        dst = dst_dir / f"{stem}{src.suffix.lower() or '.png'}"
+        if dst.exists():
+            k = 1
+            while True:
+                cand = dst_dir / f"{stem}_{k:04d}{src.suffix.lower() or '.png'}"
+                if not cand.exists():
+                    dst = cand
+                    break
+                k += 1
         try:
             shutil.copy2(src, dst)
         except Exception:
@@ -66,7 +103,9 @@ def _save_errors_for_cell(cell: CellResult, out_root: Path, cap_per_type: int = 
             "pred_class_key": row["pred_class_key"],
             "true_labels": row["true_labels"],
             "pred_labels": row["pred_labels"],
+            "error_type": et,
             "decision_type": row["decision_type"],
+            "max_error_prob": prob,
             "per_class_probs": row["per_class_probs"],
         }
         with open(dst.with_suffix(".json"), "w", encoding="utf-8") as f:
@@ -118,7 +157,7 @@ def _compute_paper_metrics_per_cell(cells: List[CellResult]) -> Dict[str, Dict]:
                 },
             }
         except Exception as e:
-            print(f"[stage1] WARN bit_metrics fail for {c.cell_id}: {type(e).__name__}: {e}")
+            print(f"[eval] WARN bit_metrics fail for {c.cell_id}: {type(e).__name__}: {e}")
             out[c.cell_id] = {
                 "bit_F1": 0.0, "NI_FAR": 0.0, "OOD_FAR": 0.0, "Total_FAR": 0.0,
                 "per_bit_F1": {}, "per_class_FAR": {},
@@ -168,13 +207,13 @@ def _print_paper_metrics(prefix: str, p: Dict, suffix: str = "") -> None:
         return
     print(f"{prefix}{lines[0]}{suffix}")
     for line in lines[1:]:
-        print(f"[stage1]      {line}")
+        print(f"[eval]      {line}")
 
 
 def _write_report(cells: List[CellResult], best_cell: CellResult, out_root: Path,
                   paper: Dict[str, Dict] | None = None) -> None:
     lines: List[str] = []
-    lines.append(f"# Stage 1 — chip multi-label inference variant matrix\n")
+    lines.append(f"# Eval - chip multi-label inference\n")
     lines.append(f"**run dir**: `{out_root}`")
     lines.append(f"**ts**: {datetime.now().isoformat(timespec='seconds')}\n")
     if paper is None:
@@ -237,7 +276,7 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--num-workers", type=int, default=0)
     ap.add_argument("--forward-progress-every", type=int, default=10,
-                    help="print stage1 forward progress every N batches (0 = time-based only).")
+                    help="print eval forward progress every N batches (0 = time-based only).")
     ap.add_argument("--device", default=None)
     ap.add_argument("--val-ratio", type=float, default=0.2)
     ap.add_argument("--seed", type=int, default=42)
@@ -253,7 +292,7 @@ def main() -> None:
     ap.add_argument("--strength-max", type=float, default=1.0,
                     help="filter defect classes by manifest defect_pixel_ratio <= strength-max.")
     ap.add_argument("--include-classes", default=None,
-                    help="comma-separated class_key subset (None = all 12). e.g., "
+                    help="comma-separated class_key subset (None = all available class keys). e.g., "
                          "'bank_boundary,fork,Normal,Invalid'.")
     ap.add_argument("--sample-seed", type=int, default=None,
                     help="separate seed for runtime sampling rng (None = use --seed).")
@@ -267,7 +306,7 @@ def main() -> None:
     if args.i13_prob_max is not None:
         from . import inference_variants as _iv
         _iv.I13_NORMAL_PROB_MAX = float(args.i13_prob_max)
-        print(f"[stage1] I13_NORMAL_PROB_MAX overridden to {_iv.I13_NORMAL_PROB_MAX}")
+        print(f"[eval] I13_NORMAL_PROB_MAX overridden to {_iv.I13_NORMAL_PROB_MAX}")
 
     requested = [v.strip() for v in args.variants.split(",") if v.strip()]
     for v in requested:
@@ -280,16 +319,16 @@ def main() -> None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     ts = datetime.now().strftime("%y%m%d_%H%M%S")
-    out_root = Path(args.out_root) / f"stage1_{ts}"
+    out_root = Path(args.out_root) / f"eval_{ts}"
     out_root.mkdir(parents=True, exist_ok=True)
 
-    print(f"[stage1] device={device}  out={out_root}")
-    print(f"[stage1] loading model from {args.model}")
+    print(f"[eval] device={device}  out={out_root}")
+    print(f"[eval] loading model from {args.model}")
     model, meta, keep_indices = load_chip_backbone(args.model, device)
-    print(f"[stage1] model loaded - backbone={meta['backbone']} img_size={meta['img_size']} "
+    print(f"[eval] model loaded - backbone={meta['backbone']} img_size={meta['img_size']} "
           f"classes_full={meta['classes_full']} keep_idx={keep_indices}")
 
-    print(f"[stage1] discovering eval set at {args.eval_set}")
+    print(f"[eval] discovering eval set at {args.eval_set}")
     eval_root_p = Path(args.eval_set)
     has_manifest = (eval_root_p / "manifest.csv").exists()
     use_runtime_sampling = has_manifest and (
@@ -299,9 +338,9 @@ def main() -> None:
     if use_runtime_sampling:
         sample_seed = args.sample_seed if args.sample_seed is not None else args.seed
         include = [c.strip() for c in args.include_classes.split(",")] if args.include_classes else None
-        print(f"[stage1] runtime sampling — n_per_class={args.n_per_class} "
+        print(f"[eval] runtime sampling - n_per_class={args.n_per_class} "
               f"strength=[{args.strength_min:.2f},{args.strength_max:.2f}] "
-              f"include={include or 'all 12'} seed={sample_seed}")
+              f"include={include or 'all available'} seed={sample_seed}")
         records = discover_records_runtime(
             args.eval_set,
             n_per_class=args.n_per_class,
@@ -318,28 +357,28 @@ def main() -> None:
         records = discover_records(args.eval_set)
     if not records:
         raise SystemExit(f"no records found at {args.eval_set}")
-    print(f"[stage1] discovered {len(records)} chips across {len(set(r.class_key for r in records))} class keys")
+    print(f"[eval] discovered {len(records)} chips across {len(set(r.class_key for r in records))} class keys")
     val_idx, eval_idx = stratified_val_eval_split(records, val_ratio=args.val_ratio, seed=args.seed)
-    print(f"[stage1] split val={len(val_idx)} eval={len(eval_idx)}")
+    print(f"[eval] split val={len(val_idx)} eval={len(eval_idx)}")
 
     ds = ChipEvalDataset(records, img_size=meta["img_size"])
 
-    print(f"[stage1] computing invalid heuristic masks")
+    print(f"[eval] computing invalid heuristic masks")
     inv_mask, inv_score = _compute_invalid_masks(records)
-    print(f"[stage1]   invalid detected pred={int(inv_mask.sum())} (gt={sum(r.is_invalid_gt for r in records)})")
+    print(f"[eval]   invalid detected pred={int(inv_mask.sum())} (gt={sum(r.is_invalid_gt for r in records)})")
 
-    print(f"[stage1] forward pass batch={args.batch_size} workers={args.num_workers} "
+    print(f"[eval] forward pass batch={args.batch_size} workers={args.num_workers} "
           f"N={len(ds)}")
     t0 = time.time()
     logits_full = forward_all_logits(model, ds, device, batch_size=args.batch_size,
                                     num_workers=args.num_workers, tta=False,
-                                    progress_label="[stage1] forward",
+                                    progress_label="[eval] forward",
                                     progress_every=args.forward_progress_every)
-    print(f"[stage1]   {logits_full.shape}  {time.time() - t0:.1f}s")
+    print(f"[eval]   {logits_full.shape}  {time.time() - t0:.1f}s")
 
     cells: List[CellResult] = []
     for vid in requested:
-        print(f"[stage1] evaluating cell T0__{vid}")
+        print(f"[eval] evaluating cell T0__{vid}")
         cell = evaluate_cell(
             variant_id=vid,
             logits_full=logits_full,
@@ -354,7 +393,7 @@ def main() -> None:
         )
         paper_one = _compute_paper_metrics_per_cell([cell])[cell.cell_id]
         _print_paper_metrics(
-            f"[stage1]   {cell.cell_id}  ",
+            f"[eval]   {cell.cell_id}  ",
             paper_one,
             suffix=f"  ({cell.elapsed_sec:.1f}s)",
         )
@@ -409,7 +448,7 @@ def main() -> None:
     ))
     best_pm = paper_metrics[best.cell_id]
     print("")
-    _print_paper_metrics(f"[stage1] BEST cell: {best.cell_id}  ", best_pm)
+    _print_paper_metrics(f"[eval] BEST cell: {best.cell_id}  ", best_pm)
     _save_errors_for_cell(best, out_root, cap_per_type=args.error_cap)
 
     write_eval_summary({
@@ -419,7 +458,7 @@ def main() -> None:
         "n_eval": len(eval_idx),
         "n_val": len(val_idx),
         "n_classes": 11,
-        "stage1": {
+        "eval": {
             "best_cell_id": best.cell_id,
             "best_eval_bit_F1": best_pm["bit_F1"],
             "best_eval_NI_FAR": best_pm["NI_FAR"],
@@ -445,8 +484,8 @@ def main() -> None:
     }, out_root / "eval_summary.json")
 
     _write_report(cells, best, out_root, paper_metrics)
-    print(f"\n[stage1] DONE — outputs at {out_root}")
-    print(f"[stage1] report: {out_root / 'report.md'}")
+    print(f"\n[eval] DONE - outputs at {out_root}")
+    print(f"[eval] report: {out_root / 'report.md'}")
 
 
 if __name__ == "__main__":

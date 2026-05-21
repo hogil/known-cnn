@@ -440,6 +440,91 @@ def _canvas_wafer_inside_mask():
     return ((yy - cy) ** 2 + (xx - cx) ** 2) <= (r ** 2)
 
 
+def render_canvas_in_memory(class_name, seed):
+    """In-memory variant of render_canvas: no PNG/JSON file writes.
+    Returns (canvas np.uint8 array SIZE x SIZE, chip_meta dict, PALETTE bytes).
+    Used by mega_matrix.ood_chips for OOD chip synthesis without temp wafer files."""
+    rng = np.random.default_rng(seed)
+    inside = _canvas_wafer_inside_mask()
+    inside_pix = np.repeat(np.repeat(inside, CHIP, axis=0), CHIP, axis=1)
+    baseline_tier = pick_baseline_tier(rng)
+    intensity_tier = pick_intensity_tier(rng)
+    canvas_tau = float(rng.choice([0.20, 0.30, 0.40], p=[0.25, 0.50, 0.25]))
+    cum_base_use = CUM_BASELINE_TIERS[baseline_tier].astype(np.float32)
+    alpha = ALPHA_FN[class_name](rng) * INTENSITY_ALPHA_SCALE[intensity_tier]
+
+    def _bilinear_field(rng, h, w, lo, hi):
+        coarse = rng.uniform(lo, hi, size=(h, w)).astype(np.float32)
+        yi = np.linspace(0, h - 1, SIZE, dtype=np.float32)
+        xi = np.linspace(0, w - 1, SIZE, dtype=np.float32)
+        yi0 = np.clip(np.floor(yi).astype(np.int32), 0, h - 2)
+        xi0 = np.clip(np.floor(xi).astype(np.int32), 0, w - 2)
+        fy = yi - yi0; fx = xi - xi0
+        return (
+            (1 - fy)[:, None] * ((1 - fx)[None, :] * coarse[yi0][:, xi0] +
+                                 fx[None, :]       * coarse[yi0][:, xi0 + 1]) +
+            fy[:, None]       * ((1 - fx)[None, :] * coarse[yi0 + 1][:, xi0] +
+                                 fx[None, :]       * coarse[yi0 + 1][:, xi0 + 1])
+        ).astype(np.float32)
+
+    field_medium = _bilinear_field(rng, 32, 32, 0.50, 1.50)
+    field_high = _bilinear_field(rng, 128, 128, 0.65, 1.40)
+    alpha *= field_medium * field_high
+    fine_noise = rng.normal(0, 0.04, (SIZE, SIZE)).astype(np.float32)
+    alpha = np.clip(alpha + fine_noise, 0, 1).astype(np.float32)
+    del field_medium, field_high, fine_noise
+    alpha *= inside_pix.astype(np.float32)
+
+    u = rng.random((SIZE, SIZE))
+    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
+    canvas[~inside_pix] = IDX_BG
+
+    cum_peak = _build_peak_cum(class_name)
+    for y0 in range(0, SIZE, 800):
+        y1 = min(y0 + 800, SIZE)
+        a_c = alpha[y0:y1, :]
+        if a_c.max() < 0.01: continue
+        cum_mixed = ((1 - a_c)[..., None] * cum_base_use[None, None, :] +
+                     a_c[..., None] * cum_peak[None, None, :])
+        uu = rng.random((y1-y0, SIZE)).astype(np.float32)
+        grades = (uu[..., None] < cum_mixed).argmax(axis=-1).astype(np.uint8)
+        mask = a_c > 0.01
+        canvas[y0:y1][mask] = grades[mask]
+
+    chip_meta = {}
+    kind = '00P' if rng.random() < 0.5 else '00C'
+    bin_pool = DEFECT_BIN_POOL[kind]
+    for gy in range(GRID):
+        for gx in range(GRID):
+            if not inside[gy, gx]: continue
+            y0, x0 = gy*CHIP, gx*CHIP
+            chip_alpha = alpha[y0:y0+CHIP, x0:x0+CHIP]
+            chip_alpha_mean = float(chip_alpha.mean())
+            chip_alpha_max = float(chip_alpha.max())
+            if chip_alpha_max < canvas_tau: continue
+            score = max(chip_alpha_mean * 3.0, (chip_alpha_max - 0.5) * 1.5)
+            p_def = min(score, 1.0)
+            if rng.random() > p_def: continue
+            b = int(rng.choice(bin_pool, p=DEFECT_BIN_WEIGHTS))
+            chip_meta[(gy, gx)] = {'kind': 'defect', 'obj': None, 'bin': b, 'inside': True}
+    del alpha
+
+    IDX_BORDER_NORMAL = KEY_TO_INDEX["border"]
+    for gy in range(GRID):
+        for gx in range(GRID):
+            if not inside[gy, gx]: continue
+            y0, x0 = gy*CHIP, gx*CHIP; y1, x1 = y0+CHIP, x0+CHIP
+            meta = chip_meta.get((gy, gx))
+            if meta is None:
+                bw, c = 1, IDX_BORDER_NORMAL
+            else:
+                bw, c = 2, BIN_TO_BORDER_IDX.get(meta['bin'], KEY_TO_INDEX["border_etc"])
+            canvas[y0:y0+bw, x0:x1] = c; canvas[y1-bw:y1, x0:x1] = c
+            canvas[y0:y1, x0:x0+bw] = c; canvas[y0:y1, x1-bw:x1] = c
+
+    return canvas, chip_meta, PALETTE
+
+
 def render_canvas(class_name, seed):
     rng = np.random.default_rng(seed)
     inside = _canvas_wafer_inside_mask()                # 32x32

@@ -1,23 +1,11 @@
 #!/bin/bash
-# =====================================================================
-# Mega matrix sweep — all-in-one runner (single GPU)
+# SOTA-only matrix runner (single GPU).
 #
-# train_n / class ∈ {50, 100, 200}
-# eval_n / class  ∈ {200, 2000, 20000}
-# selection       ∈ {val_f1, val_margin}
-# recipe          = iter126e (LS=0.30, g=2, grid_dim=16, ep=10)
-# + Optional Stage 4: pseudo-label retrain (OFF by default)
-#
-# Usage:
-#   bash mega_matrix/run.sh                     # data + train + eval + report
-#   bash mega_matrix/run.sh --skip-data         # data 이미 있을 때
-#   bash mega_matrix/run.sh --skip-train        # eval+report only
-#   bash mega_matrix/run.sh --with-pseudo       # also run pseudo-label retrain
-#   bash mega_matrix/run.sh --data-base data/images
-#   bash mega_matrix/run.sh --report-only       # only summary.md regen
-#
-# DDP: bash mega_matrix/run_ddp.sh --gpus N
-# =====================================================================
+# Fixed recipe: iter116J canonical single model.
+# Sweep: train_n={50,100,200,400} x eval_n={200,2000,20000}.
+# Selection is not a training axis: one trajectory per train_n, then choose
+# val_f1 and val_margin best epoch checkpoints from the same trajectory.
+
 set -e
 set -E
 set -o pipefail
@@ -37,432 +25,349 @@ fi
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
-OUT_BASE=outputs/_mega_matrix    # models + reports (per-run TS-prefixed GROUP)
 BACKBONE="convnextv2_base.fcmae_ft_in22k_in1k_384"
-# 260520 — renamed env IMAGES_ROOT (was WM811K_ROOT) and default path data/images.
+IMG_SIZE=384
 DATA_BASE="${IMAGES_ROOT:-$PROJ_ROOT/data/images}"
-# Fallback: if default path missing classification_chips AND E:/data/images exists, use E:.
-if [ -z "$IMAGES_ROOT" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
+if [ -z "${IMAGES_ROOT:-}" ] && [ ! -d "$DATA_BASE/classification_chips" ] && [ -d "E:/data/images/classification_chips" ]; then
     DATA_BASE="E:/data/images"
 fi
-DO_DATA=1; DO_TRAIN=1; DO_EVAL=1; DO_PSEUDO=0; DO_REPORT=1
-SMOKE=0
-EPOCHS=30
+
+OUT_BASE="outputs/_mega_matrix_sota"
 TRAIN_SIZES_LIST="50 100 200 400"
-SEL_LIST="f1 margin_max"
 EVAL_SIZES_LIST="200 2000 20000"
+EPOCHS=10
+BATCH=2
+ACCUM=8
+TRAIN_WORKERS="${TRAIN_WORKERS:-0}"
+EVAL_BATCH="${EVAL_BATCH:-32}"
+EVAL_WORKERS="${EVAL_WORKERS:-0}"
+EPOCH_EVAL_BATCH="${EPOCH_EVAL_BATCH:-32}"
+EPOCH_EVAL_CAP="${EPOCH_EVAL_CAP:-0}"
+TRAIN_EPOCH_PRINT_CAP="${TRAIN_EPOCH_PRINT_CAP:-50}"
+ERROR_CAP="${ERROR_CAP:-200}"
+DO_DATA=1
+DO_TRAIN=1
+DO_EPOCH_EVAL=1
+DO_EVAL=1
+DO_REPORT=1
+FORCE=0
+EXTRA_TRAIN_FLAGS=""
+GROUP_DIR=""
+SMOKE=0
+
 while [ $# -gt 0 ]; do
-    case $1 in
+    case "$1" in
         --skip-data) DO_DATA=0 ;;
         --skip-train) DO_TRAIN=0 ;;
+        --skip-epoch-eval) DO_EPOCH_EVAL=0 ;;
         --skip-eval) DO_EVAL=0 ;;
-        --with-pseudo) DO_PSEUDO=1 ;;
-        --skip-pseudo) DO_PSEUDO=0 ;;
         --skip-report) DO_REPORT=0 ;;
-        --report-only) DO_DATA=0; DO_TRAIN=0; DO_EVAL=0; DO_PSEUDO=0; DO_REPORT=1 ;;
+        --report-only) DO_DATA=0; DO_TRAIN=0; DO_EPOCH_EVAL=0; DO_EVAL=0; DO_REPORT=1 ;;
         --data-base) shift; DATA_BASE="$1" ;;
         --data-base=*) DATA_BASE="${1#--data-base=}" ;;
-        --backbone) shift; BACKBONE="$1" ;;
-        --backbone=*) BACKBONE="${1#--backbone=}" ;;
-        # 260521 — custom sweep axes (comma or space separated; pipe through tr to normalize)
+        --out-base) shift; OUT_BASE="$1" ;;
+        --out-base=*) OUT_BASE="${1#--out-base=}" ;;
+        --group-dir) shift; GROUP_DIR="$1" ;;
+        --group-dir=*) GROUP_DIR="${1#--group-dir=}" ;;
         --train-sizes) shift; TRAIN_SIZES_LIST=$(echo "$1" | tr ',' ' ') ;;
         --train-sizes=*) TRAIN_SIZES_LIST=$(echo "${1#--train-sizes=}" | tr ',' ' ') ;;
         --eval-sizes) shift; EVAL_SIZES_LIST=$(echo "$1" | tr ',' ' ') ;;
         --eval-sizes=*) EVAL_SIZES_LIST=$(echo "${1#--eval-sizes=}" | tr ',' ' ') ;;
-        --sels) shift; SEL_LIST=$(echo "$1" | tr ',' ' ') ;;
-        --sels=*) SEL_LIST=$(echo "${1#--sels=}" | tr ',' ' ') ;;
         --epochs) shift; EPOCHS="$1" ;;
         --epochs=*) EPOCHS="${1#--epochs=}" ;;
-        # 260521 — small-GPU overrides (default batch table assumes H100 80GB server)
-        --batch) shift; BATCH_OVERRIDE="$1" ;;
-        --batch=*) BATCH_OVERRIDE="${1#--batch=}" ;;
-        --eval-batch) shift; EVAL_BATCH_OVERRIDE="$1" ;;
-        --eval-batch=*) EVAL_BATCH_OVERRIDE="${1#--eval-batch=}" ;;
-        --grad-ckpt) FORCE_GRAD_CKPT=1 ;;
-        --smoke) SMOKE=1 ;;
-        --help|-h) head -22 "$0" | tail -18; exit 0 ;;
+        --batch) shift; BATCH="$1" ;;
+        --batch=*) BATCH="${1#--batch=}" ;;
+        --accum) shift; ACCUM="$1" ;;
+        --accum=*) ACCUM="${1#--accum=}" ;;
+        --eval-batch) shift; EVAL_BATCH="$1" ;;
+        --eval-batch=*) EVAL_BATCH="${1#--eval-batch=}" ;;
+        --epoch-eval-batch) shift; EPOCH_EVAL_BATCH="$1" ;;
+        --epoch-eval-batch=*) EPOCH_EVAL_BATCH="${1#--epoch-eval-batch=}" ;;
+        --epoch-eval-cap) shift; EPOCH_EVAL_CAP="$1" ;;
+        --epoch-eval-cap=*) EPOCH_EVAL_CAP="${1#--epoch-eval-cap=}" ;;
+        --train-workers) shift; TRAIN_WORKERS="$1" ;;
+        --train-workers=*) TRAIN_WORKERS="${1#--train-workers=}" ;;
+        --eval-workers) shift; EVAL_WORKERS="$1" ;;
+        --eval-workers=*) EVAL_WORKERS="${1#--eval-workers=}" ;;
+        --error-cap) shift; ERROR_CAP="$1" ;;
+        --error-cap=*) ERROR_CAP="${1#--error-cap=}" ;;
+        --grad-ckpt) EXTRA_TRAIN_FLAGS="$EXTRA_TRAIN_FLAGS --grad-checkpointing" ;;
+        --force) FORCE=1 ;;
+        --smoke)
+            SMOKE=1
+            TRAIN_SIZES_LIST="${SMOKE_TRAIN_SIZES:-50}"
+            EVAL_SIZES_LIST="${SMOKE_EVAL_SIZES:-200}"
+            EPOCHS="${SMOKE_EPOCHS:-1}"
+            EPOCH_EVAL_CAP="${SMOKE_EPOCH_EVAL_CAP:-10}"
+            BATCH="${SMOKE_BATCH:-2}"
+            ACCUM="${SMOKE_ACCUM:-1}"
+            ;;
+        --help|-h)
+            sed -n '1,45p' "$0"
+            exit 0
+            ;;
+        *)
+            echo "unknown arg: $1" >&2
+            exit 2
+            ;;
     esac
     shift
 done
 
-# Propagate to gen_data.py + make_report.py so they generate / aggregate only the requested axes
+export IMAGES_ROOT="$DATA_BASE"
 export MEGA_TRAIN_SIZES=$(echo "$TRAIN_SIZES_LIST" | tr ' ' ',')
 export MEGA_EVAL_SIZES=$(echo "$EVAL_SIZES_LIST" | tr ' ' ',')
-export MEGA_SELS=$(echo "$SEL_LIST" | tr ' ' ',')
+export MEGA_SELS="val_f1,val_margin"
 
-# Derive input img-size from backbone name pattern
-case "$BACKBONE" in
-    *384*) IMG_SIZE=384 ;;
-    *256*) IMG_SIZE=256 ;;
-    *)     IMG_SIZE=224 ;;
-esac
-
-# H100 batch table — sized to ~60 GB / 80 GB (~75% utilization) for SERVER
-# (mega_matrix exception — runs on server with no baseline GPU contention).
-# Local-machine 30-40GB baseline rule does NOT apply here.
-case "$BACKBONE" in
-    *convnextv2_large*384*) BATCH_PER_GPU=9 ;;
-    *swinv2_base*384*)      BATCH_PER_GPU=12 ;;
-    *vit_base*384*)         BATCH_PER_GPU=18 ;;
-    *deit3_base*384*)       BATCH_PER_GPU=18 ;;
-    *convnextv2_base*384*)  BATCH_PER_GPU=18 ;;
-    *convnextv2_base*)      BATCH_PER_GPU=36 ;;   # 224
-    *convnextv2_tiny*)      BATCH_PER_GPU=72 ;;   # 224
-    *swin_tiny*224*)        BATCH_PER_GPU=72 ;;
-    *maxvit_tiny*224*)      BATCH_PER_GPU=48 ;;
-    *vit_base*clip*224*)    BATCH_PER_GPU=48 ;;
-    *efficientnetv2*)       BATCH_PER_GPU=48 ;;
-    *)                      BATCH_PER_GPU=12 ;;
-esac
-
-# Smoke mode override: tiny data × micro batch (env overrides allowed for
-# end-to-end smoke verification of full pipeline).
-if [ $SMOKE -eq 1 ]; then
-    BATCH_PER_GPU="${SMOKE_BATCH:-2}"
-    EPOCHS="${SMOKE_EPOCHS:-1}"
-    TRAIN_SIZES_LIST="${SMOKE_TRAIN_SIZES:-10}"
-    SEL_LIST="${SMOKE_SELS:-f1 margin_max}"
-    EVAL_SIZES_LIST="${SMOKE_EVAL_SIZES:-200}"
-    DO_PSEUDO=0
-    # DO_REPORT honors user value (default 1) so 'all-stages run' smoke covers report too
-    export MEGA_TRAIN_SIZES="${TRAIN_SIZES_LIST// /,}"
-    export MEGA_EVAL_SIZES="${EVAL_SIZES_LIST// /,}"
-    export MEGA_SELS="${SEL_LIST// /,}"
-fi
-
-TOTAL_CPU=$(nproc 2>/dev/null || echo 8)
-TRAIN_WORKERS="$TOTAL_CPU"
-# Smoke mode: cap DataLoader workers to avoid Windows paging-file blowout
-# (each worker re-imports torch via spawn; 16 workers * 1.5 GB = OOM on small page file).
-# Default SMOKE_WORKERS=0 (single-process loading) - safe everywhere.
-EXTRA_TRAIN_FLAGS=""
-if [ $SMOKE -eq 1 ]; then
-    TRAIN_WORKERS="${SMOKE_WORKERS:-0}"
-    EXTRA_TRAIN_FLAGS="--grad-checkpointing"
-fi
-# 260521 — --grad-ckpt CLI override (works in non-smoke mode too for small GPU)
-if [ "${FORCE_GRAD_CKPT:-0}" -eq 1 ]; then
-    EXTRA_TRAIN_FLAGS="--grad-checkpointing"
-fi
-# 260521 — --batch CLI override (replaces the H100 default batch table)
-if [ -n "${BATCH_OVERRIDE:-}" ]; then
-    BATCH_PER_GPU="$BATCH_OVERRIDE"
-fi
-EVAL_BATCH_SIZE="${EVAL_BATCH_OVERRIDE:-${EVAL_BATCH_SIZE:-$BATCH_PER_GPU}}"
-EVAL_WORKERS="${EVAL_WORKERS:-0}"
-SAVE_EVERY_EPOCH="${SAVE_EVERY_EPOCH:-0}"
-SAVE_EVERY_EPOCH_FLAG=""
-if [ "$SAVE_EVERY_EPOCH" = "1" ]; then
-    SAVE_EVERY_EPOCH_FLAG="--save-every-epoch"
-fi
-
-normalize_sel_list() {
-    local out=""
-    for raw in "$@"; do
-        local sel="$raw"
-        case "$sel" in
-            val_f1) sel="f1" ;;
-            margin|val_margin) sel="margin_max" ;;
-        esac
-        if [[ " $out " != *" $sel "* ]]; then
-            out="${out}${out:+ }${sel}"
+mkdir -p "$OUT_BASE"
+if [ -z "$GROUP_DIR" ]; then
+    if [ "$DO_DATA$DO_TRAIN$DO_EPOCH_EVAL$DO_EVAL" = "0000" ]; then
+        GROUP_DIR=$(find "$OUT_BASE" -mindepth 1 -maxdepth 1 -type d -printf '%p\n' 2>/dev/null | sort | tail -1)
+        if [ -z "$GROUP_DIR" ]; then
+            echo "no existing group under $OUT_BASE; pass --group-dir" >&2
+            exit 1
         fi
-    done
-    echo "$out"
-}
-SEL_LIST="$(normalize_sel_list $SEL_LIST)"
-if [ "${MEGA_ALLOW_SINGLE_SELECTION:-0}" != "1" ]; then
-    [[ " $SEL_LIST " == *" f1 "* ]] || SEL_LIST="f1 ${SEL_LIST}"
-    [[ " $SEL_LIST " == *" margin_max "* ]] || SEL_LIST="${SEL_LIST} margin_max"
+    else
+        RUN_STAMP=$(date +%Y%m%d_%H%M%S)
+        GROUP_DIR="$OUT_BASE/${RUN_STAMP}_iter116J_sota"
+    fi
 fi
-export MEGA_SELS=$(echo "$SEL_LIST" | tr ' ' ',')
-
-RUN_STAMP=$(date +%Y%m%d_%H%M%S)
-LOG_BACKBONE="${BACKBONE//\//_}"
-LOG_BACKBONE="${LOG_BACKBONE//:/_}"
-LOG_BACKBONE="${LOG_BACKBONE// /_}"
-# GROUP folder = single per-run namespace with TS prefix
-#   $OUT_BASE/<TS>_<backbone>/
-#     summary_mega_sweep.md  +  figs_mega/   (written by make_report.py)
-#     train{TN}_{SEL}/<inner_run>/best_model.pth + eval_{EN}/stage1_*/
-# Data (train_n{TN}, eval_n{EN}) stays at $OUT_BASE root for reuse across groups.
-GROUP_DIR="$OUT_BASE/${RUN_STAMP}_${LOG_BACKBONE}"
-MODEL_BASE="$GROUP_DIR"
 LOG_DIR="$GROUP_DIR/logs"
+mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/run.log"
-mkdir -p "$OUT_BASE" "$GROUP_DIR" "$LOG_DIR"
-export MEGA_GROUP_DIR="$GROUP_DIR"     # consumed by make_report.py
-export MEGA_MODEL_BASE="$MODEL_BASE"   # consumed by pseudo_label.py / make_report.py (legacy alias)
-export MEGA_BACKBONE="$BACKBONE"
-export MEGA_IMG_SIZE="$IMG_SIZE"
-export IMAGES_ROOT="$DATA_BASE"
+: > "$LOG"
+export MEGA_GROUP_DIR="$GROUP_DIR"
 
 log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [mega] $*" | tee -a "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [sota] $*" | tee -a "$LOG"
 }
 
-: > "$LOG"
 on_error() {
     local rc=$?
     local line="${1:-unknown}"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') [mega] EXIT_FAIL rc=$rc line=$line" | tee -a "$LOG"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') [sota] EXIT_FAIL rc=$rc line=$line" | tee -a "$LOG"
     exit "$rc"
 }
 trap 'on_error $LINENO' ERR
-CUTMIX_FORWARD_MULT=4  # complement + masked + n_groups=2 expands train forward batch up to 4x
-log "start backbone=$BACKBONE img=$IMG_SIZE batch=$BATCH_PER_GPU eval_batch=$EVAL_BATCH_SIZE effective_forward_batch<=$((BATCH_PER_GPU * CUTMIX_FORWARD_MULT)) accum=1 train_workers=$TRAIN_WORKERS eval_workers=$EVAL_WORKERS save_every_epoch=$SAVE_EVERY_EPOCH cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$IMAGES_ROOT (data=$DO_DATA train=$DO_TRAIN eval=$DO_EVAL pseudo=$DO_PSEUDO report=$DO_REPORT)"
 
-# Offline weights (closed-network) - .pth only.
-# Only required for stages that init a fresh timm backbone (train, pseudo-label).
-# data / eval / report don't need it (eval loads best_model.pth from disk).
-BACKBONE_WEIGHTS_FLAG=""
-OFFLINE_WEIGHTS="weights/${BACKBONE}.pth"
-NEEDS_WEIGHTS=0
-if [ $DO_TRAIN -eq 1 ] || [ $DO_PSEUDO -eq 1 ]; then
-    NEEDS_WEIGHTS=1
-fi
-if [ -f "$OFFLINE_WEIGHTS" ]; then
-    BACKBONE_WEIGHTS_FLAG="--backbone-timm-weights $OFFLINE_WEIGHTS"
-    log "offline weights: $OFFLINE_WEIGHTS"
-elif [ $NEEDS_WEIGHTS -eq 1 ]; then
-    log "ERROR missing offline weights for $BACKBONE under weights/"
-    log "closed-network mode forbids HF/timm download; create weights/${BACKBONE}.pth first"
+WEIGHTS="weights/${BACKBONE}.pth"
+if [ "$DO_TRAIN" -eq 1 ] && [ ! -f "$WEIGHTS" ]; then
+    log "ERROR missing offline weights: $WEIGHTS"
     exit 2
-else
-    log "SKIP weight check (no train/pseudo stage requested)"
 fi
 
-# ======================================================================
-# Stage 1: data generation
-# ======================================================================
-if [ $DO_DATA -eq 1 ]; then
-    log "=== STAGE 1: data generation ==="
+log "start group=$GROUP_DIR"
+log "fixed recipe: ConvNeXtV2-Base 384, T7 BCE+LS=0.30, no-normal, FCM-PM g=3 pair=masked, seed=1, lr=1e-4 cosine, I10 eval only"
+log "axes: train_sizes=[$TRAIN_SIZES_LIST] eval_sizes=[$EVAL_SIZES_LIST] selections=[val_f1 val_margin]"
+log "runtime: cuda_visible=$CUDA_VISIBLE_DEVICES data_base=$DATA_BASE epochs=$EPOCHS batch=$BATCH accum=$ACCUM epoch_eval_cap=$EPOCH_EVAL_CAP"
+
+count_pngs() {
+    find "$1" -maxdepth 1 -type f -name '*.png' 2>/dev/null | wc -l | tr -d ' '
+}
+
+eval_cap_for() {
+    local en=$1
+    if [ "$EPOCH_EVAL_CAP" -gt 0 ] && [ "$EPOCH_EVAL_CAP" -lt "$en" ]; then
+        echo "$EPOCH_EVAL_CAP"
+    else
+        echo "$en"
+    fi
+}
+
+latest_train_run() {
+    local tn=$1
+    local root="$GROUP_DIR/train_n${tn}"
+    [ -d "$root" ] || return 0
+    find "$root" -mindepth 1 -maxdepth 1 -type d -name '*_T7_*' -printf '%p\n' 2>/dev/null | sort | tail -1
+}
+
+eval_stage_exists() {
+    local root=$1
+    [ -d "$root" ] || return 1
+    find "$root" -mindepth 1 -maxdepth 1 -type d \( -name 'eval_*' -o -name 'stage1_*' \) -exec test -f '{}/bit_far_metrics.json' ';' -print -quit 2>/dev/null | grep -q .
+}
+
+if [ "$DO_DATA" -eq 1 ]; then
+    log "DATA generate/check train_n and eval_n"
     python -u -X utf8 mega_matrix/gen_data.py 2>&1 | tee -a "$LOG"
 fi
 
-# ======================================================================
-# Stage 2: training (6 cells = 3 train_n × 2 selection)
-# ======================================================================
-validate_train_data() {
-    local TRAIN_ROOT=$1
-    local TN=$2
-    local EXPECTED_CLASSES=(bank_boundary fork scratch scratch_rot)
-
-    if [ ! -d "$TRAIN_ROOT" ]; then
-        log "TRAIN_DATA_FAIL missing train root: $TRAIN_ROOT"
-        return 1
-    fi
-
-    local unexpected=()
-    local d cls
-    for d in "$TRAIN_ROOT"/*; do
-        [ -d "$d" ] || continue
-        cls=$(basename "$d")
-        case "$cls" in
-            bank_boundary|fork|scratch|scratch_rot|_*) ;;
-            *) unexpected+=("$cls") ;;
-        esac
-    done
-    if [ ${#unexpected[@]} -gt 0 ]; then
-        log "TRAIN_DATA_FAIL unexpected class dirs under $TRAIN_ROOT: ${unexpected[*]}"
-        log "  -> expected only: ${EXPECTED_CLASSES[*]}"
-        return 1
-    fi
-
-    local missing=()
+validate_train_root() {
+    local root=$1
+    local need=$2
     local total=0
-    local breakdown=""
-    local n
-    for cls in "${EXPECTED_CLASSES[@]}"; do
-        if [ -d "$TRAIN_ROOT/$cls" ]; then
-            n=$(find "$TRAIN_ROOT/$cls" -maxdepth 1 -name "*.png" 2>/dev/null | wc -l | tr -d ' ')
-        else
-            n=0
-        fi
+    local parts=""
+    for cls in bank_boundary fork scratch scratch_rot; do
+        local n=0
+        [ -d "$root/$cls" ] && n=$(count_pngs "$root/$cls")
+        parts="${parts}${cls}=${n} "
         total=$((total + n))
-        breakdown="${breakdown}${cls}=${n} "
-        if [ "$n" -lt "$TN" ]; then
-            missing+=("$cls=$n/$TN")
+        if [ "$n" -lt "$need" ]; then
+            log "TRAIN_DATA_FAIL $root/$cls has $n, need $need"
+            return 1
         fi
     done
-    if [ ${#missing[@]} -gt 0 ]; then
-        log "TRAIN_DATA_FAIL insufficient class data under $TRAIN_ROOT: ${missing[*]}"
-        log "  -> class_counts: ${breakdown}"
-        return 1
-    fi
-
-    TRAIN_DATA_TOTAL=$total
-    TRAIN_DATA_CLASS_N=${#EXPECTED_CLASSES[@]}
-    TRAIN_DATA_CLASS_BREAK="$breakdown"
+    TRAIN_TOTAL="$total"
+    TRAIN_PARTS="$parts"
     return 0
 }
 
 train_one() {
-    local TN=$1; local SEL=$2
-    local TAG="train${TN}_${SEL}"
-    local OUT_ROOT="${MODEL_BASE}/${TAG}"   # GROUP/<TAG>/<inner_run>/...
-    if [ -d "$OUT_ROOT" ]; then
-        log "SKIP train ${TAG}: exists $OUT_ROOT"
+    local tn=$1
+    local train_root="$DATA_BASE/train_n${tn}"
+    local out_root="$GROUP_DIR/train_n${tn}"
+    local run
+    run=$(latest_train_run "$tn" || true)
+    if [ -n "$run" ] && [ -f "$run/history.json" ] && [ "$FORCE" -eq 0 ]; then
+        log "TRAIN skip train_n${tn}: $run"
         return 0
     fi
-    # 260520 - print actual chip counts for visibility at cell start
-    local TRAIN_ROOT="${DATA_BASE}/train_n${TN}"
-    validate_train_data "$TRAIN_ROOT" "$TN" || return 1
-    local N_TRAIN_TOTAL="$TRAIN_DATA_TOTAL"
-    local N_CLASS="$TRAIN_DATA_CLASS_N"
-    local CLASS_BREAK="$TRAIN_DATA_CLASS_BREAK"
-    # Multi-val set used per-epoch (smallest available eval_n*)
-    local MV_DESC=""
-    for cand in 200 2000 100 50 30 20 10 5; do
-        if [ -d "${DATA_BASE}/eval_n${cand}" ]; then
-            local mv_total=$(find "${DATA_BASE}/eval_n${cand}" -mindepth 2 -name "*.png" 2>/dev/null | wc -l)
-            local npc=$cand
-            [ "$npc" -gt 50 ] && npc=50
-            MV_DESC=" multi_val=eval_n${cand}(${mv_total} chips, ${npc}/class)"
+    validate_train_root "$train_root" "$tn"
+    local mv_set=""
+    for cand in 200 2000 20000; do
+        if [ -d "$DATA_BASE/eval_n${cand}" ]; then
+            mv_set="$DATA_BASE/eval_n${cand}"
             break
         fi
     done
-    log "TRAIN ${TAG} ($BACKBONE) batch=$BATCH_PER_GPU workers=$TRAIN_WORKERS"
-    log "  -> train_data: ${TRAIN_ROOT}"
-    log "  -> chips=${N_TRAIN_TOTAL} (${CLASS_BREAK}) across ${N_CLASS} class; 0.9/0.1 train/val split"
-    log "  -> epochs=${EPOCHS} sel=${SEL}${MV_DESC}"
-    set +e
-    local TRAIN_STAMP=$(date +%Y%m%d_%H%M%S)
-    # 260520 - bit_F1 / FAR every epoch. Multi-val on smallest available eval set.
-    MULTI_VAL_FLAG=""
-    for cand in 200 2000 100 50 30 20 10 5; do
-        if [ -d "${DATA_BASE}/eval_n${cand}" ]; then
-            npc=$cand
-            [ "$npc" -gt 50 ] && npc=50
-            MULTI_VAL_FLAG="--multi-val-set ${DATA_BASE}/eval_n${cand} --multi-val-n-per-class ${npc}"
-            break
-        fi
-    done
-    TRAIN_RUN_STAMP="$TRAIN_STAMP" python -u -m chip_multilabel._train_chip_variant \
-        --variant T7 --ls 0.30 --epochs $EPOCHS --batch "$BATCH_PER_GPU" --accum 1 --seed 1 \
+    if [ -z "$mv_set" ]; then
+        log "TRAIN_DATA_FAIL no eval_n* set exists for per-epoch print"
+        return 1
+    fi
+    local mv_cap="$TRAIN_EPOCH_PRINT_CAP"
+    log "TRAIN train_n${tn}: before epoch 1 train_png=$TRAIN_TOTAL ($TRAIN_PARTS) eval_print_set=$mv_set cap=$mv_cap/class"
+    mkdir -p "$out_root"
+    local stamp
+    stamp=$(date +%Y%m%d_%H%M%S)
+    TRAIN_RUN_STAMP="$stamp" python -u -m chip_multilabel._train_chip_variant \
+        --variant T7 --ls 0.30 --epochs "$EPOCHS" --batch "$BATCH" --accum "$ACCUM" --seed 1 \
         --num-workers "$TRAIN_WORKERS" \
-        --lr 1e-4 --no-normal --val-criterion ${SEL} \
-        $SAVE_EVERY_EPOCH_FLAG \
-        $MULTI_VAL_FLAG \
-        --data-root "${DATA_BASE}/train_n${TN}" \
+        --lr 1e-4 --no-normal --val-criterion margin_max \
+        --save-every-epoch \
+        --multi-val-set "$mv_set" --multi-val-n-per-class "$mv_cap" \
+        --data-root "$train_root" \
         --cutmix-mode complement --cutmix-pair masked --cutmix-pair-fill corner \
         --cutmix-p 0.25 --cutmix-grid-dim 8 --cutmix-n-groups 3 --cutmix-complete-label-scale 0.5 \
-        --backbone-timm "$BACKBONE" --img-size $IMG_SIZE \
-        $BACKBONE_WEIGHTS_FLAG \
+        --backbone-timm "$BACKBONE" --img-size "$IMG_SIZE" \
+        --backbone-timm-weights "$WEIGHTS" \
         $EXTRA_TRAIN_FLAGS \
-        --out-root "$OUT_ROOT" --tag "${TAG}" \
+        --out-root "$out_root" --tag "sota_train_n${tn}" \
         2>&1 | tee -a "$LOG"
-    local TRAIN_RC=${PIPESTATUS[0]}
-    local RUN=$(find "$OUT_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
-    [ -n "$RUN" ] && rm -f "$RUN"/epoch_*.pth
-    set -e
-    if [ "$TRAIN_RC" -ne 0 ]; then
-        log "TRAIN_FAIL ${TAG} rc=$TRAIN_RC"
+}
+
+select_one() {
+    local tn=$1
+    local run
+    run=$(latest_train_run "$tn")
+    if [ -z "$run" ]; then
+        log "SELECT_FAIL train_n${tn}: missing run"
+        return 1
+    fi
+    local flag=""
+    [ "$FORCE" -eq 1 ] && flag="--force"
+    python -u -X utf8 mega_matrix/select_sota_checkpoints.py --run-dir "$run" $flag 2>&1 | tee -a "$LOG"
+}
+
+epoch_curve_one() {
+    local tn=$1
+    local en=$2
+    local run
+    run=$(latest_train_run "$tn")
+    local eval_set="$DATA_BASE/eval_n${en}"
+    local out_dir="$run/epoch_curves/eval_n${en}"
+    local cap
+    cap=$(eval_cap_for "$en")
+    if [ ! -d "$eval_set" ]; then
+        log "EPOCH_EVAL_FAIL missing $eval_set"
+        return 1
+    fi
+    if [ -s "$out_dir/epoch_metrics.csv" ] && [ -s "$out_dir/epoch_metrics.png" ] && [ "$FORCE" -eq 0 ]; then
+        log "EPOCH_EVAL skip train_n${tn} eval_n${en}: $out_dir"
         return 0
     fi
-    log "DONE ${TAG}"
+    log "EPOCH_EVAL train_n${tn} eval_n${en}: cap=$cap/class out=$out_dir"
+    python -u -X utf8 mega_matrix/eval_epoch_curve.py \
+        --run-dir "$run" --eval-set "$eval_set" --out-dir "$out_dir" \
+        --n-per-class "$cap" --batch-size "$EPOCH_EVAL_BATCH" --num-workers "$EVAL_WORKERS" \
+        2>&1 | tee -a "$LOG"
 }
-export -f train_one
 
-if [ $DO_TRAIN -eq 1 ]; then
-    log "=== STAGE 2: training ==="
-    for TN in $TRAIN_SIZES_LIST; do
-        for SEL in $SEL_LIST; do
-            train_one $TN $SEL
-        done
-    done
-fi
-
-# ======================================================================
-# Stage 3: eval (18 cells = 6 models × 3 eval_n)
-# ======================================================================
 eval_one() {
-    local TN=$1; local SEL=$2; local EN=$3
-    local MODEL_ROOT=$(find "$MODEL_BASE" -mindepth 1 -maxdepth 1 -type d \( -name "train${TN}_${SEL}" -o -name "*_model_train${TN}_${SEL}" \) -printf '%p\n' 2>/dev/null | sort -r | head -1)
-    local RUN=$(find "$MODEL_ROOT" -mindepth 2 -maxdepth 2 -name best_model.pth -printf '%h\n' 2>/dev/null | sort -r | head -1)
-    if [ -z "$RUN" ]; then
-        log "SKIP eval train${TN}_${SEL} eval_${EN}: no trained run under $MODEL_ROOT"
+    local tn=$1
+    local en=$2
+    local sel=$3
+    local run
+    run=$(latest_train_run "$tn")
+    local model="$run/selected/$sel/best_model.pth"
+    local eval_set="$DATA_BASE/eval_n${en}"
+    local out_root="$run/selected/$sel/eval_n${en}"
+    if [ ! -f "$model" ]; then
+        log "EVAL_FAIL missing selected model: $model"
+        return 1
+    fi
+    if [ ! -d "$eval_set" ]; then
+        log "EVAL_FAIL missing eval set: $eval_set"
+        return 1
+    fi
+    if eval_stage_exists "$out_root" && [ "$FORCE" -eq 0 ]; then
+        log "EVAL skip train_n${tn} eval_n${en} $sel: $out_root"
         return 0
     fi
-    local EVAL_OUT="${RUN}/eval_${EN}"
-    if [ -d "$EVAL_OUT" ]; then
-        log "SKIP eval train${TN}_${SEL} eval_${EN}: exists $EVAL_OUT"
-        return 0
-    fi
-    local EVAL_SET="${DATA_BASE}/eval_n${EN}"
-    if [ ! -d "$EVAL_SET" ]; then
-        log "SKIP eval train${TN}_${SEL} eval_${EN}: missing $EVAL_SET"
-        return 0
-    fi
-    # 260520 - print eval chip counts for visibility
-    local N_EVAL_TOTAL=$(find "$EVAL_SET" -mindepth 2 -name "*.png" 2>/dev/null | wc -l)
-    local N_EVAL_CLASS=$(find "$EVAL_SET" -mindepth 1 -maxdepth 1 -type d ! -name "_*" 2>/dev/null | wc -l)
-    log "EVAL train${TN}_${SEL} eval_${EN} ($BACKBONE)"
-    log "  -> eval_set: ${EVAL_SET}"
-    log "  -> chips=${N_EVAL_TOTAL} across ${N_EVAL_CLASS} class (target ${EN}/class)"
-    log "  -> batch=${EVAL_BATCH_SIZE} workers=${EVAL_WORKERS}"
-    log "  -> model: ${RUN}/best_model.pth"
-    log "  -> variants=I3,I7,I10,I13 (4 inference modes)"
+    local eval_total
+    eval_total=$(find "$eval_set" -mindepth 2 -type f -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
+    log "EVAL train_n${tn} eval_n${en} $sel: eval_png=$eval_total n_per_class=$en model=$model"
     python -u -m chip_multilabel.run_stage1 \
-        --model "${RUN}/best_model.pth" \
-        --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
-        --variants I3,I7,I10,I13 --n-per-class 99999 \
-        --batch-size "$EVAL_BATCH_SIZE" --num-workers "$EVAL_WORKERS" \
+        --model "$model" \
+        --eval-set "$eval_set" --out-root "$out_root" \
+        --variants I10 --n-per-class "$en" \
+        --batch-size "$EVAL_BATCH" --num-workers "$EVAL_WORKERS" \
+        --error-cap "$ERROR_CAP" \
         --strength-min 0.0 --strength-max 1.0 --seed 42 \
-        2>&1 | tee -a "$LOG" || log "EVAL_FAIL train${TN}_${SEL} eval_${EN}"
+        2>&1 | tee -a "$LOG"
 }
 
-if [ $DO_EVAL -eq 1 ]; then
-    log "=== STAGE 3: evaluation ==="
-    for TN in $TRAIN_SIZES_LIST; do
-        for SEL in $SEL_LIST; do
-            for EN in $EVAL_SIZES_LIST; do
-                eval_one $TN $SEL $EN
-            done
-        done
+if [ "$DO_TRAIN" -eq 1 ]; then
+    for tn in $TRAIN_SIZES_LIST; do
+        train_one "$tn"
+        select_one "$tn"
     done
-fi
-
-# ======================================================================
-# Stage 4: pseudo-label retrain + eval
-# ======================================================================
-if [ $DO_PSEUDO -eq 1 ]; then
-    log "=== STAGE 4: pseudo-label retrain ==="
-    python -u -X utf8 mega_matrix/pseudo_label.py 2>&1 | tee -a "$LOG"
-fi
-
-# ======================================================================
-# Stage 5: report (summary.md + plots)
-# ======================================================================
-if [ $DO_REPORT -eq 1 ]; then
-    log "=== STAGE 5: report ==="
-    python -u -X utf8 mega_matrix/make_report.py 2>&1 | tee -a "$LOG"
-    REPORT_PATH="${GROUP_DIR}/summary_mega_sweep.md"
-    if [ ! -s "$REPORT_PATH" ]; then
-        log "REPORT_FAIL missing report: $REPORT_PATH"
-        exit 1
-    fi
-    REQUIRED_PLOTS=(
-        bit_F1_heatmap.png
-        total_far_heatmap.png
-        ni_far_heatmap.png
-        ood_far_heatmap.png
-        scaling_curves.png
-        combined_bit_far_by_sel.png
-        bit_F1_by_sel.png
-        far_by_sel.png
-    )
-    if [[ " $SEL_LIST " == *" f1 "* && " $SEL_LIST " == *" margin_max "* ]]; then
-        REQUIRED_PLOTS=(best_model_eval_by_selection.png "${REQUIRED_PLOTS[@]}")
-    fi
-    for plot in "${REQUIRED_PLOTS[@]}"; do
-        PLOT_PATH="${GROUP_DIR}/figs_mega/${plot}"
-        if [ ! -s "$PLOT_PATH" ]; then
-            log "REPORT_FAIL missing plot: $PLOT_PATH"
-            exit 1
+elif [ "$DO_EVAL" -eq 1 ] || [ "$DO_EPOCH_EVAL" -eq 1 ] || [ "$DO_REPORT" -eq 1 ]; then
+    for tn in $TRAIN_SIZES_LIST; do
+        if [ -n "$(latest_train_run "$tn")" ]; then
+            select_one "$tn"
         fi
     done
 fi
 
-log "ALL DONE"
-echo "-> ${GROUP_DIR}/summary_mega_sweep.md" | tee -a "$LOG"
+if [ "$DO_EPOCH_EVAL" -eq 1 ]; then
+    for tn in $TRAIN_SIZES_LIST; do
+        for en in $EVAL_SIZES_LIST; do
+            epoch_curve_one "$tn" "$en"
+        done
+    done
+fi
+
+if [ "$DO_EVAL" -eq 1 ]; then
+    for tn in $TRAIN_SIZES_LIST; do
+        for en in $EVAL_SIZES_LIST; do
+            eval_one "$tn" "$en" "val_f1"
+            eval_one "$tn" "$en" "val_margin"
+        done
+    done
+fi
+
+if [ "$DO_REPORT" -eq 1 ]; then
+    log "REPORT build final summary and plots"
+    python -u -X utf8 mega_matrix/make_sota_matrix_report.py \
+        --group-dir "$GROUP_DIR" \
+        --train-sizes "$(echo "$TRAIN_SIZES_LIST" | tr ' ' ',')" \
+        --eval-sizes "$(echo "$EVAL_SIZES_LIST" | tr ' ' ',')" \
+        2>&1 | tee -a "$LOG"
+    test -s "$GROUP_DIR/summary_sota_matrix.md"
+    test -s "$GROUP_DIR/figs_sota/selection_bit_f1_far.png"
+    test -s "$GROUP_DIR/figs_sota/bit_F1_heatmap.png"
+    test -s "$GROUP_DIR/figs_sota/total_far_heatmap.png"
+fi
+
+log "DONE"
+echo "-> $GROUP_DIR/summary_sota_matrix.md" | tee -a "$LOG"
