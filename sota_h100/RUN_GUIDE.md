@@ -6,7 +6,11 @@ for synthesis (existing generators untouched).
 
 ---
 
-## A. Server (H100) — one shot
+> Environment setup (RHEL9/H100, Ubuntu24/H200, Python 3.11): see **ENV.md**.
+> Quick: `pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cu124`
+> then `pip install -r sota_h100/requirements.txt`.
+
+## A. Server (H100 / H200) — one shot
 
 ```bash
 # 1) code
