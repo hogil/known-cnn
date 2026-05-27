@@ -58,99 +58,14 @@ def render_chip(obj: str, rng: np.random.Generator,
     intensity_tier: 'strong'/'mid'/'weak' (None → random per pick_intensity_tier)
     bin_id: defect bin (200-299). None → random from kind=00C bin pool.
     """
-    CHIP = sg.CHIP
-    if intensity_tier is None:
-        intensity_tier = sg.pick_intensity_tier(rng)
-    if bin_id is None:
-        bin_id = int(rng.choice(sg.DEFECT_BIN_POOL['00C'], p=sg.DEFECT_BIN_WEIGHTS))
-
-    is_invalid = (obj == 'invalid_main')
-    if is_invalid:
-        canvas = np.full((CHIP, CHIP), 31, dtype=np.uint8)  # palette 31 = white
-    else:
-        # baseline grade canvas
-        baseline_tier = sg.pick_baseline_tier(rng)
-        cum_base = sg.CUM_BASELINE_TIERS[baseline_tier]
-        u = rng.random((CHIP, CHIP))
-        canvas = np.searchsorted(cum_base, u).astype(np.uint8)
-
-        # alpha modulation
-        alpha_scale = sg.INTENSITY_ALPHA_SCALE[intensity_tier]
-        alpha = sg.ALPHA_FNS[obj](rng) * alpha_scale
-        cum_obj = np.cumsum(sg.shifted_object_dist(obj, intensity_tier))
-
-        if obj in ('fork', 'scratch', 'scratch_rot'):
-            # 2-stage sampling (matches _sample_gen render @line 954)
-            u_base = rng.random((CHIP, CHIP))
-            grades_base = np.searchsorted(sg.CUM_BASE, u_base).astype(np.uint8)
-            u1 = rng.random((CHIP, CHIP))
-            is_defect = u1 < alpha
-            # 260507 v5.1: fork 만 미세 dial — peak grade 2 살짝 ↓
-            # fork:              0.50/0.88 → 0.53/0.90   (미세하게 grade 1 쪽으로)
-            # scratch / scr_rot: 0.60/0.91   (변경 없음)
-            if obj == 'fork':
-                lo_t2, hi_t2 = 0.53, 0.90
-            else:  # scratch / scratch_rot
-                lo_t2, hi_t2 = 0.60, 0.91
-            t2 = np.clip((alpha - lo_t2) / (hi_t2 - lo_t2), 0.0, 1.0).astype(np.float32)
-            p_2 = (t2 * t2 * (3.0 - 2.0 * t2)).astype(np.float32)
-            u2 = rng.random((CHIP, CHIP))
-            is_2 = u2 < p_2
-            u3 = rng.random((CHIP, CHIP))
-            defect_other = np.where(u3 < 0.95, np.uint8(1),
-                            np.where(u3 < 0.99, np.uint8(3), np.uint8(4)))
-            defect_grade = np.where(is_2, np.uint8(2), defect_other)
-            grades = np.where(is_defect, defect_grade, grades_base).astype(np.uint8)
-        else:
-            # 3-way zone mix (bank_boundary etc)
-            # 260507 v5: split 0.5/0.5 → 0.45/0.55 (center weight 더 일찍 켜짐 → peak grade 2 미세 ↑)
-            t_low = np.clip(alpha / 0.45, 0.0, 1.0).astype(np.float32)
-            t_high = np.clip((alpha - 0.45) / 0.55, 0.0, 1.0).astype(np.float32)
-            s_low = (t_low * t_low * (3.0 - 2.0 * t_low)).astype(np.float32)
-            s_high = (t_high * t_high * (3.0 - 2.0 * t_high)).astype(np.float32)
-            mask_low = (alpha < 0.45).astype(np.float32)
-            mask_high = 1.0 - mask_low
-            w_bg = (mask_low * (1.0 - s_low)).astype(np.float32)
-            w_edge = (mask_low * s_low + mask_high * (1.0 - s_high)).astype(np.float32)
-            w_center = (mask_high * s_high).astype(np.float32)
-            cum_mixed = (w_bg[..., None] * sg.CUM_DEFECT_BG[None, None, :] +
-                         w_edge[..., None] * sg.CUM_EDGE[None, None, :] +
-                         w_center[..., None] * cum_obj[None, None, :])
-            uu = rng.random((CHIP, CHIP))
-            grades = (uu[..., None] < cum_mixed).argmax(axis=-1).astype(np.uint8)
-        canvas = grades
-
-    # 2px border
-    if add_border:
-        if obj == 'invalid_main':
-            border_color = sg.KEY_TO_INDEX.get('border_inv', 30)
-        else:
-            border_color = sg.BIN_TO_BORDER_IDX.get(bin_id, sg.KEY_TO_INDEX.get('border_etc', 25))
-        canvas[:2, :] = border_color
-        canvas[-2:, :] = border_color
-        canvas[:, :2] = border_color
-        canvas[:, -2:] = border_color
-
-    # Bin number text — INVALID chip 만 (다른 class 는 chip 안 text 없음)
-    if add_bin_text and is_invalid:
-        img = Image.frombytes('P', (CHIP, CHIP), canvas.tobytes())
-        img.putpalette(_make_palette())
-        draw = ImageDraw.Draw(img)
-        font = _try_font(64)
-        text = str(bin_id)
-        try:
-            bbox = draw.textbbox((0, 0), text, font=font)
-            tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-            ty = CHIP // 2 - th // 2 - bbox[1]
-        except Exception:
-            tw, th, ty = 60, 40, CHIP // 2 - 20
-        idx_text = sg.KEY_TO_INDEX.get('text', sg.KEY_TO_INDEX.get('border_inv', 30))
-        draw.text((CHIP // 2 - tw // 2, ty), text, fill=idx_text, font=font)
-        return img
-
-    img = Image.frombytes('P', (CHIP, CHIP), canvas.tobytes())
-    img.putpalette(_make_palette())
-    return img
+    # 260527: chip rendering delegated to the current-version synth (sota_h100.synth).
+    # bank_boundary / fork / scratch / scratch_rot -> render_single_chip;
+    # invalid_main -> render_invalid_chip. (Legacy alpha path retired here.)
+    from sota_h100 import synth
+    if obj == 'invalid_main':
+        return synth.render_invalid_chip(rng)
+    return synth.render_single_chip(obj, rng, intensity_tier=intensity_tier,
+                                    bin_id=bin_id, add_border=add_border)
 
 
 def main() -> int:

@@ -163,46 +163,18 @@ def render_multi_chip(
         if o not in DEFECT_CLASSES:
             raise ValueError(f"unsupported obj '{o}'; use {DEFECT_CLASSES}")
 
-    if intensity_tier is None:
-        intensity_tier = sg.pick_intensity_tier(rng)
-    if bin_id is None:
-        bin_id = int(rng.choice(sg.DEFECT_BIN_POOL['00C'], p=sg.DEFECT_BIN_WEIGHTS))
-
-    # baseline canvas (clean baseline grade map; will be overwritten where any obj has high alpha)
-    baseline_tier = sg.pick_baseline_tier(rng)
-    cum_base = sg.CUM_BASELINE_TIERS[baseline_tier]
-    u = rng.random((CHIP, CHIP))
-    canvas = np.searchsorted(cum_base, u).astype(np.uint8)
-
-    # compute alpha + grade pattern per obj (each grade map already contains baseline where alpha low)
-    alphas, grades = [], []
-    for obj in objs:
-        a, g = _compute_alpha_grade_for_obj(obj, rng, intensity_tier)
-        alphas.append(a)
-        grades.append(g)
-
+    # 260527: chip rendering delegated to current-version synth (sota_h100.synth).
+    #   1 obj  -> render_single_chip
+    #   2 objs -> render_combo_chip (min-blend of two current singles)
+    #   N>=3   -> pixel-wise RGB min of N current singles
+    from sota_h100 import synth
     if len(objs) == 1:
-        canvas = grades[0]
-    else:
-        # per-pixel argmax over all obj alphas, take that obj's grade.
-        # baseline already encoded in each obj's `grade` where its own alpha was low,
-        # so for combined pixel: pick the obj-with-highest-alpha at that pixel.
-        all_alpha = np.stack(alphas, axis=0)                                # (n, H, W)
-        all_grade = np.stack(grades, axis=0)                                # (n, H, W)
-        max_idx = all_alpha.argmax(axis=0)                                  # (H, W)
-        canvas = np.take_along_axis(all_grade, max_idx[None], axis=0)[0].astype(np.uint8)
-
-    # 2px border (main defect = first obj)
-    if add_border:
-        border_color = sg.BIN_TO_BORDER_IDX.get(bin_id, sg.KEY_TO_INDEX.get('border_etc', 25))
-        canvas[:2, :] = border_color
-        canvas[-2:, :] = border_color
-        canvas[:, :2] = border_color
-        canvas[:, -2:] = border_color
-
-    img = Image.frombytes('P', (CHIP, CHIP), canvas.tobytes())
-    img.putpalette(_make_palette())
-    return img
+        return synth.render_single_chip(objs[0], rng, intensity_tier=intensity_tier,
+                                        bin_id=bin_id, add_border=add_border)
+    if len(objs) == 2:
+        return synth.render_combo_chip("+".join(objs), rng)
+    arrs = [np.asarray(synth.render_single_chip(o, rng).convert("RGB")) for o in objs]
+    return Image.fromarray(np.minimum.reduce(arrs).astype(np.uint8), mode="RGB")
 
 
 def _gen_synth_class(class_key: str, n: int, out_dir: Path, rng_master: np.random.Generator) -> int:
@@ -231,14 +203,33 @@ def _gen_synth_class(class_key: str, n: int, out_dir: Path, rng_master: np.rando
 
 
 def _copy_class(class_key: str, n: int, out_dir: Path, src_root: Path) -> int:
-    """Copy first n PNGs from src_root/<class_key>/ to out_dir."""
+    """260527: OOD (4) / Normal / Invalid delegated to current synth (sota_h100.synth)
+    instead of copying from pre_v5. Unsupported keys (OOD_OVERLAY 3-way) fall back to copy."""
+    from sota_h100 import synth
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rng = np.random.default_rng(abs(hash(class_key)) % (2 ** 31))
+    if class_key in synth.OOD_CLASSES:
+        idx = 0; w = 0
+        while idx < n and w < n * 5 + 50:
+            for gy, gx, img in synth.iter_ood_chips(class_key, int(rng.integers(0, 2 ** 31 - 1))):
+                if idx >= n:
+                    break
+                img.save(out_dir / f"{class_key}_{idx:04d}.png", optimize=False, compress_level=1)
+                idx += 1
+            w += 1
+        return idx
+    if class_key in ('Normal', 'Invalid'):
+        fn = synth.render_normal_chip if class_key == 'Normal' else synth.render_invalid_chip
+        for i in range(n):
+            fn(np.random.default_rng(int(rng.integers(0, 2 ** 31 - 1)))).save(
+                out_dir / f"{class_key}_{i:04d}.png", optimize=False, compress_level=1)
+        return n
+    # fallback: copy (e.g. OOD_OVERLAY 3-way not in synth)
     src_dir = src_root / class_key
     if not src_dir.is_dir():
         print(f"[copy] WARN: source not found {src_dir}", flush=True)
         return 0
-    out_dir.mkdir(parents=True, exist_ok=True)
-    src_files = sorted(src_dir.glob('*.png'))
-    take = src_files[:n]
+    take = sorted(src_dir.glob('*.png'))[:n]
     for p in take:
         shutil.copy2(p, out_dir / p.name)
     return len(take)

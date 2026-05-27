@@ -140,46 +140,35 @@ def _gen_one_ood_chip(args):
 
 def generate_direct_class(cls: str, per_class: int, rng: random.Random,
                           dst_root: Path = None, n_workers: int = None):
-    """OOD chip synth via in-memory wafer-canvas crop.
-    260521 — switched from _render_direct_chip (chip-local alpha, ±12px center) to
-    dist_apply._sample_canvas_gen.render_canvas_in_memory (full 6400x6400 wafer
-    canvas in memory, defect chip extracted). Matches the distribution of
-    chip_multilabel_v15direct_n1000 OOD chips exactly (no off-wafer mono artifact).
-    No temp wafer PNG files written."""
-    from dist_apply._sample_canvas_gen import render_canvas_in_memory, CHIP as CANVAS_CHIP
-    PALE_BLUE_IDX = 8
+    """OOD chip synth — 260527 delegated to the current-version synth
+    (sota_h100.synth.iter_ood_chips: wafer-pattern chip-crop puzzle, no full wafer).
+    One pattern realization yields many chips; loop seeds until per_class."""
+    from sota_h100 import synth
     dr = dst_root if dst_root is not None else DST_ROOT
     dst_dir = dr / cls
     dst_dir.mkdir(parents=True, exist_ok=True)
-    existing = sorted(dst_dir.glob("*.png"))
-    n_have = len(existing)
+    n_have = len(sorted(dst_dir.glob("*.png")))
     if n_have >= per_class:
-        print(f"[OOD] {cls}: canvas already has {n_have} >= {per_class}, skip")
+        print(f"[OOD] {cls}: already {n_have} >= {per_class}, skip")
         return n_have
-    print(f"[OOD] {cls}: in-memory canvas synth {n_have}/{per_class} (no temp files)", flush=True)
-    cls_seed = rng.randrange(2**31)
-    idx = n_have; wafer_i = 0; max_wafer = 1000
+    if cls not in synth.OOD_CLASSES:
+        print(f"[OOD] {cls}: not an OOD class in synth ({synth.OOD_CLASSES}); skip")
+        return n_have
+    print(f"[OOD] {cls}: synth.iter_ood_chips {n_have}/{per_class}", flush=True)
+    idx = n_have
+    wafer_i = 0
+    max_wafer = per_class * 5 + 50
     while idx < per_class and wafer_i < max_wafer:
-        seed = cls_seed + wafer_i * 1000
-        try:
-            canvas, chip_meta, palette = render_canvas_in_memory(cls, seed)
-            for (gy, gx), meta in chip_meta.items():
-                if idx >= per_class: break
-                if int(meta['bin']) < 200: continue
-                y0, x0 = gy*CANVAS_CHIP, gx*CANVAS_CHIP
-                arr = canvas[y0:y0+CANVAS_CHIP, x0:x0+CANVAS_CHIP]
-                if arr.std() < 0.01 and int(arr.flat[0]) == PALE_BLUE_IDX:
-                    continue
-                img = Image.frombytes('P', (CANVAS_CHIP, CANVAS_CHIP), arr.tobytes())
-                img.putpalette(palette)
-                img.save(dst_dir / f"{cls}_{idx:04d}.png", optimize=False, compress_level=1)
-                idx += 1
-            if wafer_i % 10 == 0 or idx >= per_class:
-                print(f"[OOD] {cls}: wafer {wafer_i+1:>3d}, total {idx}/{per_class}", flush=True)
-        except Exception as e:
-            print(f"[OOD] {cls}: wafer {wafer_i+1} ERROR {type(e).__name__}: {e}", flush=True)
+        seed = rng.randrange(2**31)
+        for gy, gx, img in synth.iter_ood_chips(cls, seed):
+            if idx >= per_class:
+                break
+            img.save(dst_dir / f"{cls}_{idx:04d}.png", optimize=False, compress_level=1)
+            idx += 1
         wafer_i += 1
-    print(f"[OOD] {cls}: in-memory canvas done {idx}/{per_class} ({wafer_i} wafer)", flush=True)
+        if wafer_i % 20 == 0 or idx >= per_class:
+            print(f"[OOD] {cls}: {idx}/{per_class} ({wafer_i} patterns)", flush=True)
+    print(f"[OOD] {cls}: done {idx}/{per_class}", flush=True)
     return idx
 
 

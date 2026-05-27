@@ -98,19 +98,8 @@ def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
     - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지)
     - return PIL Image mode='P' with palette (chip 결함 generator 와 동일 logic)
     """
-    from dist_apply import _sample_gen as sg
-
-    p_noise = float(rng.beta(2, 10))   # per-chip random noise probability
-    u = rng.random((CHIP_SIZE, CHIP_SIZE))
-    is_noise = u < p_noise
-    u2 = rng.random((CHIP_SIZE, CHIP_SIZE))
-    # noise 안에서 grade 1 (정상 sprinkle) 95%, grade 2 (가끔 dot) 5%
-    noise_grade = np.where(u2 < 0.95, 1, 2).astype(np.uint8)
-    grades = np.where(is_noise, noise_grade, 0).astype(np.uint8)
-
-    img = Image.frombytes('P', (CHIP_SIZE, CHIP_SIZE), grades.tobytes())
-    img.putpalette(sg.PALETTE)
-    return img
+    from sota_h100 import synth   # 260527: delegate to current-version synth
+    return synth.render_normal_chip(rng)
 
 
 def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
@@ -122,45 +111,8 @@ def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
     - White interior = grade 0 (palette index 0)
     - return PIL Image mode='P'
     """
-    from dist_apply import _sample_gen as sg
-
-    grades = np.zeros((CHIP_SIZE, CHIP_SIZE), dtype=np.uint8)  # all white (grade 0)
-    BORDER_IDX = sg.KEY_TO_INDEX.get('border_inv', 11)
-    TEXT_IDX = sg.KEY_TO_INDEX.get('text', 9)
-    grades[:2, :] = BORDER_IDX
-    grades[-2:, :] = BORDER_IDX
-    grades[:, :2] = BORDER_IDX
-    grades[:, -2:] = BORDER_IDX
-
-    img = Image.frombytes('P', (CHIP_SIZE, CHIP_SIZE), grades.tobytes())
-    img.putpalette(sg.PALETTE)
-
-    # Centered large text (palette index for fill — PIL converts to mode='P' index)
-    bin_num = int(rng.integers(200, 300))
-    font = None
-    for fp in ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/calibri.ttf",
-               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
-        try:
-            from os.path import exists
-            if exists(fp):
-                font = ImageFont.truetype(fp, 64)
-                break
-        except Exception:
-            pass
-    if font is None:
-        font = ImageFont.load_default()
-    draw = ImageDraw.Draw(img)
-    text = f"B{bin_num}"
-    try:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-        tx = CHIP_SIZE // 2 - tw // 2 - bbox[0]
-        ty = CHIP_SIZE // 2 - th // 2 - bbox[1]
-    except Exception:
-        tw, th = 120, 50
-        tx, ty = CHIP_SIZE // 2 - tw // 2, CHIP_SIZE // 2 - th // 2
-    draw.text((tx, ty), text, fill=int(TEXT_IDX), font=font)
-    return img
+    from sota_h100 import synth   # 260527: delegate to current-version synth
+    return synth.render_invalid_chip(rng)
 
 
 def _sanity_check(class_key: str, arr: np.ndarray,
