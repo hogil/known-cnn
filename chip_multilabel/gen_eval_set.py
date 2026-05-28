@@ -89,6 +89,42 @@ def _min_blend_n(arrs: List[np.ndarray]) -> np.ndarray:
     return np.minimum.reduce(arrs).astype(np.uint8)
 
 
+def _load_chip_grade(path: Path):
+    """Load a palette chip as (grade_index_array, palette_list). Sources from
+    classification_chips are mode 'P'. Non-P falls back to grayscale (no palette)."""
+    with Image.open(path) as im:
+        if im.mode == 'P':
+            return np.asarray(im, dtype=np.uint8), im.getpalette()
+        return np.asarray(im.convert('L'), dtype=np.uint8), None
+
+
+def _min_blend_grade(paths: List[Path]) -> Image.Image:
+    """Palette-preserving combo: per pixel keep the DARKER (lower palette luminance
+    = stronger defect) grade INDEX, returning a mode='P' PIL image. Replaces the
+    RGB-channel min which fabricated off-palette colors -> RGB PNG (260528 rule:
+    every generated image is a palette PNG)."""
+    grades, pal = [], None
+    for p in paths:
+        g, pp = _load_chip_grade(Path(p))
+        grades.append(g)
+        if pal is None and pp is not None:
+            pal = pp
+    if len({g.shape for g in grades}) != 1:
+        raise ValueError(f"grade shape mismatch for combo: {[g.shape for g in grades]}")
+    lum = np.full(256, 1e9, dtype=np.float32)        # unknown idx -> very bright, never chosen
+    if pal:
+        n = len(pal) // 3
+        lum[:n] = (np.array(pal[: n * 3], dtype=np.float32).reshape(n, 3)
+                   @ np.array([0.299, 0.587, 0.114], dtype=np.float32))
+    stack = np.stack(grades)                          # (k, H, W)
+    pick = np.argmin(lum[stack], axis=0)              # darkest grade per pixel
+    out = np.take_along_axis(stack, pick[None], axis=0)[0].astype(np.uint8)
+    img = Image.frombytes('P', (out.shape[1], out.shape[0]), out.tobytes())
+    if pal:
+        img.putpalette(pal)
+    return img
+
+
 def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
     """Palette-aligned Normal chip — per-chip Beta(2, 10) noise probability.
 
@@ -98,7 +134,7 @@ def _make_normal_chip(rng: np.random.Generator) -> Image.Image:
     - ★ palette grade 0/1/2 만 사용 (RGB 자유 색 영구 금지)
     - return PIL Image mode='P' with palette (chip 결함 generator 와 동일 logic)
     """
-    from sota_h100 import synth   # 260527: delegate to current-version synth
+    import chip_synth as synth   # 260527: delegate to current-version synth
     return synth.render_normal_chip(rng)
 
 
@@ -111,7 +147,7 @@ def _make_invalid_chip(rng: np.random.Generator) -> Image.Image:
     - White interior = grade 0 (palette index 0)
     - return PIL Image mode='P'
     """
-    from sota_h100 import synth   # 260527: delegate to current-version synth
+    import chip_synth as synth   # 260527: delegate to current-version synth
     return synth.render_invalid_chip(rng)
 
 
@@ -197,16 +233,12 @@ def _worker_make_single(args):
 
 def _worker_make_combo2(args):
     a_path, b_path, _seed = args
-    return _min_blend(_load_chip_rgb(Path(a_path)), _load_chip_rgb(Path(b_path)))
+    return _min_blend_grade([Path(a_path), Path(b_path)])      # mode 'P' palette
 
 
 def _worker_make_combo3(args):
     a_path, b_path, c_path, _seed = args
-    return _min_blend_n([
-        _load_chip_rgb(Path(a_path)),
-        _load_chip_rgb(Path(b_path)),
-        _load_chip_rgb(Path(c_path)),
-    ])
+    return _min_blend_grade([Path(a_path), Path(b_path), Path(c_path)])   # mode 'P'
 
 
 def _worker_make_normal(seed):

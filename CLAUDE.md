@@ -2,6 +2,86 @@
 
 이 파일은 Claude Code(claude.ai/code) 새 세션에 프로젝트 진입점을 알려준다.
 
+## ★★★ 절대 규칙 — 학습 성능 보고는 train + eval + pos/neg prob (260528) ★★★
+
+학습/실험 성능을 보고할 때 **무조건** 다음을 모두 표시 (하나라도 빠지면 위반):
+
+1. **train 성능** + **eval 성능** 둘 다 (한쪽만 보고 절대 금지)
+2. train 과 eval **각각에 대해 pos prob / neg prob 까지**
+   - **pos prob** = GT bit = 1 (defect 존재) 인 (sample,bit) 의 sigmoid prob 평균 — 높을수록 좋음
+   - **neg prob** = GT bit = 0 (defect 부재) 인 (sample,bit) 의 sigmoid prob 평균 — 낮을수록 좋음
+   - eval 의 Normal/Invalid/OOD 는 all-negative → neg prob 에만 기여
+3. bit_F1 / FAR (NI / OOD / Total 분리) 기본 동반
+
+이유: neg prob 가 FAR 의 근본 원인을 드러냄 (frozen OOD fork neg prob 0.23 / FAR 0% vs
+noisy-train OOD fork neg prob 0.56 / FAR 48% — bit_F1 으론 안 보이고 neg prob 으로만 보임).
+사용자 260528 "성능은 train 과 eval 보여주고 각각의 pos neg prob 까지" 절대규칙 등록 지시.
+memory: `~/.claude/projects/D--project-known-cnn/memory/feedback_show_train_eval_posneg_prob.md`.
+
+## ★★★ 절대 규칙 — 표 보여주는 양식 (260515) ★★★
+
+**표 / 히스토리 / 결과 / sweep ranking 모두 무조건 아래 양식. 위반 절대 금지.**
+
+요구 사항:
+1. **반드시 code block** (` ```으로 감쌈`) — markdown pipe 표 (` ``` ` 안 없는) 절대 금지 → CLI 터미널이 너비 초과 시 row 마다 dict-style 로 자동 split + `────────` 자동 삽입돼서 표 깨짐
+2. **단일 통합 표** — sub-section / 분할 절대 금지
+3. **모든 row 가 `|` 로 시작 + 끝** + 컬럼 사이 `|`
+4. **각 컬럼은 그 컬럼 내 최장 entry 기준으로 공백 padding** — 모든 `|` 가 세로로 정렬되어야 함
+5. **header row 와 첫 data row 사이만 dashed line** (`|---|---|...|` 형식, header 컬럼 너비와 같이)
+6. **data row 사이에 separator 절대 금지** (`────────` 라인 데이터 row 사이 삽입 절대 X)
+7. **emoji / 특수문자 (★ ↓ 🔄 ⏳ 등) 금지** — 모노스페이스 폰트에서 너비 가변이라 정렬 깨짐. 대신 plain ASCII (`done`, `train`, `queued`, `eval pend`, `dn`, `up` 등) 사용
+8. **variant tag `(I10)` `(I13)` 본문에 절대 금지** — 별도 컬럼으로만 표현 (`bestI`)
+9. **iter 이름** redundant 면 생략, 식별 필수일 때만 괄호로 짧게
+
+올바른 예시 (이 양식 그대로 따라야 함):
+
+```
+| Recipe                                    | bestI | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Status         |
+|-------------------------------------------|-------|--------|--------|---------|-----------|----------------|
+| Focal LS=0 no-cutmix                      | I13   | 0.7874 |   0.00 |    0.31 |      0.08 | FAR champ      |
+| CutMix-only single p=0.25 LS=0.30         | I10   | 0.9359 |  37.00 |   57.81 |     42.05 | F1 champ       |
+| CutMix-only single p=0.25 LS=0.30         | I13   | 0.8298 |  14.20 |   49.53 |     22.77 | valid          |
+| 5b complement g4n2 pair p=0.25 LS=0.30    | I3    | 0.8925 | 100.00 |  100.00 |    100.00 | peak F1        |
+| 5b complement g4n2 pair p=0.25 LS=0.30    | I10   | 0.8747 |  80.00 |   52.66 |     73.37 | valid          |
+| 5b complement g4n2 pair p=0.25 LS=0.30    | I13   | 0.8618 |  79.85 |   35.94 |     69.20 | pair-mask eff  |
+| 5c single pair p=0.50 LS=0.30             | I3    | 0.8946 | 100.00 |  100.00 |    100.00 | peak F1        |
+| 5c single pair p=0.50 LS=0.30             | I13   | 0.7788 |  80.00 |   77.81 |     79.47 | fork single dn |
+| ladder5 old single pair p=0.25 LS=0.30    | I3    | 0.9256 | 100.00 |  100.00 |    100.00 | valid          |
+| ladder5 old single pair p=0.25 LS=0.30    | I13   | 0.8213 |  98.55 |   99.69 |     98.83 | valid          |
+| BCE+LS=0.30 no-cutmix (baseline)          | I13   | 0.1093 |  99.65 |   98.91 |     99.47 | collapse       |
+| ASL LS=0 no-cutmix                        | I3    | 0.6435 | 100.00 |  100.00 |    100.00 | over-positive  |
+| 5d complement g4n2 pair p=1.00 LS=0.30    | -     | -      |      - |       - |         - | train          |
+| 5e complement g4n2 NO-pair p=0.25 LS=0.30 | -     | -      |      - |       - |         - | queued         |
+| 5f complement g4n2 NO-pair p=1.00 LS=0.30 | -     | -      |      - |       - |         - | queued         |
+| bag1 g=2 LS=0.30 (FCM-PM trained)         | -     | -      |      - |       - |         - | eval pend      |
+| bag2 g=3 LS=0.50 (FCM-PM trained)         | -     | -      |      - |       - |         - | eval pend      |
+| bag3 g=4 LS=0.40 (FCM-PM trained)         | -     | -      |      - |       - |         - | eval pend      |
+| bag4 g=3 LS=0.67 white (FCM-PM)           | -     | -      |      - |       - |         - | eval pend      |
+```
+
+위반 패턴 (절대 금지):
+- ❌ markdown pipe 표를 code block 없이 (CLI 가 dict-style 로 split)
+- ❌ row 마다 `────────` 자동/수동 삽입
+- ❌ recipe 별로 sub-table 분할
+- ❌ 컬럼 padding 안 해서 `|` 가 세로로 안 맞음
+- ❌ emoji / ★ / ↓ / 🔄 / ⏳ 사용 (가변 폭)
+- ❌ Variant tag `(I10)` 본문에 — 별도 컬럼만
+- ❌ `header` 와 `data` 사이가 아닌 곳에 dashed line
+
+사용자 강조 history (260514-15) — **극대노 누적 (반복 위반 = 사용자 심각 불만)**:
+- (극대노) 표는 무조건 **하나로 통합** — 분할 절대 X
+- (절대규칙 등록 요청) memory + CLAUDE.md 양쪽 명시
+- iter 이름 본문에 redundant 면 제거, header-data 사이 dashed line 필수
+- Variant 컬럼은 별도, 본문에 `(I10)` 같은 inline tag 절대 X (극대노)
+- FAR metric 은 NI-FAR / OOD-FAR 분리 필수 (Total 단독 reporting X)
+- header row 와 첫 data row 사이 `-----` dashed line 1줄로 구분
+- (극대노) markdown pipe 표 → CLI 가 dict-style 로 분할 + `────────` 자동 삽입 → 표 깨짐 → **code block plain text** 만 사용
+- (강조) "위처럼 하지말고 아래처럼" 절대규칙에 여러 번 못박기
+- (정렬 명시) 각 컬럼 최장 entry 기준 padding → 모든 `|` 세로 정렬 필수
+- (CLAUDE.md 기입 directive) 본 양식 정확히 example 로 박아두기 → 절대 이 양식대로
+
+memory: `~/.claude/projects/D--project-known-cnn/memory/feedback_table_format_one_consolidated.md`
+
 ## 이 repo가 하는 일 (현재)
 
 WM-811K wafer 분포를 학습하고 chip-internal 패턴을 합성해 36 클래스 fail-bit

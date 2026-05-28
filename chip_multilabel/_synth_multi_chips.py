@@ -163,18 +163,25 @@ def render_multi_chip(
         if o not in DEFECT_CLASSES:
             raise ValueError(f"unsupported obj '{o}'; use {DEFECT_CLASSES}")
 
-    # 260527: chip rendering delegated to current-version synth (sota_h100.synth).
+    # 260527: chip rendering delegated to current-version synth (chip_synth).
     #   1 obj  -> render_single_chip
-    #   2 objs -> render_combo_chip (min-blend of two current singles)
-    #   N>=3   -> pixel-wise RGB min of N current singles
-    from sota_h100 import synth
+    #   2 objs -> render_combo_chip (grade-space min-blend, mode 'P')
+    #   N>=3   -> grade-space min-blend of N current singles (mode 'P')
+    import chip_synth as synth
     if len(objs) == 1:
         return synth.render_single_chip(objs[0], rng, intensity_tier=intensity_tier,
                                         bin_id=bin_id, add_border=add_border)
     if len(objs) == 2:
         return synth.render_combo_chip("+".join(objs), rng)
-    arrs = [np.asarray(synth.render_single_chip(o, rng).convert("RGB")) for o in objs]
-    return Image.fromarray(np.minimum.reduce(arrs).astype(np.uint8), mode="RGB")
+    # 3+ combo: per-pixel keep the DARKER (stronger-defect) grade INDEX in palette
+    # space so the result stays mode='P' (260528 rule: every gen image is palette PNG).
+    grades = [np.asarray(synth.render_single_chip(o, rng), dtype=np.uint8) for o in objs]
+    stack = np.stack(grades)                                  # (k, H, W)
+    pick = np.argmin(synth._PAL_LUM[stack], axis=0)           # darkest grade per pixel
+    out = np.take_along_axis(stack, pick[None], axis=0)[0].astype(np.uint8)
+    img = Image.frombytes('P', (synth.CHIP, synth.CHIP), out.tobytes())
+    img.putpalette(synth.PALETTE)
+    return img
 
 
 def _gen_synth_class(class_key: str, n: int, out_dir: Path, rng_master: np.random.Generator) -> int:
@@ -205,7 +212,7 @@ def _gen_synth_class(class_key: str, n: int, out_dir: Path, rng_master: np.rando
 def _copy_class(class_key: str, n: int, out_dir: Path, src_root: Path) -> int:
     """260527: OOD (4) / Normal / Invalid delegated to current synth (sota_h100.synth)
     instead of copying from pre_v5. Unsupported keys (OOD_OVERLAY 3-way) fall back to copy."""
-    from sota_h100 import synth
+    import chip_synth as synth
     out_dir.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(abs(hash(class_key)) % (2 ** 31))
     if class_key in synth.OOD_CLASSES:
