@@ -414,7 +414,109 @@ log P(x | class=c)
 = sum_j log Normal(x_j ; μ_cj, sigma_j^2)
 ```
 
-계산 결과:
+여기서 `single 4개 + 2combo 6개` 전체 class 분포와 모두 비교한다. 거리와 likelihood는 다음 관계로 본다.
+
+```text
+z2_sum_c = sum_j ((x_j - μ_cj) / sigma_j)^2
+logL_c   = constant - 0.5 * z2_sum_c
+score    = max_c logL_c
+```
+
+### Case A: 2combo sample `x=[0.62, 0.14, 0.60, 0.13]`
+
+이 값은 `bb`와 `sc`가 같이 높은 2combo다. 모든 class와 비교하면 다음처럼 `2combo bb+sc`만 likelihood가 높다.
+
+| rank | class mean | mu=[bb,fk,sc,sr] | z2_sum | logL |
+|---:|---|---|---:|---:|
+| 1 | 2combo bb+sc | [0.62,0.14,0.60,0.13] | 0.00 | 6.43 |
+| 2 | single bb | [0.85,0.13,0.14,0.13] | 41.34 | -14.24 |
+| 3 | single sc | [0.14,0.13,0.85,0.13] | 45.78 | -16.46 |
+| 4 | 2combo bb+fk | [0.62,0.60,0.14,0.13] | 66.12 | -26.64 |
+| 5 | 2combo bb+sr | [0.62,0.14,0.13,0.60] | 69.03 | -28.09 |
+| 6 | 2combo sc+sr | [0.14,0.13,0.62,0.60] | 70.59 | -28.87 |
+| 7 | 2combo fk+sc | [0.14,0.62,0.60,0.13] | 72.00 | -29.57 |
+| 8 | 2combo fk+sr | [0.14,0.62,0.13,0.60] | 141.03 | -64.09 |
+| 9 | single fk | [0.13,0.85,0.14,0.13] | 149.34 | -68.24 |
+| 10 | single sr | [0.13,0.14,0.13,0.85] | 153.03 | -70.09 |
+
+중간 계산 예:
+
+```text
+x_combo      = [0.62, 0.14, 0.60, 0.13]
+mu_bb+sc     = [0.62, 0.14, 0.60, 0.13]
+diff         = [0.00, 0.00, 0.00, 0.00]
+z^2          = [0.00, 0.00, 0.00, 0.00]
+z2_sum       = 0.00
+logL         = 6.43
+```
+
+반대로 single bb와 비교하면 `sc`가 너무 높아서 멀어진다.
+
+```text
+x_combo      = [0.62, 0.14, 0.60, 0.13]
+mu_single_bb = [0.85, 0.13, 0.14, 0.13]
+diff         = [-0.23, +0.01, +0.46, 0.00]
+z^2          = [8.27, 0.02, 33.06, 0.00]
+z2_sum       = 41.34
+logL         = -14.24
+```
+
+따라서 이 sample은 `2combo bb+sc`로 accept된다.
+
+### Case B: OOD sample `x=[0.58, 0.33, 0.32, 0.30]`
+
+이 값은 `bb=0.58`이라 max-prob만 보면 2combo의 pos_min `0.60`과 비슷하다. 그러나 10개 known class와 비교하면 모든 likelihood가 낮다.
+
+| rank | class mean | mu=[bb,fk,sc,sr] | z2_sum | logL |
+|---:|---|---|---:|---:|
+| 1 | 2combo bb+fk | [0.62,0.60,0.14,0.13] | 21.22 | -4.18 |
+| 2 | 2combo bb+sc | [0.62,0.14,0.60,0.13] | 22.66 | -4.90 |
+| 3 | 2combo bb+sr | [0.62,0.14,0.13,0.60] | 25.59 | -6.37 |
+| 4 | single bb | [0.85,0.13,0.14,0.13] | 27.22 | -7.18 |
+| 5 | 2combo fk+sc | [0.14,0.62,0.60,0.13] | 60.16 | -23.65 |
+| 6 | 2combo fk+sr | [0.14,0.62,0.13,0.60] | 63.09 | -25.12 |
+| 7 | 2combo sc+sr | [0.14,0.13,0.62,0.60] | 64.62 | -25.89 |
+| 8 | single fk | [0.13,0.85,0.14,0.13] | 83.47 | -35.31 |
+| 9 | single sc | [0.14,0.13,0.85,0.13] | 84.91 | -36.03 |
+| 10 | single sr | [0.13,0.14,0.13,0.85] | 90.19 | -38.67 |
+
+nearest는 `2combo bb+fk`지만, score가 `-4.18`로 낮다. 예시 threshold를 `tau=0`으로 두면 reject된다.
+
+중간 계산 예:
+
+```text
+x_ood        = [0.58, 0.33, 0.32, 0.30]
+mu_bb+fk     = [0.62, 0.60, 0.14, 0.13]
+diff         = [-0.04, -0.27, +0.18, +0.17]
+z^2          = [0.25, 11.39, 5.06, 4.52]
+z2_sum       = 21.22
+logL         = -4.18
+```
+
+`bb` 하나는 가깝지만 `fk/sc/sr`가 class pattern과 동시에 맞지 않는다. 그래서 nearest class가 있어도 likelihood가 낮으면 known class로 확정하지 않고 reject/OOD로 보낸다.
+
+### Decision rule
+
+질문한 것처럼 "둘 다 값이 너무 낮으면 OOD로 가는가?"에 대한 답은 yes다. 정확히는 explicit OOD class로 분류한다기보다 **known single/2combo likelihood가 전부 threshold보다 낮으면 reject**한다.
+
+```text
+score = max_c logL_c(x)
+
+if score >= tau:
+    accept nearest known class
+else:
+    reject as unknown/OOD/ambiguous
+```
+
+요약:
+
+| sample | best known class | best logL | decision |
+|---|---|---:|---|
+| single bb | single bb | 6.43 | accept |
+| 2combo bb+sc | 2combo bb+sc | 6.43 | accept |
+| OOD bb-tail | 2combo bb+fk nearest | -4.18 | reject/OOD |
+
+기존의 짧은 계산표:
 
 | sample | logL(single bb) | logL(2combo bb+sc) | score=max logL | nearest pattern | decision, tau=0 |
 |---|---:|---:|---:|---|---|
