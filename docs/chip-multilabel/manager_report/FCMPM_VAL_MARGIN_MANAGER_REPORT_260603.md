@@ -94,9 +94,9 @@
 
 차트 파일은 이미지 출력 절대규칙에 따라 `E:/data/images/` 아래에 저장했다.
 
-![FCM-PM probability bars all conditions](E:/data/images/chip_multilabel_reports/manager_260603/fcm_pm_prob_bars_all_conditions.png)
+![FCM-PM probability bars all conditions](figs/fcm_pm_prob_bars_all_conditions.png)
 
-![FCM-PM OOD bb tail all conditions](E:/data/images/chip_multilabel_reports/manager_260603/fcm_pm_ood_bb_tail_all_conditions.png)
+![FCM-PM OOD bb tail all conditions](figs/fcm_pm_ood_bb_tail_all_conditions.png)
 
 ### Group Mean Probability
 
@@ -351,26 +351,25 @@ NB reject는 model 자체를 다시 학습하지 않고, 이미 나온 4-bit pro
 
 NB reject를 붙이는 이유는 raw classifier의 bit_F1을 크게 올리기 위해서가 아니다. 핵심은 **어떤 OOD sample에서 특정 bit probability가 높아도, 그 4개 확률의 전체 모양은 single 또는 2-combo defect와 다르다**는 점을 이용하는 것이다.
 
-예를 들어 `train=400 val_margin`에서 OOD인 `CrossScratch`, `Starburst`는 `bank_boundary(bb)` probability가 `0.40` 근처까지 올라온다. 단순 max-prob 또는 threshold만 보면 "bb가 꽤 높다"라고 볼 수 있다. 하지만 실제 `bank_boundary` single 또는 `bank_boundary+X` 2-combo와 비교하면 4-bit vector 모양이 다르다.
+아래 그림은 설명용 예시다. 실제 측정값을 그대로 복사한 것이 아니라, **OOD max probability가 2-combo의 positive min probability와 거의 같은 상황**을 의도적으로 만든다. 이 상황에서도 NB reject가 왜 필요할 수 있는지를 보여주기 위한 pattern-level illustration이다.
 
-![NB reject pattern](E:/data/images/chip_multilabel_reports/manager_260603/nb_reject_pattern_bank_boundary_ood.png)
+![NB reject single combo OOD pattern](figs/nb_reject_single_combo_ood_pattern_illustrative.png)
 
-| pattern | GT | bb | fk | sc | sr | likelihood interpretation |
+| pattern | GT | bb | fk | sc | sr | likelihood meaning |
 |---|---|---:|---:|---:|---:|---|
-| bank_boundary | 1000 | 0.849 | 0.139 | 0.151 | 0.154 | single bb: bb high, other bits low |
-| bank_boundary+fork | 1100 | 0.765 | 0.746 | 0.110 | 0.132 | combo: bb and fk both high |
-| bank_boundary+scratch | 1010 | 0.772 | 0.081 | 0.687 | 0.103 | combo: bb and sc both high |
-| bank_boundary+scratch_rot | 1001 | 0.758 | 0.106 | 0.113 | 0.714 | combo: bb and sr both high |
-| CrossScratch (OOD) | 0000 | 0.402 | 0.234 | 0.340 | 0.306 | OOD: bb is moderately high, but no valid single/combo pattern |
-| Starburst (OOD) | 0000 | 0.413 | 0.237 | 0.342 | 0.303 | OOD: bb is moderately high, but no valid single/combo pattern |
+| single bank_boundary | 1000 | 0.85 | 0.13 | 0.14 | 0.13 | valid single: one bit high, others low |
+| 2combo bank_boundary+scratch | 1010 | 0.62 | 0.14 | 0.60 | 0.13 | valid combo: two target bits high, pos_min=0.60 |
+| OOD bb-tail negative | 0000 | 0.58 | 0.33 | 0.32 | 0.30 | max=0.58 is close to combo pos_min, but the vector has no valid single/2combo shape |
 
-즉 OOD의 `bb=0.40`은 단독으로 보면 커 보이지만:
+단순 threshold 관점에서는 OOD의 `bb=0.58`이 커 보인다. 2combo의 작은 positive인 `sc=0.60`과 거의 비슷하기 때문이다. 그래서 max-prob 또는 bit별 threshold만 보면 OOD와 2combo가 헷갈릴 수 있다.
 
-- `bank_boundary` single이라면 `bb≈0.85`이고 `fk/sc/sr≈0.14~0.15`여야 한다.
-- `bank_boundary+fork` combo라면 `bb≈0.76`, `fk≈0.75`가 같이 높아야 한다.
-- `bank_boundary+scratch` combo라면 `bb≈0.77`, `sc≈0.69`가 같이 높아야 한다.
-- `bank_boundary+scratch_rot` combo라면 `bb≈0.76`, `sr≈0.71`이 같이 높아야 한다.
-- OOD는 `bb≈0.40`이 떠도 `fk/sc/sr`가 애매하게 중간값이고, 어떤 single/2-combo의 전형적인 모양에도 맞지 않는다.
+하지만 4-bit pattern은 다르다.
+
+- single `bank_boundary`: `bb`만 높고 `fk/sc/sr`는 낮아야 한다.
+- 2combo `bank_boundary+scratch`: `bb`와 `sc`가 동시에 높고 `fk/sr`는 낮아야 한다.
+- OOD bb-tail: `bb`는 높지만 `fk/sc/sr`가 모두 애매한 중간값이다. single도 아니고, `bb+scratch` 2combo도 아니다.
+
+즉 NB reject가 보는 것은 "`bb`가 0.58인가?"가 아니라, "`[bb, fk, sc, sr] = [0.58, 0.33, 0.32, 0.30]`가 어떤 valid class distribution처럼 생겼는가?"이다.
 
 GaussianNB는 이 차이를 다음처럼 본다.
 
