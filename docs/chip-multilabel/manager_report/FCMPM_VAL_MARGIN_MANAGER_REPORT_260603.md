@@ -398,102 +398,115 @@ NB reject를 붙이는 이유는 raw classifier의 bit_F1을 크게 올리기 �
 
 ### Example likelihood calculation
 
-아래는 위 illustration 값을 그대로 넣은 계산 예시다. 설명을 단순하게 하기 위해 diagonal Gaussian을 사용하고, 각 bit의 표준편차를 동일하게 `sigma=0.08`로 둔다.
+아래는 위 illustration 값을 그대로 class mean으로 둔 계산이 아니다. 그 방식이면 sample과 mean이 같아져 `z2_sum=0`이 나오는데, 실제 NB reject 설명으로는 부적절하다.
+
+실제 계산은 다음처럼 한다.
+
+- `x`: 현재 sample의 4-bit probability vector
+- `mu_c`: calibration set에서 class `c`의 4-bit probability 평균
+- `sigma_c`: calibration set에서 class `c`의 4-bit probability 표준편차
+- 비교 대상: known defect class `single 4개 + 2combo 6개`
+
+여기서는 train=200 val_margin run의 calibration predictions로 GaussianNB를 다시 fit한 값을 사용한다.
 
 ```text
-single bb mean      μ_single = [0.85, 0.13, 0.14, 0.13]
-2combo bb+sc mean   μ_combo  = [0.62, 0.14, 0.60, 0.13]
-OOD bb-tail sample  x_ood    = [0.58, 0.33, 0.32, 0.30]
-sigma = [0.08, 0.08, 0.08, 0.08]
+calib_preds = outputs/frozen_iter116J_orig814_v15direct_n2000/
+              samplecap_T7_LS02950_g3_grid9_cmp10000_p05000_ab090_100_mpos065_s7_ep10_tr200_ev00200/
+              eval_best/eval_260531_231711/preds_chip.parquet
+
+cell = T0__I10
+tau  = -165.22   # calibration negative max 기준
 ```
 
-GaussianNB의 class likelihood는 bit별 likelihood를 곱한 것과 같고, log domain에서는 다음처럼 더한다.
+NB class likelihood는 bit별 Gaussian likelihood를 곱한 것과 같고, log domain에서는 다음처럼 더한다.
 
 ```text
-log P(x | class=c)
-= sum_j log Normal(x_j ; μ_cj, sigma_j^2)
-```
-
-여기서 `single 4개 + 2combo 6개` 전체 class 분포와 모두 비교한다. 거리와 likelihood는 다음 관계로 본다.
-
-```text
-z2_sum_c = sum_j ((x_j - μ_cj) / sigma_j)^2
-logL_c   = constant - 0.5 * z2_sum_c
+z2_sum_c = sum_j ((x_j - mu_cj) / sigma_cj)^2
+logL_c   = log prior_c + sum_j log Normal(x_j ; mu_cj, sigma_cj^2)
 score    = max_c logL_c
 ```
 
-### Case A: 2combo sample `x=[0.62, 0.14, 0.60, 0.13]`
+중요한 점은 `mu`만 보는 것이 아니라 `sigma`까지 들어간다는 것이다. 분산이 작은 bit에서 조금만 벗어나도 likelihood가 크게 떨어진다.
 
-이 값은 `bb`와 `sc`가 같이 높은 2combo다. 모든 class와 비교하면 다음처럼 `2combo bb+sc`만 likelihood가 높다.
+### Case A: 2combo-like sample `x=[0.62, 0.14, 0.60, 0.13]`
 
-| rank | class mean | mu=[bb,fk,sc,sr] | z2_sum | logL |
-|---:|---|---|---:|---:|
-| 1 | 2combo bb+sc | [0.62,0.14,0.60,0.13] | 0.00 | 6.43 |
-| 2 | single bb | [0.85,0.13,0.14,0.13] | 41.34 | -14.24 |
-| 3 | single sc | [0.14,0.13,0.85,0.13] | 45.78 | -16.46 |
-| 4 | 2combo bb+fk | [0.62,0.60,0.14,0.13] | 66.12 | -26.64 |
-| 5 | 2combo bb+sr | [0.62,0.14,0.13,0.60] | 69.03 | -28.09 |
-| 6 | 2combo sc+sr | [0.14,0.13,0.62,0.60] | 70.59 | -28.87 |
-| 7 | 2combo fk+sc | [0.14,0.62,0.60,0.13] | 72.00 | -29.57 |
-| 8 | 2combo fk+sr | [0.14,0.62,0.13,0.60] | 141.03 | -64.09 |
-| 9 | single fk | [0.13,0.85,0.14,0.13] | 149.34 | -68.24 |
-| 10 | single sr | [0.13,0.14,0.13,0.85] | 153.03 | -70.09 |
+이 sample은 `bb`와 `sc`가 같이 높은 2combo-like vector다. 실제 calibration distribution 10개와 비교하면 다음과 같다.
+
+```text
+sample x = [0.62, 0.14, 0.60, 0.13]
+
+rank  class                     mu=[bb,fk,sc,sr]          sigma=[bb,fk,sc,sr]       z2_sum   logL
+----  ------------------------  ------------------------  ------------------------  -------  ---------
+1     bank_boundary+scratch     [0.769,0.103,0.674,0.110] [0.034,0.014,0.086,0.008]    34.42      -8.21
+2     fork+scratch              [0.137,0.751,0.774,0.103] [0.041,0.055,0.035,0.011]   293.70    -138.84
+3     fork+scratch_rot          [0.141,0.787,0.103,0.754] [0.016,0.091,0.011,0.035]  3189.37   -1586.29
+4     bank_boundary+fork        [0.794,0.697,0.115,0.122] [0.027,0.115,0.008,0.008]  3442.98   -1712.04
+5     scratch+scratch_rot       [0.132,0.106,0.779,0.729] [0.009,0.005,0.039,0.040]  3550.86   -1764.97
+6     bank_boundary+scratch_rot [0.808,0.125,0.115,0.758] [0.023,0.004,0.006,0.035]  6242.63   -3109.60
+7     fork                      [0.151,0.853,0.150,0.148] [0.013,0.008,0.015,0.004] 10019.10   -4996.79
+8     scratch                   [0.147,0.148,0.853,0.148] [0.004,0.008,0.007,0.005] 14430.89   -7200.76
+9     bank_boundary             [0.853,0.150,0.147,0.148] [0.004,0.003,0.003,0.003] 27965.91  -13965.70
+10    scratch_rot               [0.146,0.146,0.145,0.854] [0.004,0.004,0.006,0.005] 45281.49  -22625.00
+```
 
 중간 계산 예:
 
 ```text
-x_combo      = [0.62, 0.14, 0.60, 0.13]
-mu_bb+sc     = [0.62, 0.14, 0.60, 0.13]
-diff         = [0.00, 0.00, 0.00, 0.00]
-z^2          = [0.00, 0.00, 0.00, 0.00]
-z2_sum       = 0.00
-logL         = 6.43
+x                  = [0.620, 0.140, 0.600, 0.130]
+mu_bank+scratch    = [0.769, 0.103, 0.674, 0.110]
+sigma              = [0.034, 0.014, 0.086, 0.008]
+diff               = [-0.149, +0.037, -0.074, +0.020]
+z^2                = [19.45, 7.55, 0.75, 6.67]
+z2_sum             = 34.42
+logL               = -8.21
 ```
 
-반대로 single bb와 비교하면 `sc`가 너무 높아서 멀어진다.
+`score=-8.21`이고 `tau=-165.22`보다 높으므로 이 sample은 known 2combo로 accept된다. 반대로 single `bank_boundary`와 비교하면 `sc`가 너무 높아서 멀어진다.
 
 ```text
-x_combo      = [0.62, 0.14, 0.60, 0.13]
-mu_single_bb = [0.85, 0.13, 0.14, 0.13]
-diff         = [-0.23, +0.01, +0.46, 0.00]
-z^2          = [8.27, 0.02, 33.06, 0.00]
-z2_sum       = 41.34
-logL         = -14.24
+x            = [0.620, 0.140, 0.600, 0.130]
+mu_single_bb = [0.853, 0.150, 0.147, 0.148]
+sigma        = [0.004, 0.003, 0.003, 0.003]
+z2_sum       = 27965.91
+logL         = -13965.70
 ```
-
-따라서 이 sample은 `2combo bb+sc`로 accept된다.
 
 ### Case B: OOD sample `x=[0.58, 0.33, 0.32, 0.30]`
 
-이 값은 `bb=0.58`이라 max-prob만 보면 2combo의 pos_min `0.60`과 비슷하다. 그러나 10개 known class와 비교하면 모든 likelihood가 낮다.
+이 값은 `bb=0.58`이라 max-prob만 보면 2combo의 positive 값과 비슷하다. 그러나 10개 known class와 비교하면 모든 likelihood가 낮다.
 
-| rank | class mean | mu=[bb,fk,sc,sr] | z2_sum | logL |
-|---:|---|---|---:|---:|
-| 1 | 2combo bb+fk | [0.62,0.60,0.14,0.13] | 21.22 | -4.18 |
-| 2 | 2combo bb+sc | [0.62,0.14,0.60,0.13] | 22.66 | -4.90 |
-| 3 | 2combo bb+sr | [0.62,0.14,0.13,0.60] | 25.59 | -6.37 |
-| 4 | single bb | [0.85,0.13,0.14,0.13] | 27.22 | -7.18 |
-| 5 | 2combo fk+sc | [0.14,0.62,0.60,0.13] | 60.16 | -23.65 |
-| 6 | 2combo fk+sr | [0.14,0.62,0.13,0.60] | 63.09 | -25.12 |
-| 7 | 2combo sc+sr | [0.14,0.13,0.62,0.60] | 64.62 | -25.89 |
-| 8 | single fk | [0.13,0.85,0.14,0.13] | 83.47 | -35.31 |
-| 9 | single sc | [0.14,0.13,0.85,0.13] | 84.91 | -36.03 |
-| 10 | single sr | [0.13,0.14,0.13,0.85] | 90.19 | -38.67 |
+```text
+sample x = [0.58, 0.33, 0.32, 0.30]
 
-nearest는 `2combo bb+fk`지만, score가 `-4.18`로 낮다. 예시 threshold를 `tau=0`으로 두면 reject된다.
+rank  class                     mu=[bb,fk,sc,sr]          sigma=[bb,fk,sc,sr]       z2_sum   logL
+----  ------------------------  ------------------------  ------------------------  -------  ---------
+1     fork+scratch              [0.137,0.751,0.774,0.103] [0.041,0.055,0.035,0.011]   685.51    -334.74
+2     bank_boundary+scratch     [0.769,0.103,0.674,0.110] [0.034,0.014,0.086,0.008]   901.11    -441.56
+3     bank_boundary+fork        [0.794,0.697,0.115,0.122] [0.027,0.115,0.008,0.008]  1224.73    -602.91
+4     fork+scratch_rot          [0.141,0.787,0.103,0.754] [0.016,0.091,0.011,0.035]  1339.02    -661.11
+5     bank_boundary+scratch_rot [0.808,0.125,0.115,0.758] [0.023,0.004,0.006,0.035]  3858.41   -1917.49
+6     scratch+scratch_rot       [0.132,0.106,0.779,0.729] [0.009,0.005,0.039,0.040]  4685.07   -2332.07
+7     fork                      [0.151,0.853,0.150,0.148] [0.013,0.008,0.015,0.004]  6559.47   -3266.97
+8     bank_boundary             [0.853,0.150,0.147,0.148] [0.004,0.003,0.003,0.003] 16167.25   -8066.37
+9     scratch                   [0.147,0.148,0.853,0.148] [0.004,0.008,0.007,0.005] 18979.45   -9475.04
+10    scratch_rot               [0.146,0.146,0.145,0.854] [0.004,0.004,0.006,0.005] 30482.21  -15225.36
+```
+
+nearest는 `fork+scratch`지만, score가 `-334.74`로 `tau=-165.22`보다 낮다. 따라서 reject/OOD로 보낸다. nearest class 이름이 직관과 다를 수 있는 이유는 NB가 max bit 하나가 아니라 4차원 전체와 각 bit의 variance를 같이 보기 때문이다.
 
 중간 계산 예:
 
 ```text
-x_ood        = [0.58, 0.33, 0.32, 0.30]
-mu_bb+fk     = [0.62, 0.60, 0.14, 0.13]
-diff         = [-0.04, -0.27, +0.18, +0.17]
-z^2          = [0.25, 11.39, 5.06, 4.52]
-z2_sum       = 21.22
-logL         = -4.18
+x               = [0.580, 0.330, 0.320, 0.300]
+mu_fork+scratch = [0.137, 0.751, 0.774, 0.103]
+sigma           = [0.041, 0.055, 0.035, 0.011]
+diff            = [+0.443, -0.421, -0.454, +0.197]
+z^2             = [118.83, 57.60, 168.56, 340.52]
+z2_sum          = 685.51
+logL            = -334.74
 ```
 
-`bb` 하나는 가깝지만 `fk/sc/sr`가 class pattern과 동시에 맞지 않는다. 그래서 nearest class가 있어도 likelihood가 낮으면 known class로 확정하지 않고 reject/OOD로 보낸다.
+`bb`가 높아도 `fork+scratch`의 `fk/sc` high pattern에도 안 맞고, `bank_boundary+scratch`의 `bb/sc` high pattern에도 충분히 안 맞는다. 그래서 known class 중 가장 가까운 후보가 있어도 likelihood threshold를 넘지 못하면 reject된다.
 
 ### Decision rule
 
@@ -512,30 +525,10 @@ else:
 
 | sample | best known class | best logL | decision |
 |---|---|---:|---|
-| single bb | single bb | 6.43 | accept |
-| 2combo bb+sc | 2combo bb+sc | 6.43 | accept |
-| OOD bb-tail | 2combo bb+fk nearest | -4.18 | reject/OOD |
+| 2combo-like `[0.62,0.14,0.60,0.13]` | bank_boundary+scratch | -8.21 | accept |
+| OOD bb-tail `[0.58,0.33,0.32,0.30]` | fork+scratch nearest | -334.74 | reject/OOD |
 
-기존의 짧은 계산표:
-
-| sample | logL(single bb) | logL(2combo bb+sc) | score=max logL | nearest pattern | decision, tau=0 |
-|---|---:|---:|---:|---|---|
-| single bb | 6.43 | -14.24 | 6.43 | single bb | accept |
-| 2combo bb+sc | -14.24 | 6.43 | 6.43 | 2combo bb+sc | accept |
-| OOD bb-tail | -7.18 | -4.90 | -4.90 | 2combo bb+sc | reject |
-
-핵심은 OOD의 `bb=0.58`이 2combo의 `sc=0.60`과 비슷해도, 전체 vector가 combo mean에서 멀다는 점이다.
-
-OOD를 2combo `bb+sc`와 비교하면:
-
-```text
-OOD          = [0.58, 0.33, 0.32, 0.30]
-2combo mean  = [0.62, 0.14, 0.60, 0.13]
-diff         = [-0.04, +0.19, -0.28, +0.17]
-z^2          = [0.25, 5.64, 12.25, 4.52]
-```
-
-`bb` 하나는 가깝지만 `fk`, `sc`, `sr`가 동시에 멀다. 특히 combo에서 높아야 하는 `sc`는 `0.60` 근처여야 하는데 OOD에서는 `0.32`다. 그래서 max-prob는 애매해도 likelihood score는 낮아지고 reject된다.
+핵심은 OOD의 `bb=0.58`이 높아 보여도, 전체 vector가 어떤 single/2combo Gaussian distribution에도 충분히 들어가지 않는다는 점이다. 그래서 max-prob는 애매해도 likelihood score는 낮아지고 reject된다.
 
 GaussianNB는 이 차이를 다음처럼 본다.
 
