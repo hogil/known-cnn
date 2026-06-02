@@ -365,6 +365,118 @@ NB reject는 model 자체를 다시 학습하지 않고, 이미 나온 4-bit pro
 
 즉 NB reject는 classifier 자체를 더 정확하게 만든다기보다, ambiguous probability vector를 운영상 reject로 보내서 accepted region의 신뢰도를 높이는 장치다.
 
+### Threshold selection protocol
+
+NB reject threshold는 eval/test 결과를 보고 맞추면 안 된다. train과 final eval 사이에 별도 calibration split을 두고, 그 split에서 한 번 고정한 뒤 final eval에는 그대로 적용한다.
+
+정의:
+
+```text
+s(x) = max_c log P(p(x) | class=c)
+     = known single/2combo 10개 class 중 가장 높은 NB log-likelihood
+
+accept if s(x) >= tau
+reject otherwise
+```
+
+calibration set에서 score를 두 그룹으로 나눈다.
+
+```text
+pos_scores = scores of known defect classes
+             = single 4 + 2combo 6
+
+neg_scores = scores of negative / unknown-like classes
+             = Normal + Invalid + OOD proxies
+```
+
+운영 목표는 두 개다.
+
+```text
+target_neg_accept = allowed fraction of NEG accepted as known defect
+max_pos_reject    = allowed fraction of POS rejected
+```
+
+accept 조건이 `s(x) >= tau`이므로 threshold 후보는 다음처럼 잡는다.
+
+```text
+tau_neg(alpha) = empirical quantile(neg_scores, 1 - alpha)
+tau_pos(beta)  = empirical quantile(pos_scores, beta)
+```
+
+예:
+
+```text
+alpha = 0.001  # NEG 0.1% 이하만 accept
+beta  = 0.005  # POS 0.5% 이하만 reject
+
+tau_neg = quantile(neg_scores, 0.999)
+tau_pos = quantile(pos_scores, 0.005)
+```
+
+판정:
+
+```text
+if tau_neg <= tau_pos:
+    feasible separation
+    choose tau between tau_neg and tau_pos
+else:
+    POS/NEG score distributions overlap
+    one threshold cannot satisfy both constraints
+```
+
+운영 안전을 우선하면:
+
+```text
+tau = tau_neg
+```
+
+이 경우 negative leakage는 줄지만 POS false reject가 늘 수 있다.
+
+POS recall을 우선하면:
+
+```text
+tau = tau_pos
+```
+
+이 경우 POS reject는 줄지만 negative accept가 늘 수 있다.
+
+`target_neg_accept=0`을 요구하면 다음과 같다.
+
+```text
+tau = max(neg_scores) + eps
+```
+
+이것이 `neg-max` 방식이다. calibration negative를 전부 reject하도록 고정한다. 논문/관리자 보고에서는 이 값을 최종 eval에 그대로 적용하고, 아래 네 값을 같이 보고해야 한다.
+
+| metric | meaning |
+|---|---|
+| POS coverage | POS 중 reject되지 않고 accept된 비율 |
+| POS false reject | POS인데 reject된 수/비율 |
+| NEG coverage | NEG 중 accept된 비율 |
+| NEG false accept | NEG인데 known defect로 통과한 수/비율 |
+
+현재 report의 `pos-q=0.0001`은 POS coverage를 거의 1로 유지하려는 threshold다. safety-first 운영안을 보려면 `neg-max`도 같이 표시해야 한다. 두 threshold는 목적이 다르므로 한 표에 같이 보고한다.
+
+학술 근거:
+
+| reference | threshold 관점 | 이 보고서에서의 대응 |
+|---|---|---|
+| Chow (1970), optimum recognition error-reject tradeoff | reject는 error cost와 reject cost의 tradeoff로 결정한다 | `target_neg_accept`와 `max_pos_reject`를 운영 비용으로 둔다 |
+| El-Yaniv & Wiener (2010), selective classification | coverage를 낮추면 accepted risk를 낮출 수 있고 risk-coverage curve로 본다 | NB reject는 coverage를 낮춰 accepted-only quality를 올리는 sidecar다 |
+| Geifman & El-Yaniv (2017), selective classification for DNNs | validation/calibration에서 confidence threshold를 골라 risk target을 맞춘다 | `tau`는 eval이 아니라 calibration scores에서 고정한다 |
+| Hendrycks & Gimpel (2017), OOD/misclassification baseline | confidence score threshold로 misclassified/OOD를 분리한다 | raw max-prob 대신 NB log-likelihood score를 confidence로 쓴다 |
+| Lee et al. (2018), Mahalanobis/Gaussian OOD score | class-conditional Gaussian score와 threshold detector를 사용한다 | 4-bit probability vector 위의 diagonal GaussianNB score를 사용한다 |
+| Conformal / reject-option calibration papers | calibration quantile로 coverage/error target을 정한다 | `tau_pos`, `tau_neg`를 empirical quantile로 고정한다 |
+
+참고 링크:
+
+- Chow, C. K. (1970), "On optimum recognition error and reject tradeoff", IEEE Transactions on Information Theory. https://research.ibm.com/publications/on-optimum-recognition-error-and-reject-tradeoff
+- El-Yaniv, R. and Wiener, Y. (2010), "On the Foundations of Noise-free Selective Classification", JMLR. https://jmlr.csail.mit.edu/papers/v11/el-yaniv10a.html
+- Geifman, Y. and El-Yaniv, R. (2017), "Selective Classification for Deep Neural Networks", NeurIPS. https://papers.neurips.cc/paper/7073-selective-classification-for-deep-neural-networks.pdf
+- Hendrycks, D. and Gimpel, K. (2017), "A Baseline for Detecting Misclassified and Out-of-Distribution Examples in Neural Networks", ICLR. https://arxiv.org/abs/1610.02136
+- Lee, K. et al. (2018), "A Simple Unified Framework for Detecting Out-of-Distribution Samples and Adversarial Attacks", NeurIPS. https://papers.nips.cc/paper/2018/hash/abdeb6f575ac5c6676b747bca8d09cc2-Abstract.html
+- Garcia-Galindo, C. et al. (2024), "Multi-class Classification with Reject Option and Performance Guarantees using Conformal Prediction", PMLR. https://proceedings.mlr.press/v230/garcia-galindo24a.html
+
 ## 7. NB Reject의 실제 의미: max-prob가 아니라 4-bit pattern likelihood
 
 NB reject를 붙이는 이유는 raw classifier의 bit_F1을 크게 올리기 위해서가 아니다. 핵심은 **어떤 OOD sample에서 특정 bit probability가 높아도, 그 4개 확률의 전체 모양은 single 또는 2-combo defect와 다르다**는 점을 이용하는 것이다.
