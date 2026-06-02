@@ -396,6 +396,45 @@ NB reject를 붙이는 이유는 raw classifier의 bit_F1을 크게 올리기 �
 
 즉 NB reject가 보는 것은 "`bb`가 0.58인가?"가 아니라, "`[bb, fk, sc, sr] = [0.58, 0.33, 0.32, 0.30]`가 어떤 valid class distribution처럼 생겼는가?"이다.
 
+### Example likelihood calculation
+
+아래는 위 illustration 값을 그대로 넣은 계산 예시다. 설명을 단순하게 하기 위해 diagonal Gaussian을 사용하고, 각 bit의 표준편차를 동일하게 `sigma=0.08`로 둔다.
+
+```text
+single bb mean      μ_single = [0.85, 0.13, 0.14, 0.13]
+2combo bb+sc mean   μ_combo  = [0.62, 0.14, 0.60, 0.13]
+OOD bb-tail sample  x_ood    = [0.58, 0.33, 0.32, 0.30]
+sigma = [0.08, 0.08, 0.08, 0.08]
+```
+
+GaussianNB의 class likelihood는 bit별 likelihood를 곱한 것과 같고, log domain에서는 다음처럼 더한다.
+
+```text
+log P(x | class=c)
+= sum_j log Normal(x_j ; μ_cj, sigma_j^2)
+```
+
+계산 결과:
+
+| sample | logL(single bb) | logL(2combo bb+sc) | score=max logL | nearest pattern | decision, tau=0 |
+|---|---:|---:|---:|---|---|
+| single bb | 6.43 | -14.24 | 6.43 | single bb | accept |
+| 2combo bb+sc | -14.24 | 6.43 | 6.43 | 2combo bb+sc | accept |
+| OOD bb-tail | -7.18 | -4.90 | -4.90 | 2combo bb+sc | reject |
+
+핵심은 OOD의 `bb=0.58`이 2combo의 `sc=0.60`과 비슷해도, 전체 vector가 combo mean에서 멀다는 점이다.
+
+OOD를 2combo `bb+sc`와 비교하면:
+
+```text
+OOD          = [0.58, 0.33, 0.32, 0.30]
+2combo mean  = [0.62, 0.14, 0.60, 0.13]
+diff         = [-0.04, +0.19, -0.28, +0.17]
+z^2          = [0.25, 5.64, 12.25, 4.52]
+```
+
+`bb` 하나는 가깝지만 `fk`, `sc`, `sr`가 동시에 멀다. 특히 combo에서 높아야 하는 `sc`는 `0.60` 근처여야 하는데 OOD에서는 `0.32`다. 그래서 max-prob는 애매해도 likelihood score는 낮아지고 reject된다.
+
 GaussianNB는 이 차이를 다음처럼 본다.
 
 ```text
