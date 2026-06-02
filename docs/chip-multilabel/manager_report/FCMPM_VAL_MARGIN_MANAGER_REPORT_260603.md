@@ -94,72 +94,225 @@
 
 차트 파일은 이미지 출력 절대규칙에 따라 `E:/data/images/` 아래에 저장했다.
 
-![FCM-PM probability bars](E:/data/images/chip_multilabel_reports/manager_260603/fcm_pm_prob_bars_tr200_vs_tr400.png)
+![FCM-PM probability bars all conditions](E:/data/images/chip_multilabel_reports/manager_260603/fcm_pm_prob_bars_all_conditions.png)
+
+![FCM-PM OOD bb tail all conditions](E:/data/images/chip_multilabel_reports/manager_260603/fcm_pm_ood_bb_tail_all_conditions.png)
 
 ### Group Mean Probability
 
 | condition | group | bb | fk | sc | sr |
 |---|---|---:|---:|---:|---:|
-| train=200 val_margin | single POS | 0.324 | 0.325 | 0.324 | 0.325 |
-| train=200 val_margin | combo POS | 0.466 | 0.426 | 0.424 | 0.427 |
+| train=50 val_f1 | single POS | 0.362 | 0.304 | 0.279 | 0.348 |
+| train=50 val_f1 | combo POS | 0.578 | 0.273 | 0.174 | 0.414 |
+| train=50 val_f1 | OOD NEG | 0.133 | 0.343 | 0.293 | 0.200 |
+| train=50 val_f1 | Normal/Invalid | 0.206 | 0.503 | 0.351 | 0.311 |
+| train=50 val_margin | single POS | 0.328 | 0.315 | 0.330 | 0.325 |
+| train=50 val_margin | combo POS | 0.473 | 0.368 | 0.328 | 0.419 |
+| train=50 val_margin | OOD NEG | 0.174 | 0.335 | 0.556 | 0.177 |
+| train=50 val_margin | Normal/Invalid | 0.197 | 0.428 | 0.557 | 0.252 |
+| train=100 val_f1 | single POS | 0.328 | 0.308 | 0.324 | 0.307 |
+| train=100 val_f1 | combo POS | 0.493 | 0.379 | 0.239 | 0.377 |
+| train=100 val_f1 | OOD NEG | 0.442 | 0.178 | 0.312 | 0.114 |
+| train=100 val_f1 | Normal/Invalid | 0.269 | 0.296 | 0.419 | 0.230 |
+| train=100 val_margin | single POS | 0.322 | 0.323 | 0.325 | 0.328 |
+| train=100 val_margin | combo POS | 0.453 | 0.408 | 0.395 | 0.438 |
+| train=100 val_margin | OOD NEG | 0.375 | 0.152 | 0.461 | 0.140 |
+| train=100 val_margin | Normal/Invalid | 0.261 | 0.290 | 0.483 | 0.323 |
+| train=200 val_f1 | single POS | 0.316 | 0.314 | 0.336 | 0.320 |
+| train=200 val_f1 | combo POS | 0.439 | 0.385 | 0.402 | 0.410 |
+| train=200 val_f1 | OOD NEG | 0.451 | 0.280 | 0.318 | 0.284 |
+| train=200 val_f1 | Normal/Invalid | 0.321 | 0.356 | 0.391 | 0.383 |
+| train=200 val_margin | single POS | 0.323 | 0.324 | 0.324 | 0.325 |
+| train=200 val_margin | combo POS | 0.465 | 0.428 | 0.426 | 0.430 |
 | train=200 val_margin | OOD NEG | 0.281 | 0.227 | 0.402 | 0.332 |
-| train=200 val_margin | Normal/Invalid | 0.287 | 0.310 | 0.416 | 0.408 |
-| train=400 val_margin | single POS | 0.323 | 0.323 | 0.327 | 0.326 |
-| train=400 val_margin | combo POS | 0.449 | 0.405 | 0.400 | 0.416 |
-| train=400 val_margin | OOD NEG | 0.389 | 0.238 | 0.345 | 0.305 |
-| train=400 val_margin | Normal/Invalid | 0.264 | 0.297 | 0.379 | 0.416 |
+| train=200 val_margin | Normal/Invalid | 0.287 | 0.310 | 0.415 | 0.407 |
+| train=400 val_f1 | single POS | 0.323 | 0.352 | 0.327 | 0.327 |
+| train=400 val_f1 | combo POS | 0.477 | 0.392 | 0.351 | 0.415 |
+| train=400 val_f1 | OOD NEG | 0.170 | 0.274 | 0.401 | 0.324 |
+| train=400 val_f1 | Normal/Invalid | 0.132 | 0.336 | 0.390 | 0.447 |
+| train=400 val_margin | single POS | 0.321 | 0.322 | 0.329 | 0.326 |
+| train=400 val_margin | combo POS | 0.447 | 0.403 | 0.401 | 0.416 |
+| train=400 val_margin | OOD NEG | 0.390 | 0.238 | 0.346 | 0.307 |
+| train=400 val_margin | Normal/Invalid | 0.263 | 0.296 | 0.379 | 0.416 |
 
 읽는 법:
 
-- single POS는 자기 bit 하나만 강하고 나머지는 낮은 구조다.
-- combo POS는 두 bit가 동시에 올라가며, 이 값이 충분히 높아야 combo recall이 산다.
-- OOD NEG는 원래 모든 bit가 낮아야 한다.
-- train=400에서는 OOD NEG의 `bb` 평균이 `0.281 -> 0.389`로 상승한다.
-- 이 때문에 train=400은 bit_F1은 높아도 OOD 쪽 negative tail이 커진다.
+- single POS는 자기 bit 하나만 높고 나머지는 낮은 구조지만, group mean으로 평균내면 네 bit가 비슷하게 보인다. class별 표에서 실제 one-hot 구조를 확인해야 한다.
+- combo POS는 두 bit가 동시에 올라가야 하며, combo POS 평균이 낮으면 multi-label recall이 약해진다.
+- OOD NEG와 Normal/Invalid는 모든 bit가 낮아야 한다. 특정 bit 평균이 올라가면 해당 bit tail이 생긴 것이다.
+- train=400 val_margin은 combo POS는 강하지만 OOD NEG의 `bb` tail이 커진다. train=200 val_margin은 그 tail이 낮아 대표 조건으로 적합하다.
 
 ## 5. Class Probability Diagnostic
 
-### train=200, val_margin, eval=20000
+아래 표는 모든 train/class 조건과 두 checkpoint 선택 기준(`val_f1`, `val_margin`)을 동일하게 보여준다. POS는 single+combo, NEG는 Normal/Invalid/OOD이다.
 
-| class | GT | bb | fk | sc | sr | note |
+### train=50 val_f1, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
 |---|---|---:|---:|---:|---:|---|
-| bank_boundary | 1000 | 0.852 | 0.150 | 0.147 | 0.148 | clean single positive |
-| fork | 0100 | 0.149 | 0.853 | 0.149 | 0.147 | clean single positive |
-| scratch | 0010 | 0.147 | 0.147 | 0.853 | 0.148 | clean single positive |
-| scratch_rot | 0001 | 0.146 | 0.146 | 0.145 | 0.855 | clean single positive |
-| bank_boundary+fork | 1100 | 0.791 | 0.702 | 0.115 | 0.123 | strong combo |
-| bank_boundary+scratch | 1010 | 0.772 | 0.102 | 0.674 | 0.111 | weakest combo but usable |
-| bank_boundary+scratch_rot | 1001 | 0.806 | 0.126 | 0.117 | 0.762 | strong combo |
-| fork+scratch | 0110 | 0.144 | 0.737 | 0.773 | 0.104 | strong combo |
-| fork+scratch_rot | 0101 | 0.143 | 0.793 | 0.101 | 0.749 | strong combo |
-| scratch+scratch_rot | 0011 | 0.136 | 0.106 | 0.775 | 0.733 | strong combo |
-| Normal | 0000 | 0.298 | 0.246 | 0.431 | 0.343 | negative tail controlled |
-| Invalid | 0000 | 0.276 | 0.375 | 0.400 | 0.472 | negative tail controlled |
-| DiagonalSmear | 0000 | 0.273 | 0.225 | 0.404 | 0.331 | OOD tail controlled |
-| CenterDonut | 0000 | 0.280 | 0.226 | 0.403 | 0.331 | OOD tail controlled |
-| CrossScratch | 0000 | 0.289 | 0.228 | 0.403 | 0.326 | OOD tail controlled |
-| Starburst | 0000 | 0.281 | 0.228 | 0.398 | 0.341 | OOD tail controlled |
+| bank_boundary | 1000 | 0.862 | 0.140 | 0.106 | 0.209 | bit_F1=1.000 |
+| fork | 100 | 0.188 | 0.839 | 0.094 | 0.144 | bit_F1=0.985 |
+| scratch | 10 | 0.215 | 0.103 | 0.798 | 0.155 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.184 | 0.135 | 0.120 | 0.883 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.831 | 0.264 | 0.100 | 0.184 | bit_F1=0.503 |
+| bank_boundary+scratch | 1010 | 0.839 | 0.144 | 0.145 | 0.173 | bit_F1=0.496 |
+| bank_boundary+scratch_rot | 1001 | 0.745 | 0.118 | 0.120 | 0.510 | bit_F1=0.635 |
+| fork+scratch | 110 | 0.535 | 0.519 | 0.242 | 0.116 | bit_F1=0.263 |
+| fork+scratch_rot | 101 | 0.338 | 0.489 | 0.098 | 0.680 | bit_F1=0.654 |
+| scratch+scratch_rot | 11 | 0.179 | 0.103 | 0.338 | 0.820 | bit_F1=0.652 |
+| Normal | 0 | 0.127 | 0.520 | 0.361 | 0.195 | FAR=0.222 |
+| Invalid | 0 | 0.285 | 0.486 | 0.340 | 0.427 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.126 | 0.348 | 0.289 | 0.196 | FAR=0.008 |
+| CenterDonut | 0 | 0.132 | 0.343 | 0.292 | 0.200 | FAR=0.005 |
+| CrossScratch | 0 | 0.139 | 0.348 | 0.292 | 0.201 | FAR=0.005 |
+| Starburst | 0 | 0.136 | 0.333 | 0.300 | 0.203 | FAR=0.011 |
 
-### train=400, val_margin, eval=20000
+### train=50 val_margin, eval=20000
 
-| class | GT | bb | fk | sc | sr | note |
+| class | GT | bb | fk | sc | sr | metric |
 |---|---|---:|---:|---:|---:|---|
-| bank_boundary | 1000 | 0.849 | 0.139 | 0.151 | 0.154 | clean single positive |
-| fork | 0100 | 0.143 | 0.856 | 0.154 | 0.148 | clean single positive |
-| scratch | 0010 | 0.143 | 0.147 | 0.859 | 0.147 | clean single positive |
-| scratch_rot | 0001 | 0.149 | 0.145 | 0.152 | 0.855 | clean single positive |
-| bank_boundary+fork | 1100 | 0.765 | 0.746 | 0.110 | 0.132 | strong combo |
-| bank_boundary+scratch | 1010 | 0.772 | 0.081 | 0.687 | 0.103 | combo improved vs 200 |
-| bank_boundary+scratch_rot | 1001 | 0.758 | 0.106 | 0.113 | 0.714 | usable combo |
-| fork+scratch | 0110 | 0.154 | 0.682 | 0.719 | 0.087 | usable combo |
-| fork+scratch_rot | 0101 | 0.115 | 0.720 | 0.090 | 0.736 | strong combo |
-| scratch+scratch_rot | 0011 | 0.119 | 0.080 | 0.689 | 0.722 | strong combo |
-| Normal | 0000 | 0.245 | 0.262 | 0.383 | 0.364 | negative tail mostly controlled |
-| Invalid | 0000 | 0.282 | 0.331 | 0.375 | 0.469 | sr tail near boundary |
-| DiagonalSmear | 0000 | 0.355 | 0.244 | 0.356 | 0.311 | OOD bb/sc tail elevated |
-| CenterDonut | 0000 | 0.388 | 0.236 | 0.346 | 0.309 | OOD bb tail elevated |
-| CrossScratch | 0000 | 0.402 | 0.234 | 0.340 | 0.306 | OOD bb tail elevated |
-| Starburst | 0000 | 0.413 | 0.237 | 0.342 | 0.303 | OOD bb tail elevated |
+| bank_boundary | 1000 | 0.856 | 0.152 | 0.148 | 0.144 | bit_F1=1.000 |
+| fork | 100 | 0.153 | 0.846 | 0.167 | 0.142 | bit_F1=0.998 |
+| scratch | 10 | 0.163 | 0.123 | 0.849 | 0.145 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.141 | 0.137 | 0.155 | 0.868 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.743 | 0.565 | 0.110 | 0.114 | bit_F1=0.904 |
+| bank_boundary+scratch | 1010 | 0.811 | 0.099 | 0.489 | 0.109 | bit_F1=0.583 |
+| bank_boundary+scratch_rot | 1001 | 0.773 | 0.105 | 0.093 | 0.787 | bit_F1=0.998 |
+| fork+scratch | 110 | 0.182 | 0.604 | 0.690 | 0.112 | bit_F1=0.895 |
+| fork+scratch_rot | 101 | 0.162 | 0.735 | 0.074 | 0.656 | bit_F1=0.991 |
+| scratch+scratch_rot | 11 | 0.167 | 0.102 | 0.510 | 0.739 | bit_F1=0.567 |
+| Normal | 0 | 0.166 | 0.384 | 0.600 | 0.152 | FAR=0.099 |
+| Invalid | 0 | 0.227 | 0.473 | 0.514 | 0.351 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.164 | 0.336 | 0.556 | 0.175 | FAR=0.029 |
+| CenterDonut | 0 | 0.174 | 0.335 | 0.554 | 0.177 | FAR=0.025 |
+| CrossScratch | 0 | 0.179 | 0.338 | 0.554 | 0.178 | FAR=0.030 |
+| Starburst | 0 | 0.181 | 0.329 | 0.560 | 0.180 | FAR=0.037 |
+
+### train=100 val_f1, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.845 | 0.124 | 0.175 | 0.128 | bit_F1=1.000 |
+| fork | 100 | 0.159 | 0.839 | 0.135 | 0.119 | bit_F1=0.993 |
+| scratch | 10 | 0.117 | 0.116 | 0.865 | 0.117 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.192 | 0.152 | 0.120 | 0.865 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.606 | 0.510 | 0.163 | 0.106 | bit_F1=0.663 |
+| bank_boundary+scratch | 1010 | 0.741 | 0.149 | 0.366 | 0.097 | bit_F1=0.974 |
+| bank_boundary+scratch_rot | 1001 | 0.839 | 0.112 | 0.123 | 0.591 | bit_F1=0.954 |
+| fork+scratch | 110 | 0.165 | 0.694 | 0.412 | 0.107 | bit_F1=0.978 |
+| fork+scratch_rot | 101 | 0.196 | 0.635 | 0.102 | 0.562 | bit_F1=0.865 |
+| scratch+scratch_rot | 11 | 0.411 | 0.175 | 0.265 | 0.799 | bit_F1=0.911 |
+| Normal | 0 | 0.247 | 0.220 | 0.389 | 0.074 | FAR=0.308 |
+| Invalid | 0 | 0.292 | 0.372 | 0.449 | 0.385 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.437 | 0.174 | 0.309 | 0.113 | FAR=0.608 |
+| CenterDonut | 0 | 0.441 | 0.176 | 0.310 | 0.114 | FAR=0.615 |
+| CrossScratch | 0 | 0.450 | 0.180 | 0.308 | 0.112 | FAR=0.649 |
+| Starburst | 0 | 0.441 | 0.183 | 0.321 | 0.117 | FAR=0.557 |
+
+### train=100 val_margin, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.851 | 0.149 | 0.144 | 0.147 | bit_F1=1.000 |
+| fork | 100 | 0.150 | 0.852 | 0.153 | 0.150 | bit_F1=0.995 |
+| scratch | 10 | 0.143 | 0.145 | 0.852 | 0.153 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.146 | 0.148 | 0.149 | 0.862 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.764 | 0.698 | 0.092 | 0.124 | bit_F1=0.992 |
+| bank_boundary+scratch | 1010 | 0.763 | 0.098 | 0.651 | 0.112 | bit_F1=0.935 |
+| bank_boundary+scratch_rot | 1001 | 0.808 | 0.116 | 0.098 | 0.734 | bit_F1=0.998 |
+| fork+scratch | 110 | 0.126 | 0.696 | 0.734 | 0.105 | bit_F1=0.989 |
+| fork+scratch_rot | 101 | 0.129 | 0.761 | 0.101 | 0.778 | bit_F1=0.993 |
+| scratch+scratch_rot | 11 | 0.126 | 0.078 | 0.696 | 0.772 | bit_F1=0.979 |
+| Normal | 0 | 0.298 | 0.216 | 0.515 | 0.179 | FAR=0.001 |
+| Invalid | 0 | 0.224 | 0.364 | 0.451 | 0.467 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.362 | 0.149 | 0.463 | 0.139 | FAR=0.027 |
+| CenterDonut | 0 | 0.374 | 0.151 | 0.459 | 0.140 | FAR=0.032 |
+| CrossScratch | 0 | 0.379 | 0.154 | 0.457 | 0.138 | FAR=0.044 |
+| Starburst | 0 | 0.385 | 0.153 | 0.463 | 0.143 | FAR=0.052 |
+
+### train=200 val_f1, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.843 | 0.155 | 0.162 | 0.146 | bit_F1=1.000 |
+| fork | 100 | 0.140 | 0.831 | 0.143 | 0.149 | bit_F1=1.000 |
+| scratch | 10 | 0.137 | 0.138 | 0.879 | 0.129 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.143 | 0.132 | 0.159 | 0.854 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.782 | 0.634 | 0.115 | 0.115 | bit_F1=0.981 |
+| bank_boundary+scratch | 1010 | 0.747 | 0.095 | 0.615 | 0.107 | bit_F1=0.942 |
+| bank_boundary+scratch_rot | 1001 | 0.765 | 0.111 | 0.130 | 0.709 | bit_F1=0.992 |
+| fork+scratch | 110 | 0.107 | 0.650 | 0.717 | 0.087 | bit_F1=0.982 |
+| fork+scratch_rot | 101 | 0.117 | 0.733 | 0.093 | 0.705 | bit_F1=0.992 |
+| scratch+scratch_rot | 11 | 0.117 | 0.087 | 0.741 | 0.736 | bit_F1=0.997 |
+| Normal | 0 | 0.346 | 0.297 | 0.407 | 0.299 | FAR=0.000 |
+| Invalid | 0 | 0.296 | 0.415 | 0.375 | 0.467 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.413 | 0.283 | 0.326 | 0.291 | FAR=0.105 |
+| CenterDonut | 0 | 0.446 | 0.281 | 0.321 | 0.284 | FAR=0.170 |
+| CrossScratch | 0 | 0.472 | 0.280 | 0.316 | 0.274 | FAR=0.231 |
+| Starburst | 0 | 0.472 | 0.277 | 0.307 | 0.289 | FAR=0.209 |
+
+### train=200 val_margin, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.852 | 0.150 | 0.147 | 0.148 | bit_F1=1.000 |
+| fork | 100 | 0.149 | 0.853 | 0.149 | 0.147 | bit_F1=1.000 |
+| scratch | 10 | 0.147 | 0.147 | 0.853 | 0.148 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.146 | 0.146 | 0.145 | 0.855 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.791 | 0.702 | 0.115 | 0.123 | bit_F1=0.989 |
+| bank_boundary+scratch | 1010 | 0.772 | 0.102 | 0.674 | 0.111 | bit_F1=0.968 |
+| bank_boundary+scratch_rot | 1001 | 0.806 | 0.126 | 0.117 | 0.762 | bit_F1=0.998 |
+| fork+scratch | 110 | 0.144 | 0.737 | 0.773 | 0.104 | bit_F1=0.988 |
+| fork+scratch_rot | 101 | 0.143 | 0.793 | 0.101 | 0.749 | bit_F1=0.993 |
+| scratch+scratch_rot | 11 | 0.136 | 0.106 | 0.775 | 0.733 | bit_F1=1.000 |
+| Normal | 0 | 0.298 | 0.246 | 0.431 | 0.343 | FAR=0.000 |
+| Invalid | 0 | 0.276 | 0.375 | 0.400 | 0.472 | FAR=0.000 |
+| DiagonalSmear | 0 | 0.273 | 0.225 | 0.404 | 0.331 | FAR=0.001 |
+| CenterDonut | 0 | 0.280 | 0.226 | 0.403 | 0.331 | FAR=0.002 |
+| CrossScratch | 0 | 0.289 | 0.228 | 0.403 | 0.326 | FAR=0.007 |
+| Starburst | 0 | 0.281 | 0.228 | 0.398 | 0.341 | FAR=0.007 |
+
+### train=400 val_f1, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.859 | 0.150 | 0.156 | 0.149 | bit_F1=1.000 |
+| fork | 100 | 0.149 | 0.898 | 0.133 | 0.150 | bit_F1=1.000 |
+| scratch | 10 | 0.142 | 0.195 | 0.869 | 0.161 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.142 | 0.164 | 0.150 | 0.848 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.719 | 0.687 | 0.110 | 0.117 | bit_F1=0.984 |
+| bank_boundary+scratch | 1010 | 0.801 | 0.117 | 0.482 | 0.111 | bit_F1=0.791 |
+| bank_boundary+scratch_rot | 1001 | 0.692 | 0.104 | 0.130 | 0.717 | bit_F1=0.972 |
+| fork+scratch | 110 | 0.320 | 0.688 | 0.664 | 0.088 | bit_F1=0.923 |
+| fork+scratch_rot | 101 | 0.185 | 0.648 | 0.084 | 0.731 | bit_F1=0.976 |
+| scratch+scratch_rot | 11 | 0.148 | 0.108 | 0.633 | 0.726 | bit_F1=0.938 |
+| Normal | 0 | 0.104 | 0.305 | 0.380 | 0.341 | FAR=0.000 |
+| Invalid | 0 | 0.159 | 0.367 | 0.399 | 0.552 | FAR=0.107 |
+| DiagonalSmear | 0 | 0.156 | 0.275 | 0.401 | 0.323 | FAR=0.004 |
+| CenterDonut | 0 | 0.169 | 0.274 | 0.401 | 0.324 | FAR=0.011 |
+| CrossScratch | 0 | 0.172 | 0.275 | 0.400 | 0.323 | FAR=0.015 |
+| Starburst | 0 | 0.183 | 0.272 | 0.403 | 0.327 | FAR=0.016 |
+
+### train=400 val_margin, eval=20000
+
+| class | GT | bb | fk | sc | sr | metric |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.849 | 0.139 | 0.151 | 0.154 | bit_F1=1.000 |
+| fork | 100 | 0.143 | 0.856 | 0.154 | 0.148 | bit_F1=1.000 |
+| scratch | 10 | 0.143 | 0.147 | 0.859 | 0.147 | bit_F1=1.000 |
+| scratch_rot | 1 | 0.149 | 0.145 | 0.152 | 0.855 | bit_F1=1.000 |
+| bank_boundary+fork | 1100 | 0.765 | 0.746 | 0.110 | 0.132 | bit_F1=0.977 |
+| bank_boundary+scratch | 1010 | 0.772 | 0.081 | 0.687 | 0.103 | bit_F1=0.985 |
+| bank_boundary+scratch_rot | 1001 | 0.758 | 0.106 | 0.113 | 0.714 | bit_F1=0.979 |
+| fork+scratch | 110 | 0.154 | 0.682 | 0.719 | 0.087 | bit_F1=0.983 |
+| fork+scratch_rot | 101 | 0.115 | 0.720 | 0.090 | 0.736 | bit_F1=0.992 |
+| scratch+scratch_rot | 11 | 0.119 | 0.080 | 0.689 | 0.722 | bit_F1=0.999 |
+| Normal | 0 | 0.245 | 0.262 | 0.383 | 0.364 | FAR=0.000 |
+| Invalid | 0 | 0.282 | 0.331 | 0.375 | 0.469 | FAR=0.010 |
+| DiagonalSmear | 0 | 0.355 | 0.244 | 0.356 | 0.311 | FAR=0.052 |
+| CenterDonut | 0 | 0.388 | 0.236 | 0.346 | 0.309 | FAR=0.090 |
+| CrossScratch | 0 | 0.402 | 0.234 | 0.340 | 0.306 | FAR=0.116 |
+| Starburst | 0 | 0.413 | 0.237 | 0.342 | 0.303 | FAR=0.118 |
 
 ## 6. NB Reject Sidecar
 
@@ -194,40 +347,59 @@ NB reject는 model 자체를 다시 학습하지 않고, 이미 나온 4-bit pro
 
 즉 NB reject는 classifier 자체를 더 정확하게 만든다기보다, ambiguous probability vector를 운영상 reject로 보내서 accepted region의 신뢰도를 높이는 장치다.
 
-## 7. 왜 NB Reject가 올라가는가
+## 7. NB Reject의 실제 의미: max-prob가 아니라 4-bit pattern likelihood
 
-FCM-PM의 4-bit probability vector는 class별 모양이 다르다.
+NB reject를 붙이는 이유는 raw classifier의 bit_F1을 크게 올리기 위해서가 아니다. 핵심은 **어떤 OOD sample에서 특정 bit probability가 높아도, 그 4개 확률의 전체 모양은 single 또는 2-combo defect와 다르다**는 점을 이용하는 것이다.
 
-| group | probability shape |
-|---|---|
-| single POS | 하나의 bit만 높고 나머지 bit는 낮음 |
-| combo POS | 정답 두 bit가 동시에 높고 나머지 bit는 낮음 |
-| Normal/Invalid | 여러 bit가 중간값 근처에 머물며 뚜렷한 positive pattern이 약함 |
-| OOD NEG | 특정 bit tail이 올라갈 수 있지만, defect class의 full pattern과는 다름 |
+예를 들어 `train=400 val_margin`에서 OOD인 `CrossScratch`, `Starburst`는 `bank_boundary(bb)` probability가 `0.40` 근처까지 올라온다. 단순 max-prob 또는 threshold만 보면 "bb가 꽤 높다"라고 볼 수 있다. 하지만 실제 `bank_boundary` single 또는 `bank_boundary+X` 2-combo와 비교하면 4-bit vector 모양이 다르다.
 
-GaussianNB는 이 4-bit vector를 보고 "defect class probability pattern과 얼마나 닮았는지"를 log-likelihood로 계산한다. 그래서 단순 threshold에서 애매하게 positive로 보이던 OOD/Normal tail을 reject할 수 있다.
+![NB reject pattern](E:/data/images/chip_multilabel_reports/manager_260603/nb_reject_pattern_bank_boundary_ood.png)
 
-수식적으로는 다음과 같다.
+| pattern | GT | bb | fk | sc | sr | likelihood interpretation |
+|---|---|---:|---:|---:|---:|---|
+| bank_boundary | 1000 | 0.849 | 0.139 | 0.151 | 0.154 | single bb: bb high, other bits low |
+| bank_boundary+fork | 1100 | 0.765 | 0.746 | 0.110 | 0.132 | combo: bb and fk both high |
+| bank_boundary+scratch | 1010 | 0.772 | 0.081 | 0.687 | 0.103 | combo: bb and sc both high |
+| bank_boundary+scratch_rot | 1001 | 0.758 | 0.106 | 0.113 | 0.714 | combo: bb and sr both high |
+| CrossScratch (OOD) | 0000 | 0.402 | 0.234 | 0.340 | 0.306 | OOD: bb is moderately high, but no valid single/combo pattern |
+| Starburst (OOD) | 0000 | 0.413 | 0.237 | 0.342 | 0.303 | OOD: bb is moderately high, but no valid single/combo pattern |
+
+즉 OOD의 `bb=0.40`은 단독으로 보면 커 보이지만:
+
+- `bank_boundary` single이라면 `bb≈0.85`이고 `fk/sc/sr≈0.14~0.15`여야 한다.
+- `bank_boundary+fork` combo라면 `bb≈0.76`, `fk≈0.75`가 같이 높아야 한다.
+- `bank_boundary+scratch` combo라면 `bb≈0.77`, `sc≈0.69`가 같이 높아야 한다.
+- `bank_boundary+scratch_rot` combo라면 `bb≈0.76`, `sr≈0.71`이 같이 높아야 한다.
+- OOD는 `bb≈0.40`이 떠도 `fk/sc/sr`가 애매하게 중간값이고, 어떤 single/2-combo의 전형적인 모양에도 맞지 않는다.
+
+GaussianNB는 이 차이를 다음처럼 본다.
 
 ```text
 p = [p_bb, p_fk, p_sc, p_sr]
-L_c(p) = log P(p | class=c)
+
+For each defect class c:
+  L_c(p) = log P(p | c)
+         = sum_j log Normal(p_j ; mu_{c,j}, sigma^2_{c,j})
+
 score(p) = max_c L_c(p)
+
 accept if score(p) >= tau
 reject otherwise
 ```
 
-이 구조의 장점:
+여기서 중요한 점은 `max(p)`만 보는 것이 아니라 `[p_bb, p_fk, p_sc, p_sr]` 전체를 class별 Gaussian 분포에 넣는다는 것이다. 그래서 `bb` 하나가 높아도 나머지 bit 조합이 class distribution과 안 맞으면 likelihood가 낮아진다.
 
-- single과 combo는 class-conditional probability pattern이 뚜렷하다.
-- OOD는 일부 bit가 올라가도 전체 4-bit vector가 defect class centroid와 다르다.
-- 따라서 NB reject는 단일 max-prob threshold보다 "pattern-level reject"에 가깝다.
+정리하면:
+
+- max-prob threshold: "`bb`가 높으니 positive일 수 있다"까지만 본다.
+- NB reject: "`bb`가 높긴 한데, 이 4-bit vector가 `bank_boundary` single 또는 `bank_boundary+X` combo처럼 생겼는가?"를 본다.
+- 따라서 NB reject는 **bit threshold 보정**이 아니라 **probability-shape reject**다.
 
 주의:
 
-- NB reject는 본 모델의 학습 성능을 대체하지 않는다.
-- 운영 단계에서 ambiguous case를 reject하는 selective prediction 장치다.
-- 논문/보고서에서는 raw 성능과 NB-reject 성능을 분리해서 제시해야 한다.
+- NB reject는 raw model 학습 성능을 대체하지 않는다.
+- raw 성능표와 NB-reject 성능표는 분리해서 제시해야 한다.
+- 운영상 의미는 "불확실한 OOD/ambiguous vector를 reject하고 accepted region의 신뢰도를 높이는 것"이다.
 
 ## 8. 후속 실험
 
