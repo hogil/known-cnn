@@ -38,13 +38,23 @@ train=200/class, eval=2000/class
 
 | axis | value | bit_F1 | pos | neg | gap | worst POS min | worst NEG max |
 |---|---|---:|---:|---:|---:|---|---|
+| abpos_Avar_B100 | A070_B100 | 0.9820 | 0.7125 | 0.2250 | 0.044 | bank_boundary+scratch/sc=0.536 | CrossScratch/bb=0.492 |
+| abpos_Avar_B100 | A080_B100 | 0.9837 | 0.7169 | 0.2203 | -0.246 | bank_boundary+scratch/sc=0.257 | Starburst/sc=0.503 |
+| abpos_Avar_B100 | A090_B100 | 0.9949 | 0.7706 | 0.2209 | 0.130 | bank_boundary+scratch/sc=0.652 | Invalid/sr=0.522 |
 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.7890 | 0.2202 | 0.140 | bank_boundary+scratch/sc=0.676 | Invalid/fk=0.536 |
+| cutmix_p | p020 | 0.9865 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
+| neg_target | neg002 | 0.9964 | 0.7605 | 0.2226 | 0.212 | bank_boundary+scratch/sc=0.654 | Normal/sc=0.442 |
+| neg_target | neg005 | 0.9954 | 0.7753 | 0.2287 | 0.204 | scratch+scratch_rot/sc=0.656 | Normal/sc=0.452 |
+| neg_target | neg010 | 0.9847 | 0.7769 | 0.2458 | 0.028 | bank_boundary+scratch/sc=0.594 | Invalid/fk=0.566 |
 
 ## Axis Best So Far
 
 | axis | best value | bit_F1 | gap | reason |
 |---|---|---:|---:|---|
+| abpos_Avar_B100 | A090_B100 | 0.9949 | 0.130 | worst POS bank_boundary+scratch/sc=0.652; worst NEG Invalid/sr=0.522 |
 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.140 | worst POS bank_boundary+scratch/sc=0.676; worst NEG Invalid/fk=0.536 |
+| cutmix_p | p020 | 0.9865 | 0.098 | worst POS bank_boundary+scratch/sc=0.544; worst NEG Invalid/fk=0.446 |
+| neg_target | neg002 | 0.9964 | 0.212 | worst POS bank_boundary+scratch/sc=0.654; worst NEG Normal/sc=0.442 |
 
 ## Next Stage Rule
 

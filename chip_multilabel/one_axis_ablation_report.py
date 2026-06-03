@@ -25,11 +25,24 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 
 def classify_axis(tag: str) -> tuple[str, str]:
-    m = re.match(r"oneaxis_([^_]+(?:_[^_]+)*)_(.+?)_T7_", tag)
-    if m:
-        axis = m.group(1)
-        value = m.group(2)
-        return axis, value
+    oneaxis_prefixes = (
+        "abpos_Avar_B100",
+        "neg_target",
+        "cutmix_p",
+        "grid_g3",
+        "group_aligned_grid",
+        "twofactor_abpos_neg",
+        "twofactor_abpos_p",
+        "twofactor_neg_p",
+        "twofactor_grid_p",
+        "threefactor_abpos_neg_p",
+        "threefactor_abpos_neg_grid",
+    )
+    for axis in oneaxis_prefixes:
+        prefix = f"oneaxis_{axis}_"
+        if tag.startswith(prefix):
+            value = tag[len(prefix):].split("_T7_", 1)[0]
+            return axis, value
     if tag.startswith("targetlabel_weak100_strong100_neg000_"):
         return "baseline", "A100_B100_neg000_p050_grid9_g3_cmp100"
     return "other", tag
