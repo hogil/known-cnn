@@ -1,13 +1,13 @@
 # Live FCMPM Experiment Audit
 
-updated: 2026-06-04 05:01:12
+updated: 2026-06-04 05:05:02
 
 Purpose: keep training/eval running, record split effects, prune weak checkpoints, and identify next additions.
 
 ## Active Processes
 
 - `"C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe" -u -m chip_multilabel.recipe_sweep --datasets frozen_original,sota_gapstress_seed31_260531,sota_gapstress_seed97_260531,frozen_original_200_snapshot,frozen_original_2015_candidate --diag-devic`
-- `C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe -u -m chip_multilabel._posneg_prob_diag --model D:\project\known-cnn\outputs\frozen_original\oneaxis_seed_repeat_neg_neg005_s13_T7_LS029500_g3_grid9_cmp10000_p05000_mpos065_s13_ep10_tr200_ev0200`
+- `C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe -u -m chip_multilabel._train_chip_variant --num-workers 0 --lr 1e-4 --no-normal --grad-checkpointing --val-criterion margin_max --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 --img-size`
 
 ## Split Summary
 
@@ -32,6 +32,7 @@ Purpose: keep training/eval running, record split effects, prune weak checkpoint
 | neg_target | neg003 | 1 | 1 | 0.9931 | 0.0000 | 0.08 | 0.138 | 0.000 | repeat: promising but dispersion unknown |
 | cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 3.14 | 0.034 | 0.000 | observe: keep evidence, no expansion yet |
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 1.01 | 0.098 | 0.000 | prune: delete pth and avoid expansion |
+| seed_repeat_neg | neg005_s13 | 1 | 1 | 0.9863 | 0.0000 | 16.11 | 0.047 | 0.000 | prune: delete pth and avoid expansion |
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.37 | 0.028 | 0.000 | prune: delete pth and avoid expansion |
 | abpos_Avar_B100 | A080_B100 | 1 | 1 | 0.9837 | 0.0000 | 15.54 | -0.246 | 0.000 | prune: delete pth and avoid expansion |
 | abpos_Avar_B100 | A070_B100 | 1 | 1 | 0.9820 | 0.0000 | 0.54 | 0.044 | 0.000 | prune: delete pth and avoid expansion |

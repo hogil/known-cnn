@@ -28,14 +28,14 @@ train=200/class, eval=2000/class
 | 1-axis | A/B positive target | A=0.90/0.80/0.70, B=1.00 fixed | running / queued |
 | 1-axis | neg target | 0.015 / 0.02 / 0.025 / 0.03 / 0.05 / 0.10 | queued |
 | 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.55 / 0.575 / 0.60 / 0.625 / 0.65 / 0.70 / 0.80 | running / queued |
-| 1-axis | loss variant | T10 ASL+LS / T4 ASL / T6 BCE->ASL, A/B=1.00/1.00 fixed | queued |
+| 1-axis | loss variant | T10 / T4 / T6 completed on frozen_original; collapsed or leaked | pruned from transfer repeats |
 | repeat | seed stability | baseline, neg=0.02/0.05, p=0.60 at seed 13/42/99 | queued |
 | 1-axis | grid, g=3 | 3x3 / 6x6 / 12x12, baseline 9x9 | queued |
 | 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |
 | existing evidence | cmp | 0.5 / 0.7 / 0.8 / 1.0 | mined, not rerun |
 | multi-dataset | transfer data | frozen_original, gapstress seed31/97, frozen snapshots | running after restart |
-| 2-factor | top 1-axis pairs | neg/p/A-grid plus T10 loss interactions | pending |
-| 3-factor | top 2-factor neighborhood | compact T10/neg/p and A/neg/p candidates | pending |
+| 2-factor | top 1-axis pairs | p=0.575-centered neg/p, A=0.90/p, A=0.90/neg, grid/p | pending |
+| 3-factor | top 2-factor neighborhood | compact A=0.90 + neg + p=0.575 candidates | pending |
 
 ## Completed Rows
 
@@ -67,6 +67,7 @@ train=200/class, eval=2000/class
 | frozen_original | neg_target | neg010 | 0.9847 | 0.7769 | 0.2458 | 0.028 | bank_boundary+scratch/sc=0.594 | Invalid/fk=0.566 |
 | frozen_original | seed_repeat_baseline | s13 | 0.9942 | 0.7887 | 0.2230 | 0.190 | scratch+scratch_rot/sr=0.641 | Invalid/sr=0.451 |
 | frozen_original | seed_repeat_neg | neg002_s13 | 0.9960 | 0.7843 | 0.2237 | 0.143 | scratch+scratch_rot/sr=0.647 | Invalid/sr=0.504 |
+| frozen_original | seed_repeat_neg | neg005_s13 | 0.9863 | 0.7622 | 0.2347 | 0.047 | bank_boundary+scratch/sc=0.637 | CenterDonut/bb=0.590 |
 
 ## Mean / Dispersion by Split
 
@@ -97,6 +98,7 @@ train=200/class, eval=2000/class
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.028 | 0.000 | 0.7769 | 0.2458 |
 | seed_repeat_baseline | s13 | 1 | 1 | 0.9942 | 0.0000 | 0.190 | 0.000 | 0.7887 | 0.2230 |
 | seed_repeat_neg | neg002_s13 | 1 | 1 | 0.9960 | 0.0000 | 0.143 | 0.000 | 0.7843 | 0.2237 |
+| seed_repeat_neg | neg005_s13 | 1 | 1 | 0.9863 | 0.0000 | 0.047 | 0.000 | 0.7622 | 0.2347 |
 
 ## Axis Best So Far
 
