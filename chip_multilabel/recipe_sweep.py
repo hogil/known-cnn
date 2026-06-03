@@ -2952,13 +2952,13 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
         # target axis and keep the same baseline unless the axis itself changes.
         # Baselines p=0.5 / neg=0.0 / grid=9 / g=3 are reused from the existing
         # targetlabel_weak100_strong100_neg000 row.
-        for neg_target in ("0.02", "0.05", "0.10"):
+        for neg_target in ("0.015", "0.02", "0.025", "0.03", "0.05", "0.10"):
             add_one_axis_recipe(
                 "neg_target",
                 f"neg{label_pct_tag(neg_target)}",
                 other_label=neg_target,
             )
-        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.6000", "0.7000", "0.8000"):
+        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.5500", "0.5750", "0.6000", "0.6250", "0.6500", "0.7000", "0.8000"):
             add_one_axis_recipe(
                 "cutmix_p",
                 f"p{label_pct_tag(cutmix_p)}",
@@ -2990,6 +2990,12 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                     other_label=neg_target,
                     seed=seed,
                 )
+            add_one_axis_recipe(
+                "seed_repeat_p",
+                f"p060_s{seed}",
+                cutmix_p="0.6000",
+                seed=seed,
+            )
         # cmp axis already has extensive historical evidence; do not spend this
         # one-axis queue on repeated cmp=0.5/0.7/0.8/1.0 runs.
         for grid_dim in ("3", "6", "12"):

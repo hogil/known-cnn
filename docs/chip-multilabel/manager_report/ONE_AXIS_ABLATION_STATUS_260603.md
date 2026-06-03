@@ -26,10 +26,10 @@ train=200/class, eval=2000/class
 | phase | axis | values | status |
 |---|---|---|---|
 | 1-axis | A/B positive target | A=0.90/0.80/0.70, B=1.00 fixed | running / queued |
-| 1-axis | neg target | 0.02 / 0.05 / 0.10 | queued |
-| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.60 / 0.70 / 0.80 | running / queued |
+| 1-axis | neg target | 0.015 / 0.02 / 0.025 / 0.03 / 0.05 / 0.10 | queued |
+| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.55 / 0.575 / 0.60 / 0.625 / 0.65 / 0.70 / 0.80 | running / queued |
 | 1-axis | loss variant | T10 ASL+LS / T4 ASL / T6 BCE->ASL, A/B=1.00/1.00 fixed | queued |
-| repeat | seed stability | baseline and neg=0.02/0.05 at seed 13/42/99 | queued |
+| repeat | seed stability | baseline, neg=0.02/0.05, p=0.60 at seed 13/42/99 | queued |
 | 1-axis | grid, g=3 | 3x3 / 6x6 / 12x12, baseline 9x9 | queued |
 | 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |
 | existing evidence | cmp | 0.5 / 0.7 / 0.8 / 1.0 | mined, not rerun |
@@ -48,6 +48,8 @@ train=200/class, eval=2000/class
 | frozen_original | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.7890 | 0.2202 | 0.140 | bank_boundary+scratch/sc=0.676 | Invalid/fk=0.536 |
 | frozen_original | cutmix_p | p020 | 0.9865 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
 | frozen_original | cutmix_p | p030 | 0.9964 | 0.7904 | 0.2304 | 0.233 | bank_boundary+scratch/sc=0.685 | Invalid/fk=0.452 |
+| frozen_original | cutmix_p | p040 | 0.9929 | 0.7970 | 0.2225 | 0.034 | bank_boundary+scratch/sc=0.617 | CrossScratch/bb=0.583 |
+| frozen_original | cutmix_p | p060 | 0.9944 | 0.7902 | 0.2212 | 0.183 | bank_boundary+scratch/sc=0.643 | CrossScratch/bb=0.460 |
 | frozen_original | neg_target | neg002 | 0.9964 | 0.7605 | 0.2226 | 0.212 | bank_boundary+scratch/sc=0.654 | Normal/sc=0.442 |
 | frozen_original | neg_target | neg005 | 0.9954 | 0.7753 | 0.2287 | 0.204 | scratch+scratch_rot/sc=0.656 | Normal/sc=0.452 |
 | frozen_original | neg_target | neg010 | 0.9847 | 0.7769 | 0.2458 | 0.028 | bank_boundary+scratch/sc=0.594 | Invalid/fk=0.566 |
@@ -62,6 +64,8 @@ train=200/class, eval=2000/class
 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 2 | 2 | 0.9966 | 0.0010 | 0.186 | 0.066 | 0.7981 | 0.2234 |
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 0.098 | 0.000 | 0.7712 | 0.2393 |
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 0.233 | 0.000 | 0.7904 | 0.2304 |
+| cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 0.034 | 0.000 | 0.7970 | 0.2225 |
+| cutmix_p | p060 | 1 | 1 | 0.9944 | 0.0000 | 0.183 | 0.000 | 0.7902 | 0.2212 |
 | neg_target | neg002 | 1 | 1 | 0.9964 | 0.0000 | 0.212 | 0.000 | 0.7605 | 0.2226 |
 | neg_target | neg005 | 1 | 1 | 0.9954 | 0.0000 | 0.204 | 0.000 | 0.7753 | 0.2287 |
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.028 | 0.000 | 0.7769 | 0.2458 |
