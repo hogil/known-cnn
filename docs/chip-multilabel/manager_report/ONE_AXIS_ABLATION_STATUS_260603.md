@@ -27,12 +27,14 @@ train=200/class, eval=2000/class
 |---|---|---|---|
 | 1-axis | A/B positive target | A=0.90/0.80/0.70, B=1.00 fixed | running / queued |
 | 1-axis | neg target | 0.02 / 0.05 / 0.10 | queued |
-| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.60 | queued |
+| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.60 / 0.70 / 0.80 | running / queued |
+| 1-axis | loss variant | T10 ASL+LS / T4 ASL / T6 BCE->ASL, A/B=1.00/1.00 fixed | queued |
+| repeat | seed stability | baseline and neg=0.02/0.05 at seed 13/42/99 | queued |
 | 1-axis | grid, g=3 | 3x3 / 6x6 / 12x12, baseline 9x9 | queued |
 | 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |
 | existing evidence | cmp | 0.5 / 0.7 / 0.8 / 1.0 | mined, not rerun |
-| 2-factor | top 1-axis pairs | selected after 1-axis complete | pending |
-| 3-factor | top 2-factor neighborhood | selected after 2-factor stabilizes | pending |
+| 2-factor | top 1-axis pairs | neg/p/A-grid plus T10 loss interactions | pending |
+| 3-factor | top 2-factor neighborhood | compact T10/neg/p and A/neg/p candidates | pending |
 
 ## Completed Rows
 

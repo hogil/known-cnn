@@ -2887,6 +2887,8 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
             groups: str = "3",
             grid_dim: str = "9",
             ls: str = "0.29500",
+            variant: str = "T7",
+            seed: str = "7",
         ) -> None:
             source = fcmpm_high_p_matrix_recipe(
                 cutmix_p,
@@ -2898,12 +2900,13 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 other_label=other_label,
                 raw_target=False,
                 ls=ls,
+                variant=variant,
             )
             tag = (
                 f"oneaxis_{axis}_{value_tag}_"
-                f"T7_LS{ls.replace('.', '')}_g{groups}_grid{grid_dim}_"
+                f"{variant}_LS{ls.replace('.', '')}_g{groups}_grid{grid_dim}_"
                 f"cmp{cmp_ls.replace('.', '')}_p{cutmix_p.replace('.', '')}_"
-                "mpos065_s7_ep10_tr200_ev02000"
+                f"mpos065_s{seed}_ep10_tr200_ev02000"
             )
             extra = tuple(source.extra) + (
                 "--max-per-class-defect",
@@ -2926,7 +2929,7 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 source.groups,
                 source.cmp_ls,
                 source.cutmix_p,
-                source.seed,
+                seed,
                 extra,
                 source.epochs,
                 source.batch,
@@ -2955,12 +2958,38 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 f"neg{label_pct_tag(neg_target)}",
                 other_label=neg_target,
             )
-        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.6000"):
+        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.6000", "0.7000", "0.8000"):
             add_one_axis_recipe(
                 "cutmix_p",
                 f"p{label_pct_tag(cutmix_p)}",
                 cutmix_p=cutmix_p,
             )
+        # ASL alternative to lowering A target: keep A/B target hard (1.00/1.00)
+        # and change only the loss.  T10 is the most relevant because it keeps
+        # the LS-smoothed BCE target geometry while adding ASL-style asymmetric
+        # focusing. T4/T6 are included as controls.
+        for variant in ("T10", "T4", "T6"):
+            add_one_axis_recipe(
+                "loss_variant",
+                variant,
+                variant=variant,
+            )
+        # Replicate only top/probable candidates.  One-axis sweeps are for
+        # direction; paper evidence needs seed-repeat stability on the best
+        # known rows.
+        for seed in ("13", "42", "99"):
+            add_one_axis_recipe(
+                "seed_repeat_baseline",
+                f"s{seed}",
+                seed=seed,
+            )
+            for neg_target in ("0.02", "0.05"):
+                add_one_axis_recipe(
+                    "seed_repeat_neg",
+                    f"neg{label_pct_tag(neg_target)}_s{seed}",
+                    other_label=neg_target,
+                    seed=seed,
+                )
         # cmp axis already has extensive historical evidence; do not spend this
         # one-axis queue on repeated cmp=0.5/0.7/0.8/1.0 runs.
         for grid_dim in ("3", "6", "12"):
@@ -2996,6 +3025,8 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
             cutmix_p: str = "0.5000",
             groups: str = "3",
             grid_dim: str = "9",
+            variant: str = "T7",
+            seed: str = "7",
         ) -> None:
             before = len(one_axis_ablation_tags)
             add_one_axis_recipe(
@@ -3006,6 +3037,8 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 cutmix_p=cutmix_p,
                 groups=groups,
                 grid_dim=grid_dim,
+                variant=variant,
+                seed=seed,
             )
             tag = one_axis_ablation_tags.pop()
             explicit[tag] = explicit[tag]
@@ -3060,6 +3093,19 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 grid_dim=grid_dim,
                 cutmix_p=cutmix_p,
             )
+        for variant, neg_target, cutmix_p in (
+            ("T10", "0.02", "0.5000"),
+            ("T10", "0.0", "0.6000"),
+            ("T10", "0.02", "0.6000"),
+        ):
+            add_factor_recipe(
+                two_factor_ablation_tags,
+                "twofactor_loss_neg_p",
+                f"{variant}_neg{label_pct_tag(neg_target)}_p{label_pct_tag(cutmix_p)}",
+                other_label=neg_target,
+                cutmix_p=cutmix_p,
+                variant=variant,
+            )
 
         for a_target, neg_target, cutmix_p in (
             ("0.90", "0.02", "0.4000"),
@@ -3087,6 +3133,14 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 other_label=neg_target,
                 grid_dim=grid_dim,
             )
+        add_factor_recipe(
+            three_factor_ablation_tags,
+            "threefactor_loss_neg_p",
+            "T10_neg002_p060",
+            other_label="0.02",
+            cutmix_p="0.6000",
+            variant="T10",
+        )
 
         # Follow-up around the target-label rows (260601):
         # neg=0.03 is current best on eval_n20000, neg=0.04 starts leaking,
