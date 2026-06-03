@@ -49,10 +49,24 @@ train=200/class, eval=2000/class
 | frozen_original | cutmix_p | p020 | 0.9865 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
 | frozen_original | cutmix_p | p030 | 0.9964 | 0.7904 | 0.2304 | 0.233 | bank_boundary+scratch/sc=0.685 | Invalid/fk=0.452 |
 | frozen_original | cutmix_p | p040 | 0.9929 | 0.7970 | 0.2225 | 0.034 | bank_boundary+scratch/sc=0.617 | CrossScratch/bb=0.583 |
+| frozen_original | cutmix_p | p055 | 0.9963 | 0.8034 | 0.2225 | 0.203 | fork+scratch/fk=0.736 | Invalid/fk=0.533 |
+| frozen_original | cutmix_p | p0575 | 0.9975 | 0.7861 | 0.2234 | 0.285 | fork+scratch_rot/sr=0.726 | Invalid/fk=0.441 |
 | frozen_original | cutmix_p | p060 | 0.9944 | 0.7902 | 0.2212 | 0.183 | bank_boundary+scratch/sc=0.643 | CrossScratch/bb=0.460 |
+| frozen_original | cutmix_p | p0625 | 0.9943 | 0.7937 | 0.2261 | 0.113 | bank_boundary+scratch/sc=0.675 | Normal/sc=0.562 |
+| frozen_original | cutmix_p | p065 | 0.9964 | 0.8003 | 0.2032 | 0.171 | fork+scratch/fk=0.702 | Invalid/fk=0.531 |
+| frozen_original | cutmix_p | p070 | 0.9957 | 0.7981 | 0.2200 | 0.226 | fork+scratch/fk=0.689 | Invalid/fk=0.463 |
+| frozen_original | cutmix_p | p080 | 0.9971 | 0.8046 | 0.2235 | 0.234 | fork+scratch/sc=0.709 | Normal/sc=0.475 |
+| frozen_original | loss_variant | T10_T10_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.0001 | 0.7723 | 0.5879 | -0.089 | bank_boundary+scratch/sc=0.682 | Invalid/fk=0.771 |
+| frozen_original | loss_variant | T4_T4_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.0001 | 0.7723 | 0.5879 | -0.089 | bank_boundary+scratch/sc=0.682 | Invalid/fk=0.771 |
+| frozen_original | loss_variant | T6_T6_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.9602 | 0.9100 | 0.1123 | -0.337 | bank_boundary+scratch/sc=0.197 | Invalid/fk=0.534 |
+| frozen_original | neg_target | neg0015 | 0.9960 | 0.7958 | 0.2309 | 0.180 | bank_boundary+scratch/sc=0.688 | Normal/sc=0.508 |
 | frozen_original | neg_target | neg002 | 0.9964 | 0.7605 | 0.2226 | 0.212 | bank_boundary+scratch/sc=0.654 | Normal/sc=0.442 |
+| frozen_original | neg_target | neg0025 | 0.9944 | 0.7838 | 0.2240 | 0.145 | bank_boundary+scratch/sc=0.656 | Normal/sc=0.511 |
+| frozen_original | neg_target | neg003 | 0.9931 | 0.7835 | 0.2266 | 0.138 | bank_boundary+scratch/sc=0.631 | Normal/sc=0.493 |
 | frozen_original | neg_target | neg005 | 0.9954 | 0.7753 | 0.2287 | 0.204 | scratch+scratch_rot/sc=0.656 | Normal/sc=0.452 |
 | frozen_original | neg_target | neg010 | 0.9847 | 0.7769 | 0.2458 | 0.028 | bank_boundary+scratch/sc=0.594 | Invalid/fk=0.566 |
+| frozen_original | seed_repeat_baseline | s13 | 0.9942 | 0.7887 | 0.2230 | 0.190 | scratch+scratch_rot/sr=0.641 | Invalid/sr=0.451 |
+| frozen_original | seed_repeat_neg | neg002_s13 | 0.9960 | 0.7843 | 0.2237 | 0.143 | scratch+scratch_rot/sr=0.647 | Invalid/sr=0.504 |
 
 ## Mean / Dispersion by Split
 
@@ -65,10 +79,24 @@ train=200/class, eval=2000/class
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 0.098 | 0.000 | 0.7712 | 0.2393 |
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 0.233 | 0.000 | 0.7904 | 0.2304 |
 | cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 0.034 | 0.000 | 0.7970 | 0.2225 |
+| cutmix_p | p055 | 1 | 1 | 0.9963 | 0.0000 | 0.203 | 0.000 | 0.8034 | 0.2225 |
+| cutmix_p | p0575 | 1 | 1 | 0.9975 | 0.0000 | 0.285 | 0.000 | 0.7861 | 0.2234 |
 | cutmix_p | p060 | 1 | 1 | 0.9944 | 0.0000 | 0.183 | 0.000 | 0.7902 | 0.2212 |
+| cutmix_p | p0625 | 1 | 1 | 0.9943 | 0.0000 | 0.113 | 0.000 | 0.7937 | 0.2261 |
+| cutmix_p | p065 | 1 | 1 | 0.9964 | 0.0000 | 0.171 | 0.000 | 0.8003 | 0.2032 |
+| cutmix_p | p070 | 1 | 1 | 0.9957 | 0.0000 | 0.226 | 0.000 | 0.7981 | 0.2200 |
+| cutmix_p | p080 | 1 | 1 | 0.9971 | 0.0000 | 0.234 | 0.000 | 0.8046 | 0.2235 |
+| loss_variant | T10_T10_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 1 | 1 | 0.0001 | 0.0000 | -0.089 | 0.000 | 0.7723 | 0.5879 |
+| loss_variant | T4_T4_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 1 | 1 | 0.0001 | 0.0000 | -0.089 | 0.000 | 0.7723 | 0.5879 |
+| loss_variant | T6_T6_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 1 | 1 | 0.9602 | 0.0000 | -0.337 | 0.000 | 0.9100 | 0.1123 |
+| neg_target | neg0015 | 1 | 1 | 0.9960 | 0.0000 | 0.180 | 0.000 | 0.7958 | 0.2309 |
 | neg_target | neg002 | 1 | 1 | 0.9964 | 0.0000 | 0.212 | 0.000 | 0.7605 | 0.2226 |
+| neg_target | neg0025 | 1 | 1 | 0.9944 | 0.0000 | 0.145 | 0.000 | 0.7838 | 0.2240 |
+| neg_target | neg003 | 1 | 1 | 0.9931 | 0.0000 | 0.138 | 0.000 | 0.7835 | 0.2266 |
 | neg_target | neg005 | 1 | 1 | 0.9954 | 0.0000 | 0.204 | 0.000 | 0.7753 | 0.2287 |
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.028 | 0.000 | 0.7769 | 0.2458 |
+| seed_repeat_baseline | s13 | 1 | 1 | 0.9942 | 0.0000 | 0.190 | 0.000 | 0.7887 | 0.2230 |
+| seed_repeat_neg | neg002_s13 | 1 | 1 | 0.9960 | 0.0000 | 0.143 | 0.000 | 0.7843 | 0.2237 |
 
 ## Axis Best So Far
 
@@ -76,8 +104,11 @@ train=200/class, eval=2000/class
 |---|---|---:|---:|---|
 | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.130 | worst POS bank_boundary+scratch/sc=0.652; worst NEG Invalid/sr=0.522 |
 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.233 | worst POS bank_boundary+scratch/sc=0.741; worst NEG Invalid/sr=0.508 |
-| cutmix_p | p030 | 0.9964 | 0.233 | worst POS bank_boundary+scratch/sc=0.685; worst NEG Invalid/fk=0.452 |
+| cutmix_p | p0575 | 0.9975 | 0.285 | worst POS fork+scratch_rot/sr=0.726; worst NEG Invalid/fk=0.441 |
+| loss_variant | T6_T6_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.9602 | -0.337 | worst POS bank_boundary+scratch/sc=0.197; worst NEG Invalid/fk=0.534 |
 | neg_target | neg002 | 0.9964 | 0.212 | worst POS bank_boundary+scratch/sc=0.654; worst NEG Normal/sc=0.442 |
+| seed_repeat_baseline | s13 | 0.9942 | 0.190 | worst POS scratch+scratch_rot/sr=0.641; worst NEG Invalid/sr=0.451 |
+| seed_repeat_neg | neg002_s13 | 0.9960 | 0.143 | worst POS scratch+scratch_rot/sr=0.647; worst NEG Invalid/sr=0.504 |
 
 ## Next Stage Rule
 

@@ -213,9 +213,11 @@ def _r2(xs: list[float], ys: list[float], coef: list[float]) -> float:
 
 def _numeric_split(axis: str, value: str) -> float | None:
     if axis == "cutmix_p" and value.startswith("p"):
-        return int(value[1:]) / 100.0
+        raw = value[1:]
+        return int(raw) / (1000.0 if len(raw) >= 4 else 100.0)
     if axis == "neg_target" and value.startswith("neg"):
-        return int(value[3:]) / 100.0
+        raw = value[3:]
+        return int(raw) / (1000.0 if len(raw) >= 4 else 100.0)
     if axis == "abpos_Avar_B100" and value.startswith("A"):
         return int(value[1:4]) / 100.0
     if axis == "baseline":
