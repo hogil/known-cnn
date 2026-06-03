@@ -8,6 +8,7 @@ import csv
 import re
 from collections import defaultdict
 from pathlib import Path
+from statistics import mean, stdev
 
 
 def _f(row: dict[str, str], key: str, default: float = 0.0) -> float:
@@ -22,6 +23,33 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return []
     with path.open("r", encoding="utf-8", newline="") as f:
         return list(csv.DictReader(f))
+
+
+def _leaderboard_paths(patterns: list[str]) -> list[Path]:
+    paths: list[Path] = []
+    for pattern in patterns:
+        matches = sorted(Path().glob(pattern))
+        if matches:
+            paths.extend(matches)
+        else:
+            p = Path(pattern)
+            if p.exists():
+                paths.append(p)
+    seen: set[Path] = set()
+    uniq: list[Path] = []
+    for p in paths:
+        rp = p.resolve()
+        if rp not in seen:
+            seen.add(rp)
+            uniq.append(p)
+    return uniq
+
+
+def _dataset_from_leaderboard(path: Path) -> str:
+    try:
+        return path.parent.name
+    except Exception:
+        return "unknown"
 
 
 def classify_axis(tag: str) -> tuple[str, str]:
@@ -64,7 +92,7 @@ def score(row: dict[str, str]) -> tuple[float, float, float]:
 
 def row_line(row: dict[str, str], axis: str, value: str) -> str:
     return (
-        f"| {axis} | {value} | {row.get('eval_bit_F1','')} | "
+        f"| {row.get('_dataset','')} | {axis} | {value} | {row.get('eval_bit_F1','')} | "
         f"{row.get('eval_pos_prob','')} | {row.get('eval_neg_prob','')} | "
         f"{row.get('eval_global_gap','')} | "
         f"{row.get('eval_worst_pos_class','')}/{row.get('eval_worst_pos_bit','')}="
@@ -77,10 +105,21 @@ def row_line(row: dict[str, str], axis: str, value: str) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--leaderboard", default="outputs/frozen_original/_leaderboard.csv")
+    ap.add_argument(
+        "--leaderboards",
+        nargs="*",
+        default=[],
+        help="Optional leaderboard paths/globs. When set, overrides --leaderboard.",
+    )
     ap.add_argument("--out", default="docs/chip-multilabel/manager_report/ONE_AXIS_ABLATION_STATUS_260603.md")
     args = ap.parse_args()
 
-    rows = _read_csv(Path(args.leaderboard))
+    leaderboard_paths = _leaderboard_paths(args.leaderboards) if args.leaderboards else [Path(args.leaderboard)]
+    rows: list[dict[str, str]] = []
+    for lb in leaderboard_paths:
+        for row in _read_csv(lb):
+            row["_dataset"] = _dataset_from_leaderboard(lb)
+            rows.append(row)
     selected: list[tuple[str, str, dict[str, str]]] = []
     for row in rows:
         tag = row.get("tag", "")
@@ -130,16 +169,40 @@ def main() -> None:
         "| 1-axis | grid, g=3 | 3x3 / 6x6 / 12x12, baseline 9x9 | queued |",
         "| 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |",
         "| existing evidence | cmp | 0.5 / 0.7 / 0.8 / 1.0 | mined, not rerun |",
+        "| multi-dataset | transfer data | frozen_original, gapstress seed31/97, frozen snapshots | running after restart |",
         "| 2-factor | top 1-axis pairs | neg/p/A-grid plus T10 loss interactions | pending |",
         "| 3-factor | top 2-factor neighborhood | compact T10/neg/p and A/neg/p candidates | pending |",
         "",
         "## Completed Rows",
         "",
-        "| axis | value | bit_F1 | pos | neg | gap | worst POS min | worst NEG max |",
-        "|---|---|---:|---:|---:|---:|---|---|",
+        "| dataset | axis | value | bit_F1 | pos | neg | gap | worst POS min | worst NEG max |",
+        "|---|---|---|---:|---:|---:|---:|---|---|",
     ]
     for axis, value, row in sorted(selected, key=lambda x: (x[0], x[1])):
         lines.append(row_line(row, axis, value))
+
+    lines.extend(["", "## Mean / Dispersion by Split", ""])
+    grouped: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+    for axis, value, row in selected:
+        grouped[(axis, value)].append(row)
+    if not grouped:
+        lines.append("No completed rows yet.")
+    else:
+        lines.append("| axis | value | n | dataset n | bit_F1 mean | bit_F1 std | gap mean | gap std | pos mean | neg mean |")
+        lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for (axis, value), vals in sorted(grouped.items()):
+            f1s = [_f(v, "eval_bit_F1") for v in vals]
+            gaps = [_f(v, "eval_global_gap") for v in vals]
+            poss = [_f(v, "eval_pos_prob") for v in vals]
+            negs = [_f(v, "eval_neg_prob") for v in vals]
+            datasets = {v.get("_dataset", "") for v in vals}
+            f1_std = stdev(f1s) if len(f1s) >= 2 else 0.0
+            gap_std = stdev(gaps) if len(gaps) >= 2 else 0.0
+            lines.append(
+                f"| {axis} | {value} | {len(vals)} | {len(datasets)} | "
+                f"{mean(f1s):.4f} | {f1_std:.4f} | {mean(gaps):.3f} | {gap_std:.3f} | "
+                f"{mean(poss):.4f} | {mean(negs):.4f} |"
+            )
 
     lines.extend(["", "## Axis Best So Far", ""])
     if not by_axis:
@@ -169,6 +232,7 @@ def main() -> None:
             "",
             "- 관리자 표에는 오탐률 컬럼을 넣지 않는다. 단, 내부 후보 gate에서는 `Total FAR <= 1%`를 같이 본다.",
             "- 1축에서 `bit_F1 >= 0.993`, `Total FAR <= 1%`, `gap`이 baseline보다 개선되는 값을 후보로 둔다.",
+            "- 여러 데이터셋/seed에 걸친 평균과 표준편차를 같이 본다. 단일 row 최고값보다 `mean(bit_F1)`과 `std(gap)`이 더 중요하다.",
             "- 후보가 2개 이상이면 2축 조합을 만든다. 예: `A/B target best` x `neg target best`.",
             "- 2축 조합에서 다시 상위 조건이 안정되면 3축 조합으로 확장한다.",
             "- 이미 충분히 결과가 많은 `cmp` 축은 새로 반복하지 않고 기존 evidence를 사용한다.",
