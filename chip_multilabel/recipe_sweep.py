@@ -2958,7 +2958,7 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 f"neg{label_pct_tag(neg_target)}",
                 other_label=neg_target,
             )
-        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.5500", "0.5750", "0.6000", "0.6250", "0.6500", "0.7000", "0.8000"):
+        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.5500", "0.5750", "0.6000", "0.6250", "0.6500", "0.7000", "0.8000", "0.9000", "1.0000"):
             add_one_axis_recipe(
                 "cutmix_p",
                 f"p{label_pct_tag(cutmix_p)}",
@@ -2983,16 +2983,23 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                     other_label=neg_target,
                     seed=seed,
                 )
-            for cutmix_p in ("0.5750", "0.6000"):
+            for cutmix_p in ("0.5500", "0.5750", "0.6000", "0.6500", "0.7000", "0.8000"):
                 add_one_axis_recipe(
                     "seed_repeat_p",
                     f"p{label_pct_tag(cutmix_p)}_s{seed}",
                     cutmix_p=cutmix_p,
                     seed=seed,
                 )
+            for grid_dim in ("3", "6", "9", "12"):
+                add_one_axis_recipe(
+                    "seed_repeat_grid_g3",
+                    f"grid{grid_dim}_s{seed}",
+                    grid_dim=grid_dim,
+                    seed=seed,
+                )
         # cmp axis already has extensive historical evidence; do not spend this
         # one-axis queue on repeated cmp=0.5/0.7/0.8/1.0 runs.
-        for grid_dim in ("3", "6", "12"):
+        for grid_dim in ("3", "6", "9", "12"):
             add_one_axis_recipe(
                 "grid_g3",
                 f"grid{grid_dim}",
