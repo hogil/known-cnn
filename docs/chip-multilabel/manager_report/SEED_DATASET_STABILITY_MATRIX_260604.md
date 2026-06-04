@@ -42,6 +42,7 @@ n >= 2, min(bit_F1) >= 0.990, max(FAR) <= 2.0, min(gap) >= 0.10
 | seed_repeat_neg | neg005 | 3 | 1 | 3 | 0.9903 | 0.9863 | 0.0046 | 16.11 | 0.096 | 0.024 | 0.105 | repeat/prune-check |
 | neg_target | neg010 | 1 | 1 | 1 | 0.9847 | 0.9847 | 0.0000 | 0.37 | 0.028 | 0.028 | 0.000 | repeat/prune-check |
 | seed_repeat_abpos_Avar_B100 | A070_B100 | 1 | 1 | 1 | 0.9835 | 0.9835 | 0.0000 | 1.30 | 0.155 | 0.155 | 0.000 | repeat/prune-check |
+| cutmix_p | p010 | 1 | 1 | 1 | 0.9835 | 0.9835 | 0.0000 | 1.16 | 0.090 | 0.090 | 0.000 | repeat/prune-check |
 
 ## Interpretation
 

@@ -1,6 +1,6 @@
 # Live FCMPM Experiment Audit
 
-updated: 2026-06-04 22:31:43
+updated: 2026-06-04 23:05:57
 
 Purpose: keep training/eval running, record split effects, prune weak checkpoints, and identify next additions.
 
@@ -57,6 +57,7 @@ Purpose: keep training/eval running, record split effects, prune weak checkpoint
 | seed_repeat_neg | neg005_s13 | 1 | 1 | 0.9863 | 0.0000 | 16.11 | 0.047 | 0.000 | prune: delete pth and avoid expansion |
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.37 | 0.028 | 0.000 | prune: delete pth and avoid expansion |
 | abpos_Avar_B100 | A080_B100 | 1 | 1 | 0.9837 | 0.0000 | 15.54 | -0.246 | 0.000 | prune: delete pth and avoid expansion |
+| cutmix_p | p010 | 1 | 1 | 0.9835 | 0.0000 | 1.16 | 0.090 | 0.000 | prune: delete pth and avoid expansion |
 | seed_repeat_abpos_Avar_B100 | A070_B100_s13 | 1 | 1 | 0.9835 | 0.0000 | 1.30 | 0.155 | 0.000 | prune: delete pth and avoid expansion |
 | abpos_Avar_B100 | A070_B100 | 1 | 1 | 0.9820 | 0.0000 | 0.54 | 0.044 | 0.000 | prune: delete pth and avoid expansion |
 | grid_g3 | grid3 | 1 | 1 | 0.9813 | 0.0000 | 8.15 | -0.037 | 0.000 | prune: delete pth and avoid expansion |
@@ -80,7 +81,7 @@ This keeps high-F1 rows from winning if the negative tail leaks.
 | axis | points | fit | R2 | observed best x | suggested x | note |
 |---|---:|---|---:|---:|---:|---|
 | abpos_Avar_B100 | 4 | quadratic | 0.413 | 1.0000 | 1.0000 | best observed |
-| cutmix_p | 13 | linear | 0.097 | 0.5750 | 0.5750 | best observed |
+| cutmix_p | 14 | linear | 0.138 | 0.5750 | 0.5750 | best observed |
 | neg_target | 7 | linear | 0.047 | 0.0200 | 0.0200 | best observed |
 
 ## Operating Rule

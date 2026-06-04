@@ -47,6 +47,7 @@ train=200/class, eval=2000/class
 | frozen_original | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.33 | 0.7706 | 0.2209 | 0.130 | bank_boundary+scratch/sc=0.652 | Invalid/sr=0.522 |
 | frozen_iter116J_orig814_eval_n20000 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.86 | 0.8072 | 0.2266 | 0.233 | bank_boundary+scratch/sc=0.741 | Invalid/sr=0.508 |
 | frozen_original | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.38 | 0.7890 | 0.2202 | 0.140 | bank_boundary+scratch/sc=0.676 | Invalid/fk=0.536 |
+| frozen_original | cutmix_p | p010 | 0.9835 | 1.16 | 0.7442 | 0.2288 | 0.090 | bank_boundary+scratch/sc=0.586 | Invalid/sr=0.496 |
 | frozen_original | cutmix_p | p020 | 0.9865 | 1.01 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
 | frozen_original | cutmix_p | p030 | 0.9964 | 1.75 | 0.7904 | 0.2304 | 0.233 | bank_boundary+scratch/sc=0.685 | Invalid/fk=0.452 |
 | frozen_original | cutmix_p | p040 | 0.9929 | 3.14 | 0.7970 | 0.2225 | 0.034 | bank_boundary+scratch/sc=0.617 | CrossScratch/bb=0.583 |
@@ -102,6 +103,7 @@ train=200/class, eval=2000/class
 | abpos_Avar_B100 | A080_B100 | 1 | 1 | 0.9837 | 0.0000 | 15.54 | 15.54 | -0.246 | 0.000 | 0.7169 | 0.2203 |
 | abpos_Avar_B100 | A090_B100 | 1 | 1 | 0.9949 | 0.0000 | 0.33 | 0.33 | 0.130 | 0.000 | 0.7706 | 0.2209 |
 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 2 | 2 | 0.9966 | 0.0010 | 0.62 | 0.86 | 0.186 | 0.066 | 0.7981 | 0.2234 |
+| cutmix_p | p010 | 1 | 1 | 0.9835 | 0.0000 | 1.16 | 1.16 | 0.090 | 0.000 | 0.7442 | 0.2288 |
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 1.01 | 1.01 | 0.098 | 0.000 | 0.7712 | 0.2393 |
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 1.75 | 1.75 | 0.233 | 0.000 | 0.7904 | 0.2304 |
 | cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 3.14 | 3.14 | 0.034 | 0.000 | 0.7970 | 0.2225 |
