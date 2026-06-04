@@ -127,8 +127,8 @@ python chip_multilabel\cleanup_checkpoints.py --min-f1 0.990 --max-far 5.0 --exe
 
 관리자용 matrix:
 
-- FAR 컬럼은 혼동을 줄이기 위해 기본 표에서는 제외한다.
-- 대신 bit_F1, pos_prob, neg_prob, global_gap, worst POS min, worst NEG max를 표시한다.
+- FAR 컬럼은 모든 실험 표에 포함한다.
+- bit_F1, FAR, pos_prob, neg_prob, global_gap, worst POS min, worst NEG max를 같이 표시한다.
 
 기술 분석용 상세 보고:
 

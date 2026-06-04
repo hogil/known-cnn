@@ -1,13 +1,13 @@
 # Live FCMPM Experiment Audit
 
-updated: 2026-06-04 15:31:42
+updated: 2026-06-04 18:21:52
 
 Purpose: keep training/eval running, record split effects, prune weak checkpoints, and identify next additions.
 
 ## Active Processes
 
 - `"C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe" -u -m chip_multilabel.recipe_sweep --datasets frozen_original,sota_gapstress_seed31_260531,sota_gapstress_seed97_260531,frozen_original_200_snapshot,frozen_original_2015_candidate --diag-devic`
-- `C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe -u -m chip_multilabel._train_chip_variant --num-workers 0 --lr 1e-4 --no-normal --grad-checkpointing --val-criterion margin_max --backbone-timm convnextv2_base.fcmae_ft_in22k_in1k_384 --img-size`
+- `C:\Users\hgcho\AppData\Local\Programs\Python\Python313\python.exe -u -m chip_multilabel.run_stage1 --model D:\project\known-cnn\outputs\frozen_original\oneaxis_seed_repeat_p_p065_s13_T7_LS029500_g3_grid9_cmp10000_p06500_mpos065_s13_ep10_tr200_ev02000\20260604_`
 
 ## Split Summary
 
@@ -22,6 +22,7 @@ Purpose: keep training/eval running, record split effects, prune weak checkpoint
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 1.75 | 0.233 | 0.000 | repeat: promising but dispersion unknown |
 | cutmix_p | p055 | 1 | 1 | 0.9963 | 0.0000 | 0.49 | 0.203 | 0.000 | promote: use for 2-factor/seed repeat |
 | seed_repeat_p | p060_s13 | 1 | 1 | 0.9961 | 0.0000 | 0.31 | 0.225 | 0.000 | promote: use for 2-factor/seed repeat |
+| cutmix_p | p100 | 1 | 1 | 0.9961 | 0.0000 | 1.43 | 0.253 | 0.000 | repeat: promising but dispersion unknown |
 | neg_target | neg0015 | 1 | 1 | 0.9960 | 0.0000 | 0.11 | 0.180 | 0.000 | promote: use for 2-factor/seed repeat |
 | seed_repeat_neg | neg002_s13 | 1 | 1 | 0.9960 | 0.0000 | 0.60 | 0.143 | 0.000 | repeat: promising but dispersion unknown |
 | cutmix_p | p070 | 1 | 1 | 0.9957 | 0.0000 | 1.01 | 0.226 | 0.000 | repeat: promising but dispersion unknown |
@@ -36,10 +37,12 @@ Purpose: keep training/eval running, record split effects, prune weak checkpoint
 | neg_target | neg0025 | 1 | 1 | 0.9944 | 0.0000 | 3.32 | 0.145 | 0.000 | observe: keep evidence, no expansion yet |
 | cutmix_p | p0625 | 1 | 1 | 0.9943 | 0.0000 | 0.25 | 0.113 | 0.000 | repeat: promising but dispersion unknown |
 | seed_repeat_baseline | s13 | 1 | 1 | 0.9942 | 0.0000 | 2.00 | 0.190 | 0.000 | repeat: promising but dispersion unknown |
+| seed_repeat_p | p055_s13 | 1 | 1 | 0.9940 | 0.0000 | 11.89 | 0.117 | 0.000 | prune: delete pth and avoid expansion |
 | seed_repeat_p | p0575_s99 | 1 | 1 | 0.9938 | 0.0000 | 0.32 | 0.233 | 0.000 | promote: use for 2-factor/seed repeat |
 | neg_target | neg003 | 1 | 1 | 0.9931 | 0.0000 | 0.08 | 0.138 | 0.000 | repeat: promising but dispersion unknown |
 | cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 3.14 | 0.034 | 0.000 | observe: keep evidence, no expansion yet |
 | seed_repeat_p | p0575_s42 | 1 | 1 | 0.9924 | 0.0000 | 52.98 | -0.084 | 0.000 | prune: delete pth and avoid expansion |
+| cutmix_p | p090 | 1 | 1 | 0.9921 | 0.0000 | 0.96 | 0.175 | 0.000 | observe: keep evidence, no expansion yet |
 | grid_g3 | grid12 | 1 | 1 | 0.9917 | 0.0000 | 0.11 | 0.181 | 0.000 | observe: keep evidence, no expansion yet |
 | seed_repeat_baseline | s99 | 1 | 1 | 0.9904 | 0.0000 | 1.51 | 0.192 | 0.000 | observe: keep evidence, no expansion yet |
 | grid_g3 | grid6 | 1 | 1 | 0.9902 | 0.0000 | 1.32 | 0.111 | 0.000 | observe: keep evidence, no expansion yet |
@@ -71,7 +74,7 @@ This keeps high-F1 rows from winning if the negative tail leaks.
 | axis | points | fit | R2 | observed best x | suggested x | note |
 |---|---:|---|---:|---:|---:|---|
 | abpos_Avar_B100 | 4 | quadratic | 0.413 | 1.0000 | 1.0000 | best observed |
-| cutmix_p | 11 | linear | 0.107 | 0.5750 | 0.5750 | best observed |
+| cutmix_p | 13 | linear | 0.097 | 0.5750 | 0.5750 | best observed |
 | neg_target | 7 | linear | 0.047 | 0.0200 | 0.0200 | best observed |
 
 ## Operating Rule

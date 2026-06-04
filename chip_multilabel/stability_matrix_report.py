@@ -41,6 +41,9 @@ def _read_rows(patterns: list[str]) -> list[dict[str, str]]:
 def _condition_key(tag: str) -> tuple[str, str]:
     if tag.startswith("oneaxis_seed_repeat_baseline_"):
         return "baseline", "A100_B100_neg000_p050"
+    m = re.match(r"oneaxis_seed_repeat_abpos_Avar_B100_(A\d+_B100)_s\d+_", tag)
+    if m:
+        return "seed_repeat_abpos_Avar_B100", m.group(1)
     m = re.match(r"oneaxis_seed_repeat_neg_(neg\d+)_s\d+_", tag)
     if m:
         return "seed_repeat_neg", m.group(1)

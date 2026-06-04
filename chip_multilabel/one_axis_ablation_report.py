@@ -59,6 +59,7 @@ def classify_axis(tag: str) -> tuple[str, str]:
         "cutmix_p",
         "loss_variant",
         "seed_repeat_baseline",
+        "seed_repeat_abpos_Avar_B100",
         "seed_repeat_neg",
         "seed_repeat_p",
         "grid_g3",
@@ -94,6 +95,7 @@ def score(row: dict[str, str]) -> tuple[float, float, float]:
 def row_line(row: dict[str, str], axis: str, value: str) -> str:
     return (
         f"| {row.get('_dataset','')} | {axis} | {value} | {row.get('eval_bit_F1','')} | "
+        f"{row.get('eval_Total_FAR','')} | "
         f"{row.get('eval_pos_prob','')} | {row.get('eval_neg_prob','')} | "
         f"{row.get('eval_global_gap','')} | "
         f"{row.get('eval_worst_pos_class','')}/{row.get('eval_worst_pos_bit','')}="
@@ -155,8 +157,8 @@ def main() -> None:
         "1. 단일 변수 분리 평가로 영향 인자를 찾는다.",
         "2. 상위 성능 축 2개를 조합해 2-factor interaction을 본다.",
         "3. 2축 조합에서 안정적인 상위 조건이 나오면 3축 조합으로 확장한다.",
-        "4. 매 row는 bit_F1뿐 아니라 POS min / NEG max gap을 같이 본다.",
-        "5. 관리자용 표는 오탐률 컬럼을 빼고, probability separation 중심으로 표시한다.",
+        "4. 모든 실험 row는 bit_F1, FAR, POS min / NEG max gap을 같이 본다.",
+        "5. 관리자용 표도 FAR를 포함한다. probability separation은 FAR와 함께 해석한다.",
         "",
         "## Active / Planned Queue",
         "",
@@ -166,9 +168,9 @@ def main() -> None:
         "| 1-axis | neg target | 0.015 / 0.02 / 0.025 / 0.03 / 0.05 / 0.10 | queued |",
         "| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.55 / 0.575 / 0.60 / 0.625 / 0.65 / 0.70 / 0.80 / 0.90 / 1.00 | running / queued |",
         "| 1-axis | loss variant | T10 / T4 / T6 completed on frozen_original; collapsed or leaked | pruned from transfer repeats |",
-        "| repeat | seed stability | baseline, neg=0.02/0.05, p=0.55/0.575/0.60/0.65/0.70/0.80 at seed 13/42/99 | queued |",
-        "| 1-axis | grid, g=3 | 3x3 / 6x6 / 9x9 / 12x12 | running / queued |",
-        "| repeat | grid seed stability | g=3 grid 3x3/6x6/9x9/12x12 at seed 13/42/99 | queued |",
+        "| repeat | seed stability | baseline, A=0.90/0.80/0.70, neg=0.015/0.02/0.025/0.03/0.05/0.10, p=0.55/0.575/0.60/0.65/0.70/0.80 at seed 13/42/99 | queued |",
+        "| 1-axis | grid, g=3 | 3x3 / 6x6 / 9x9 / 12x12 / 15x15 / 18x18 | running / queued |",
+        "| repeat | grid seed stability | g=3 grid 3x3/6x6/9x9/12x12/15x15/18x18 at seed 13/42/99 | queued |",
         "| 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |",
         "| existing evidence | cmp | 0.5 / 0.7 / 0.8 / 1.0 | mined, not rerun |",
         "| multi-dataset | transfer data | frozen_original, gapstress seed31/97, frozen snapshots | running after restart |",
@@ -177,8 +179,8 @@ def main() -> None:
         "",
         "## Completed Rows",
         "",
-        "| dataset | axis | value | bit_F1 | pos | neg | gap | worst POS min | worst NEG max |",
-        "|---|---|---|---:|---:|---:|---:|---|---|",
+        "| dataset | axis | value | bit_F1 | FAR | pos | neg | gap | worst POS min | worst NEG max |",
+        "|---|---|---|---:|---:|---:|---:|---:|---|---|",
     ]
     for axis, value, row in sorted(selected, key=lambda x: (x[0], x[1])):
         lines.append(row_line(row, axis, value))
@@ -190,10 +192,11 @@ def main() -> None:
     if not grouped:
         lines.append("No completed rows yet.")
     else:
-        lines.append("| axis | value | n | dataset n | bit_F1 mean | bit_F1 std | gap mean | gap std | pos mean | neg mean |")
-        lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+        lines.append("| axis | value | n | dataset n | bit_F1 mean | bit_F1 std | FAR mean | FAR max | gap mean | gap std | pos mean | neg mean |")
+        lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
         for (axis, value), vals in sorted(grouped.items()):
             f1s = [_f(v, "eval_bit_F1") for v in vals]
+            fars = [_f(v, "eval_Total_FAR", 100.0) for v in vals]
             gaps = [_f(v, "eval_global_gap") for v in vals]
             poss = [_f(v, "eval_pos_prob") for v in vals]
             negs = [_f(v, "eval_neg_prob") for v in vals]
@@ -202,7 +205,8 @@ def main() -> None:
             gap_std = stdev(gaps) if len(gaps) >= 2 else 0.0
             lines.append(
                 f"| {axis} | {value} | {len(vals)} | {len(datasets)} | "
-                f"{mean(f1s):.4f} | {f1_std:.4f} | {mean(gaps):.3f} | {gap_std:.3f} | "
+                f"{mean(f1s):.4f} | {f1_std:.4f} | {mean(fars):.2f} | {max(fars):.2f} | "
+                f"{mean(gaps):.3f} | {gap_std:.3f} | "
                 f"{mean(poss):.4f} | {mean(negs):.4f} |"
             )
 
@@ -210,8 +214,8 @@ def main() -> None:
     if not by_axis:
         lines.append("No completed one-axis rows yet.")
     else:
-        lines.append("| axis | best value | bit_F1 | gap | reason |")
-        lines.append("|---|---|---:|---:|---|")
+        lines.append("| axis | best value | bit_F1 | FAR | gap | reason |")
+        lines.append("|---|---|---:|---:|---:|---|")
         for axis, vals in sorted(by_axis.items()):
             best_value, best_row = max(vals, key=lambda vr: score(vr[1]))
             reason = (
@@ -224,6 +228,7 @@ def main() -> None:
             )
             lines.append(
                 f"| {axis} | {best_value} | {best_row.get('eval_bit_F1','')} | "
+                f"{best_row.get('eval_Total_FAR','')} | "
                 f"{best_row.get('eval_global_gap','')} | {reason} |"
             )
 
@@ -232,7 +237,7 @@ def main() -> None:
             "",
             "## Next Stage Rule",
             "",
-            "- 관리자 표에는 오탐률 컬럼을 넣지 않는다. 단, 내부 후보 gate에서는 `Total FAR <= 1%`를 같이 본다.",
+            "- 모든 실험/관리자 표에는 FAR 컬럼을 넣는다. 내부 후보 gate도 `Total FAR <= 1%`를 같이 본다.",
             "- 1축에서 `bit_F1 >= 0.993`, `Total FAR <= 1%`, `gap`이 baseline보다 개선되는 값을 후보로 둔다.",
             "- 여러 데이터셋/seed에 걸친 평균과 표준편차를 같이 본다. 단일 row 최고값보다 `mean(bit_F1)`과 `std(gap)`이 더 중요하다.",
             "- 후보가 2개 이상이면 2축 조합을 만든다. 예: `A/B target best` x `neg target best`.",

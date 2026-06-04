@@ -45,6 +45,7 @@ def _split_key(tag: str) -> tuple[str, str]:
             "cutmix_p",
             "loss_variant",
             "seed_repeat_baseline",
+            "seed_repeat_abpos_Avar_B100",
             "seed_repeat_neg",
             "seed_repeat_p",
             "grid_g3",
