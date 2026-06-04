@@ -2958,7 +2958,12 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 f"neg{label_pct_tag(neg_target)}",
                 other_label=neg_target,
             )
-        for cutmix_p in ("0.2000", "0.3000", "0.4000", "0.5500", "0.5750", "0.6000", "0.6250", "0.6500", "0.7000", "0.8000", "0.9000", "1.0000"):
+        p_deciles = (
+            "0.1000", "0.2000", "0.3000", "0.4000", "0.5000",
+            "0.6000", "0.7000", "0.8000", "0.9000", "1.0000",
+        )
+        p_refine = ("0.5500", "0.5750", "0.6250", "0.6500")
+        for cutmix_p in (*p_deciles, *p_refine):
             add_one_axis_recipe(
                 "cutmix_p",
                 f"p{label_pct_tag(cutmix_p)}",
@@ -2990,7 +2995,7 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                     other_label=neg_target,
                     seed=seed,
                 )
-            for cutmix_p in ("0.5500", "0.5750", "0.6000", "0.6500", "0.7000", "0.8000"):
+            for cutmix_p in (*p_deciles, *p_refine):
                 add_one_axis_recipe(
                     "seed_repeat_p",
                     f"p{label_pct_tag(cutmix_p)}_s{seed}",

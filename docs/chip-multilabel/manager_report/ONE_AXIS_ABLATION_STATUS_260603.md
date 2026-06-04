@@ -27,9 +27,9 @@ train=200/class, eval=2000/class
 |---|---|---|---|
 | 1-axis | A/B positive target | A=0.90/0.80/0.70, B=1.00 fixed | running / queued |
 | 1-axis | neg target | 0.015 / 0.02 / 0.025 / 0.03 / 0.05 / 0.10 | queued |
-| 1-axis | cutmix_p | 0.20 / 0.30 / 0.40 / 0.55 / 0.575 / 0.60 / 0.625 / 0.65 / 0.70 / 0.80 / 0.90 / 1.00 | running / queued |
+| 1-axis | cutmix_p | decile 0.10 / 0.20 / ... / 1.00 plus refine 0.55 / 0.575 / 0.625 / 0.65 | running / queued |
 | 1-axis | loss variant | T10 / T4 / T6 completed on frozen_original; collapsed or leaked | pruned from transfer repeats |
-| repeat | seed stability | baseline, A=0.90/0.80/0.70, neg=0.015/0.02/0.025/0.03/0.05/0.10, p=0.55/0.575/0.60/0.65/0.70/0.80 at seed 13/42/99 | queued |
+| repeat | seed stability | baseline, A=0.90/0.80/0.70, neg=0.015/0.02/0.025/0.03/0.05/0.10, p decile 0.10-1.00 plus 0.55/0.575/0.625/0.65 at seed 13/42/99 | queued |
 | 1-axis | grid, g=3 | 3x3 / 6x6 / 9x9 / 12x12 / 15x15 / 18x18 | running / queued |
 | repeat | grid seed stability | g=3 grid 3x3/6x6/9x9/12x12/15x15/18x18 at seed 13/42/99 | queued |
 | 1-axis | group-grid alignment | g=2 grid6 / g=4 grid12, baseline g=3 grid9 | queued |
@@ -45,6 +45,7 @@ train=200/class, eval=2000/class
 | frozen_original | abpos_Avar_B100 | A070_B100 | 0.9820 | 0.54 | 0.7125 | 0.2250 | 0.044 | bank_boundary+scratch/sc=0.536 | CrossScratch/bb=0.492 |
 | frozen_original | abpos_Avar_B100 | A080_B100 | 0.9837 | 15.54 | 0.7169 | 0.2203 | -0.246 | bank_boundary+scratch/sc=0.257 | Starburst/sc=0.503 |
 | frozen_original | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.33 | 0.7706 | 0.2209 | 0.130 | bank_boundary+scratch/sc=0.652 | Invalid/sr=0.522 |
+| frozen_iter116J_orig814_eval_n20000 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.86 | 0.8072 | 0.2266 | 0.233 | bank_boundary+scratch/sc=0.741 | Invalid/sr=0.508 |
 | frozen_original | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.38 | 0.7890 | 0.2202 | 0.140 | bank_boundary+scratch/sc=0.676 | Invalid/fk=0.536 |
 | frozen_original | cutmix_p | p020 | 0.9865 | 1.01 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
 | frozen_original | cutmix_p | p030 | 0.9964 | 1.75 | 0.7904 | 0.2304 | 0.233 | bank_boundary+scratch/sc=0.685 | Invalid/fk=0.452 |
@@ -70,12 +71,18 @@ train=200/class, eval=2000/class
 | frozen_original | neg_target | neg003 | 0.9931 | 0.08 | 0.7835 | 0.2266 | 0.138 | bank_boundary+scratch/sc=0.631 | Normal/sc=0.493 |
 | frozen_original | neg_target | neg005 | 0.9954 | 0.06 | 0.7753 | 0.2287 | 0.204 | scratch+scratch_rot/sc=0.656 | Normal/sc=0.452 |
 | frozen_original | neg_target | neg010 | 0.9847 | 0.37 | 0.7769 | 0.2458 | 0.028 | bank_boundary+scratch/sc=0.594 | Invalid/fk=0.566 |
+| frozen_original | seed_repeat_abpos_Avar_B100 | A070_B100_s13 | 0.9835 | 1.30 | 0.7207 | 0.1841 | 0.155 | bank_boundary+scratch/sc=0.547 | Normal/sc=0.392 |
+| frozen_original | seed_repeat_abpos_Avar_B100 | A080_B100_s13 | 0.9961 | 0.00 | 0.7281 | 0.2277 | 0.258 | scratch+scratch_rot/sc=0.638 | Invalid/sr=0.380 |
+| frozen_original | seed_repeat_abpos_Avar_B100 | A090_B100_s13 | 0.9920 | 4.06 | 0.7583 | 0.2248 | 0.211 | scratch+scratch_rot/sr=0.653 | Starburst/fk=0.442 |
 | frozen_original | seed_repeat_baseline | s13 | 0.9942 | 2.00 | 0.7887 | 0.2230 | 0.190 | scratch+scratch_rot/sr=0.641 | Invalid/sr=0.451 |
 | frozen_original | seed_repeat_baseline | s42 | 0.9954 | 68.91 | 0.8080 | 0.2409 | -0.093 | bank_boundary+scratch/sc=0.743 | CrossScratch/bb=0.836 |
 | frozen_original | seed_repeat_baseline | s99 | 0.9904 | 1.51 | 0.8044 | 0.2261 | 0.192 | bank_boundary+scratch/sc=0.701 | Invalid/sc=0.509 |
+| frozen_original | seed_repeat_neg | neg0015_s13 | 0.9958 | 2.62 | 0.7845 | 0.2243 | 0.163 | scratch+scratch_rot/sr=0.693 | Invalid/sr=0.530 |
+| frozen_original | seed_repeat_neg | neg0025_s13 | 0.9937 | 0.43 | 0.7695 | 0.2265 | 0.126 | bank_boundary+scratch/sc=0.631 | Invalid/sr=0.505 |
 | frozen_original | seed_repeat_neg | neg002_s13 | 0.9960 | 0.60 | 0.7843 | 0.2237 | 0.143 | scratch+scratch_rot/sr=0.647 | Invalid/sr=0.504 |
 | frozen_original | seed_repeat_neg | neg002_s42 | 0.9970 | 42.66 | 0.8123 | 0.2371 | -0.010 | fork+scratch/sc=0.733 | CrossScratch/bb=0.743 |
 | frozen_original | seed_repeat_neg | neg002_s99 | 0.9952 | 0.08 | 0.8043 | 0.2253 | 0.192 | bank_boundary+scratch/sc=0.713 | Invalid/sc=0.521 |
+| frozen_original | seed_repeat_neg | neg003_s13 | 0.9958 | 0.71 | 0.7789 | 0.2254 | 0.198 | bank_boundary+scratch/sc=0.698 | Invalid/sr=0.500 |
 | frozen_original | seed_repeat_neg | neg005_s13 | 0.9863 | 16.11 | 0.7622 | 0.2347 | 0.047 | bank_boundary+scratch/sc=0.637 | CenterDonut/bb=0.590 |
 | frozen_original | seed_repeat_neg | neg005_s42 | 0.9953 | 1.93 | 0.8066 | 0.2268 | 0.216 | bank_boundary+scratch/sc=0.692 | Invalid/sr=0.476 |
 | frozen_original | seed_repeat_neg | neg005_s99 | 0.9892 | 6.15 | 0.7855 | 0.2315 | 0.024 | bank_boundary+scratch/sc=0.559 | CrossScratch/bb=0.535 |
@@ -94,7 +101,7 @@ train=200/class, eval=2000/class
 | abpos_Avar_B100 | A070_B100 | 1 | 1 | 0.9820 | 0.0000 | 0.54 | 0.54 | 0.044 | 0.000 | 0.7125 | 0.2250 |
 | abpos_Avar_B100 | A080_B100 | 1 | 1 | 0.9837 | 0.0000 | 15.54 | 15.54 | -0.246 | 0.000 | 0.7169 | 0.2203 |
 | abpos_Avar_B100 | A090_B100 | 1 | 1 | 0.9949 | 0.0000 | 0.33 | 0.33 | 0.130 | 0.000 | 0.7706 | 0.2209 |
-| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 1 | 1 | 0.9959 | 0.0000 | 0.38 | 0.38 | 0.140 | 0.000 | 0.7890 | 0.2202 |
+| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 2 | 2 | 0.9966 | 0.0010 | 0.62 | 0.86 | 0.186 | 0.066 | 0.7981 | 0.2234 |
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 1.01 | 1.01 | 0.098 | 0.000 | 0.7712 | 0.2393 |
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 1.75 | 1.75 | 0.233 | 0.000 | 0.7904 | 0.2304 |
 | cutmix_p | p040 | 1 | 1 | 0.9929 | 0.0000 | 3.14 | 3.14 | 0.034 | 0.000 | 0.7970 | 0.2225 |
@@ -119,12 +126,18 @@ train=200/class, eval=2000/class
 | neg_target | neg003 | 1 | 1 | 0.9931 | 0.0000 | 0.08 | 0.08 | 0.138 | 0.000 | 0.7835 | 0.2266 |
 | neg_target | neg005 | 1 | 1 | 0.9954 | 0.0000 | 0.06 | 0.06 | 0.204 | 0.000 | 0.7753 | 0.2287 |
 | neg_target | neg010 | 1 | 1 | 0.9847 | 0.0000 | 0.37 | 0.37 | 0.028 | 0.000 | 0.7769 | 0.2458 |
+| seed_repeat_abpos_Avar_B100 | A070_B100_s13 | 1 | 1 | 0.9835 | 0.0000 | 1.30 | 1.30 | 0.155 | 0.000 | 0.7207 | 0.1841 |
+| seed_repeat_abpos_Avar_B100 | A080_B100_s13 | 1 | 1 | 0.9961 | 0.0000 | 0.00 | 0.00 | 0.258 | 0.000 | 0.7281 | 0.2277 |
+| seed_repeat_abpos_Avar_B100 | A090_B100_s13 | 1 | 1 | 0.9920 | 0.0000 | 4.06 | 4.06 | 0.211 | 0.000 | 0.7583 | 0.2248 |
 | seed_repeat_baseline | s13 | 1 | 1 | 0.9942 | 0.0000 | 2.00 | 2.00 | 0.190 | 0.000 | 0.7887 | 0.2230 |
 | seed_repeat_baseline | s42 | 1 | 1 | 0.9954 | 0.0000 | 68.91 | 68.91 | -0.093 | 0.000 | 0.8080 | 0.2409 |
 | seed_repeat_baseline | s99 | 1 | 1 | 0.9904 | 0.0000 | 1.51 | 1.51 | 0.192 | 0.000 | 0.8044 | 0.2261 |
+| seed_repeat_neg | neg0015_s13 | 1 | 1 | 0.9958 | 0.0000 | 2.62 | 2.62 | 0.163 | 0.000 | 0.7845 | 0.2243 |
+| seed_repeat_neg | neg0025_s13 | 1 | 1 | 0.9937 | 0.0000 | 0.43 | 0.43 | 0.126 | 0.000 | 0.7695 | 0.2265 |
 | seed_repeat_neg | neg002_s13 | 1 | 1 | 0.9960 | 0.0000 | 0.60 | 0.60 | 0.143 | 0.000 | 0.7843 | 0.2237 |
 | seed_repeat_neg | neg002_s42 | 1 | 1 | 0.9970 | 0.0000 | 42.66 | 42.66 | -0.010 | 0.000 | 0.8123 | 0.2371 |
 | seed_repeat_neg | neg002_s99 | 1 | 1 | 0.9952 | 0.0000 | 0.08 | 0.08 | 0.192 | 0.000 | 0.8043 | 0.2253 |
+| seed_repeat_neg | neg003_s13 | 1 | 1 | 0.9958 | 0.0000 | 0.71 | 0.71 | 0.198 | 0.000 | 0.7789 | 0.2254 |
 | seed_repeat_neg | neg005_s13 | 1 | 1 | 0.9863 | 0.0000 | 16.11 | 16.11 | 0.047 | 0.000 | 0.7622 | 0.2347 |
 | seed_repeat_neg | neg005_s42 | 1 | 1 | 0.9953 | 0.0000 | 1.93 | 1.93 | 0.216 | 0.000 | 0.8066 | 0.2268 |
 | seed_repeat_neg | neg005_s99 | 1 | 1 | 0.9892 | 0.0000 | 6.15 | 6.15 | 0.024 | 0.000 | 0.7855 | 0.2315 |
@@ -141,11 +154,12 @@ train=200/class, eval=2000/class
 | axis | best value | bit_F1 | FAR | gap | reason |
 |---|---|---:|---:|---:|---|
 | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.33 | 0.130 | worst POS bank_boundary+scratch/sc=0.652; worst NEG Invalid/sr=0.522 |
-| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.38 | 0.140 | worst POS bank_boundary+scratch/sc=0.676; worst NEG Invalid/fk=0.536 |
+| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.86 | 0.233 | worst POS bank_boundary+scratch/sc=0.741; worst NEG Invalid/sr=0.508 |
 | cutmix_p | p0575 | 0.9975 | 0.40 | 0.285 | worst POS fork+scratch_rot/sr=0.726; worst NEG Invalid/fk=0.441 |
 | grid_g3 | grid12 | 0.9917 | 0.11 | 0.181 | worst POS fork+scratch/fk=0.634; worst NEG Invalid/fk=0.453 |
 | loss_variant | T6_T6_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.9602 | 8.48 | -0.337 | worst POS bank_boundary+scratch/sc=0.197; worst NEG Invalid/fk=0.534 |
 | neg_target | neg002 | 0.9964 | 0.04 | 0.212 | worst POS bank_boundary+scratch/sc=0.654; worst NEG Normal/sc=0.442 |
+| seed_repeat_abpos_Avar_B100 | A080_B100_s13 | 0.9961 | 0.00 | 0.258 | worst POS scratch+scratch_rot/sc=0.638; worst NEG Invalid/sr=0.380 |
 | seed_repeat_baseline | s42 | 0.9954 | 68.91 | -0.093 | worst POS bank_boundary+scratch/sc=0.743; worst NEG CrossScratch/bb=0.836 |
 | seed_repeat_neg | neg002_s42 | 0.9970 | 42.66 | -0.010 | worst POS fork+scratch/sc=0.733; worst NEG CrossScratch/bb=0.743 |
 | seed_repeat_p | p060_s13 | 0.9961 | 0.31 | 0.225 | worst POS bank_boundary+scratch/sc=0.680; worst NEG Invalid/sr=0.455 |
