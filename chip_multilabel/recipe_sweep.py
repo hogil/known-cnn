@@ -3025,6 +3025,55 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 grid_dim=grid_dim,
             )
 
+        # Transfer-priority subset (260606):
+        # The high-value one-axis rows must be averaged over multiple datasets
+        # before promotion.  Put the candidate axis values in front of the broad
+        # one-axis suite on every dataset; the broad seed-repeat queue remains
+        # behind this subset.
+        p_transfer_values = (
+            "0.4000",
+            "0.5000",
+            "0.5500",
+            "0.5750",
+            "0.6000",
+            "0.6250",
+            "0.6500",
+            "0.7000",
+            "0.8000",
+            "0.9000",
+            "1.0000",
+        )
+        one_axis_transfer_priority_tags: list[str] = []
+
+        def add_transfer_priority_tag(axis: str, value_tag: str) -> None:
+            prefix = f"oneaxis_{axis}_{value_tag}_"
+            one_axis_transfer_priority_tags.extend(
+                tag for tag in one_axis_ablation_tags if tag.startswith(prefix)
+            )
+
+        # First pass: dataset mean with seed=7 and only one changed variable.
+        for cutmix_p in p_transfer_values:
+            add_transfer_priority_tag("cutmix_p", f"p{label_pct_tag(cutmix_p)}")
+        for neg_target in ("0.02", "0.05"):
+            add_transfer_priority_tag("neg_target", f"neg{label_pct_tag(neg_target)}")
+        add_transfer_priority_tag("grid_g3", "grid12")
+        for a_target in ("0.90", "0.80"):
+            add_transfer_priority_tag("abpos_Avar_B100", f"A{label_pct_tag(a_target)}_B100")
+
+        # Second pass: seed dispersion for the same candidate band.  This stays
+        # near the front but after the seed=7 dataset-mean pass.
+        for seed in ("13", "42", "99"):
+            for cutmix_p in p_transfer_values:
+                add_transfer_priority_tag("seed_repeat_p", f"p{label_pct_tag(cutmix_p)}_s{seed}")
+            for neg_target in ("0.02", "0.05"):
+                add_transfer_priority_tag("seed_repeat_neg", f"neg{label_pct_tag(neg_target)}_s{seed}")
+            add_transfer_priority_tag("seed_repeat_grid_g3", f"grid12_s{seed}")
+            for a_target in ("0.90", "0.80"):
+                add_transfer_priority_tag(
+                    "seed_repeat_abpos_Avar_B100",
+                    f"A{label_pct_tag(a_target)}_B100_s{seed}",
+                )
+
         # 2-factor / 3-factor follow-up queue (260603):
         # Keep this after the one-axis suite.  It is intentionally conservative:
         # combine only values near the current known-good baseline, then prune
@@ -3449,7 +3498,12 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 + target_tail_guard_tags
             )
         elif os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "one_axis_ablation":
-            priority = one_axis_ablation_tags + two_factor_ablation_tags + three_factor_ablation_tags
+            priority = (
+                one_axis_transfer_priority_tags
+                + [tag for tag in one_axis_ablation_tags if tag not in set(one_axis_transfer_priority_tags)]
+                + two_factor_ablation_tags
+                + three_factor_ablation_tags
+            )
         else:
             priority = (
                 target_label_matrix_tags
