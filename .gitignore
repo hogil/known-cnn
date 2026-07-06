@@ -33,7 +33,7 @@ TEST_image_root/
 TEST_positions_root/
 TEST_result_*/
 TEST_logs_predict_*/
-models/
+/models/
 _dist_heatmaps/
 _resize_compare/
 _resize_compare1024/
