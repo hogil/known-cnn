@@ -12,4 +12,6 @@ def test_forward_shape():
 def test_param_count_small():
     model = SmallCNN(num_classes=10, in_ch=1)
     n = sum(p.numel() for p in model.parameters())
-    assert n < 200_000   # stays tiny for CPU
+    # capable but still CPU-tiny. Lower bound guards against reverting to the
+    # under-capacity GAP(1) model that could not learn digit identity.
+    assert 200_000 < n < 2_000_000

@@ -8,7 +8,7 @@ from .datasets.multimnist import (
     all_pairs, split_holdout, build_single_pool, synthesize_multi, load_mnist,
 )
 from .synthesis.arms import synthesize_arm
-from .train import train_one
+from .train import train_model, evaluate
 
 ARMS = ["oracle", "fcm_pm", "cutmix", "mixup", "copy_paste", "single_only"]
 FIELDS = ["arm", "seed", "mAP_full", "mAP_holdout", "exact_full",
@@ -40,10 +40,11 @@ def run_matrix(imgs, labels, arms, seeds, n_holdout,
             trX = np.concatenate([trX, spX])
             trY = np.concatenate([trY, spY])
 
-            full = train_one(trX, trY, testX_full, testY_full,
-                             epochs=epochs, bs=bs, device=device, seed=seed)
-            ho = train_one(trX, trY, testX_ho, testY_ho,
-                           epochs=epochs, bs=bs, device=device, seed=seed)
+            # train once, evaluate on both the full-multi and held-out-combo sets
+            model = train_model(trX, trY, epochs=epochs, bs=bs,
+                                device=device, seed=seed)
+            full = evaluate(model, testX_full, testY_full, bs=bs, device=device)
+            ho = evaluate(model, testX_ho, testY_ho, bs=bs, device=device)
             rows.append({
                 "arm": arm, "seed": seed,
                 "mAP_full": round(full["mAP"], 4),
@@ -70,7 +71,7 @@ def main():
     ap.add_argument("--n-train", type=int, default=4000)
     ap.add_argument("--n-test", type=int, default=2000)
     ap.add_argument("--n-holdout-test", type=int, default=1000)
-    ap.add_argument("--epochs", type=int, default=5)
+    ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--bs", type=int, default=64)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--mnist-root", default="E:/data/torchvision")
