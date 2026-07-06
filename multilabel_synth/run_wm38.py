@@ -67,6 +67,9 @@ def main():
     ap.add_argument("--n-groups", type=int, default=3)
     ap.add_argument("--neg-target", type=float, default=0.0,
                     help="soft target for negative bits: tgt = y*1 + (1-y)*neg")
+    ap.add_argument("--n-synth-normal", type=int, default=0,
+                    help="add N synthetic normals (defects erased from singles "
+                         "via min(x,0.5)) as all-negative training samples")
     ap.add_argument("--mpos", type=float, default=0.65,
                     help="pair-mask positive target (fcm_pm_pm)")
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/wm38_matrix.csv")
@@ -122,6 +125,14 @@ def main():
                                     grid=args.grid, n_groups=args.n_groups)
             trX = np.concatenate([bX, sX_all[aug]])
             trY = np.concatenate([bY, sY_all[aug]])
+            if args.n_synth_normal > 0:
+                # blind synthetic normals: erase defect dies from singles
+                pick = r2.choice(len(sX_all), size=min(args.n_synth_normal, len(sX_all)),
+                                 replace=False)
+                nX = np.minimum(sX_all[pick], 0.5)
+                nY = np.zeros((len(nX), trY.shape[1]), np.float32)
+                trX = np.concatenate([trX, nX])
+                trY = np.concatenate([trY, nY])
             if args.neg_target > 0:
                 # pos/neg target independence: tgt = y*pos + (1-y)*neg (pos=1)
                 trY = trY + (1.0 - trY) * args.neg_target
