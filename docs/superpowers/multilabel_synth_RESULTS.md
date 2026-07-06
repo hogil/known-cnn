@@ -147,3 +147,26 @@ stronger signal wins per pixel; no location knowledge) — 3 seeds:
 4. **Domain unification.** chip min-blend (defect wins over normal) and MNIST
    max-overlay (digit wins over black) are the same "stronger signal wins per
    pixel, no location needed" operation.
+
+## VOC 2007 — natural single vs multi category split (feasibility)
+
+Parsed VOCdevkit annotations directly (pjreddie mirror; the torchvision default
+Oxford mirror stalled at ~80 KB/s). No label dropping — the split is the natural
+per-image category count.
+
+```
+| split    | total | single-category | multi-category |
+|----------|-------|-----------------|----------------|
+| trainval |  5011 |    2808 (56%)   |    2203 (44%)  |
+| test     |  4952 |    2841 (57%)   |    2111 (43%)  |
+```
+
+Per-class single-category pool is imbalanced: person 408 ... diningtable 5.
+Objects that naturally co-occur (diningtable, tvmonitor, sofa, chair) have few
+single-category images relative to their total presence — exactly the classes
+where synthesis from singles matters most. The design premise (natural single ->
+multi split, no SPML label masking) is feasible on VOC.
+
+Next: build ResNet-50 + mAP training on this split (GPU needed; CPU impractical
+for a multi-arm sweep). Adapt the synthesis arms to natural images (content-blind
+overlay/cutmix; content-aware needs masks -> COCO).
