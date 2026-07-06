@@ -10,19 +10,31 @@ from torch.utils.data import TensorDataset, DataLoader
 from .datasets.voc import build_single_pool, build_multi
 from .synthesis.voc_arms import synth_arm
 from .models.resnet import build_resnet18
-from .metrics import compute_map, pos_neg_prob
+from .metrics import compute_map, pos_neg_prob, bit_f1, far
 
 IMEAN = np.array([0.485, 0.456, 0.406], np.float32).reshape(1, 3, 1, 1)
 ISTD = np.array([0.229, 0.224, 0.225], np.float32).reshape(1, 3, 1, 1)
 ARMS = ["oracle", "cutmix", "mixup", "single_only"]
-FIELDS = ["arm", "seed", "mAP", "pos_prob", "neg_prob", "n_train"]
+FIELDS = ["arm", "seed",
+          "tr_bitF1", "tr_FAR", "tr_pos", "tr_neg",
+          "ev_bitF1", "ev_FAR", "ev_exact", "ev_mAP", "ev_pos", "ev_neg", "n_train"]
 
 
 def _norm(X):
     return (X - IMEAN) / ISTD
 
 
-def train_eval(trX, trY, teX, teY, epochs, bs, lr, device, seed):
+def _predict(model, X, Y, bs, device):
+    model.eval()
+    P = []
+    with torch.no_grad():
+        for xb, _ in DataLoader(TensorDataset(torch.from_numpy(_norm(X)), torch.from_numpy(Y)),
+                                batch_size=bs):
+            P.append(torch.sigmoid(model(xb.to(device))).cpu().numpy())
+    return np.concatenate(P)
+
+
+def train_model_voc(trX, trY, epochs, bs, lr, device, seed):
     torch.manual_seed(seed)
     model = build_resnet18(20, pretrained=True).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -36,15 +48,15 @@ def train_eval(trX, trY, teX, teY, epochs, bs, lr, device, seed):
             opt.zero_grad()
             lf(model(xb), yb).backward()
             opt.step()
-    model.eval()
-    P = []
-    with torch.no_grad():
-        for xb, _ in DataLoader(TensorDataset(torch.from_numpy(_norm(teX)), torch.from_numpy(teY)),
-                                batch_size=bs):
-            P.append(torch.sigmoid(model(xb.to(device))).cpu().numpy())
-    P = np.concatenate(P)
-    pos, neg = pos_neg_prob(P, teY)
-    return compute_map(P, teY), pos, neg
+    return model
+
+
+def eval_voc(model, X, Y, bs, device):
+    P = _predict(model, X, Y, bs, device)
+    pos, neg = pos_neg_prob(P, Y)
+    from .metrics import exact_match
+    return {"bitF1": bit_f1(P, Y), "FAR": far(P, Y), "exact": exact_match(P, Y),
+            "mAP": compute_map(P, Y), "pos": pos, "neg": neg}
 
 
 def main():
@@ -70,6 +82,7 @@ def main():
     teX, teY = build_multi(args.root, "test", args.n_test, args.size, seed=1)
     print(f"single pool {spX.shape[0]}, oracle multi {orX.shape[0]}, test {teX.shape[0]}", flush=True)
 
+    rng = np.random.default_rng(0)
     rows = []
     for arm in args.arms:
         for seed in args.seeds:
@@ -81,13 +94,23 @@ def main():
                 sX, sY = synth_arm(arm, spX, spY, args.n_train, seed, frac=args.cutmix_frac)
                 trX = np.concatenate([sX, spX])
                 trY = np.concatenate([sY, spY])
-            mAP, pos, neg = train_eval(trX, trY, teX, teY, args.epochs, args.bs,
-                                       args.lr, args.device, seed)
-            r = {"arm": arm, "seed": seed, "mAP": round(mAP, 4),
-                 "pos_prob": round(pos, 4), "neg_prob": round(neg, 4),
+            model = train_model_voc(trX, trY, args.epochs, args.bs, args.lr, args.device, seed)
+            # train-set performance on a subsample (targets binarized for metrics)
+            idx = rng.choice(len(trX), size=min(300, len(trX)), replace=False)
+            tr = eval_voc(model, trX[idx], (trY[idx] >= 0.5).astype(np.float32), args.bs, args.device)
+            ev = eval_voc(model, teX, teY, args.bs, args.device)
+            r = {"arm": arm, "seed": seed,
+                 "tr_bitF1": round(tr["bitF1"], 4), "tr_FAR": round(tr["FAR"], 4),
+                 "tr_pos": round(tr["pos"], 4), "tr_neg": round(tr["neg"], 4),
+                 "ev_bitF1": round(ev["bitF1"], 4), "ev_FAR": round(ev["FAR"], 4),
+                 "ev_exact": round(ev["exact"], 4), "ev_mAP": round(ev["mAP"], 4),
+                 "ev_pos": round(ev["pos"], 4), "ev_neg": round(ev["neg"], 4),
                  "n_train": int(trX.shape[0])}
             rows.append(r)
-            print(f"{arm:12s} seed={seed} mAP={mAP:.4f} pos={pos:.4f} neg={neg:.4f} n={trX.shape[0]}", flush=True)
+            print(f"{arm:12s} s{seed} | TRAIN bitF1={tr['bitF1']:.3f} FAR={tr['FAR']:.3f} "
+                  f"pos={tr['pos']:.3f} neg={tr['neg']:.3f} | EVAL bitF1={ev['bitF1']:.3f} "
+                  f"FAR={ev['FAR']:.3f} exact={ev['exact']:.3f} mAP={ev['mAP']:.3f} "
+                  f"pos={ev['pos']:.3f} neg={ev['neg']:.3f}", flush=True)
 
     os.makedirs(os.path.dirname(args.out_csv), exist_ok=True)
     with open(args.out_csv, "w", newline="") as f:
