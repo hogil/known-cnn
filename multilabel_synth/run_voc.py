@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
-from .datasets.voc import build_single_pool, build_multi
+from .datasets.voc import build_single_pool, build_single_pool_crops, build_multi
 from .synthesis.voc_arms import synth_arm
 from .models.resnet import build_resnet18
 from .metrics import compute_map, pos_neg_prob, bit_f1, far
@@ -72,12 +72,16 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--cutmix-frac", type=float, default=0.3)
+    ap.add_argument("--single-mode", choices=["crops", "natural"], default="crops")
     ap.add_argument("--root", default="E:/data/torchvision")
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/voc_matrix.csv")
     args = ap.parse_args()
 
-    print("loading VOC single pool / oracle multi / test ...", flush=True)
-    spX, spY, _ = build_single_pool(args.root, "trainval", args.per_class_cap, args.size, seed=0)
+    print(f"loading VOC single pool (mode={args.single_mode}) / oracle multi / test ...", flush=True)
+    if args.single_mode == "crops":
+        spX, spY, _ = build_single_pool_crops(args.root, "trainval", args.per_class_cap, args.size, seed=0)
+    else:
+        spX, spY, _ = build_single_pool(args.root, "trainval", args.per_class_cap, args.size, seed=0)
     orX, orY = build_multi(args.root, "trainval", args.n_train, args.size, seed=5)
     teX, teY = build_multi(args.root, "test", args.n_test, args.size, seed=1)
     print(f"single pool {spX.shape[0]}, oracle multi {orX.shape[0]}, test {teX.shape[0]}", flush=True)
