@@ -196,3 +196,30 @@ Next: Mosaic arm (tile whole single images in a 2x2 grid = label-honest blind
 synthesis, natural-image analog of MNIST overlay) to test the label-fidelity
 mechanism. Absolute VOC performance (overfitting) needs more data -> GPU.
 MNIST metric note: exact-match / bit_F1 discriminate arms far better than mAP.
+
+## VOC 2007 — crop-based single pool (negative result: scale mismatch)
+
+To fix the thin single coverage (diningtable 5 natural-single images vs 237
+multi-test appearances), switched the single pool to per-object bbox crops
+(all 20 classes cap-balanced at 60). Result: every arm got WORSE.
+
+```
+| arm         | crop-single bitF1 | natural-single bitF1 | delta  |
+|-------------|-------------------|----------------------|--------|
+| oracle      |            0.355  |               0.355  |  0.000 |
+| cutmix      |            0.234  |               0.285  | -0.051 |
+| single_only |            0.227  |               0.262  | -0.035 |
+| mixup       |            0.156  |               0.162  | -0.006 |
+```
+
+Cause: scale/context mismatch. Crops are tight zoomed single objects; the multi
+test is full scenes -> training on crops fails to transfer (crop cutmix pos_prob
+0.181 vs natural 0.243). The balanced-coverage gain is outweighed by the
+crop->scene domain gap. VOC has no clean single pool: natural-single is
+scene-scale but thin for co-occurring classes; crops are balanced but
+scale-mismatched. Confirms VOC is a hard testbed for the single->multi paradigm.
+
+Proper fix = Copy-Paste (paste object crops onto scene backgrounds): coverage
+(crops) + scale/context (background). Also: overfitting is severe (train bitF1
+~1.0, eval ~0.23-0.36 vs literature ~0.8) — credible absolute numbers need
+GPU + full data.
