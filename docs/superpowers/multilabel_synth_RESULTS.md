@@ -55,3 +55,40 @@ test (all 45 pairs) and held-out-combo test (9 pairs the oracle never trains on)
   real objects but must be re-examined on scene images.
 - mixup arm omitted from this sweep (focused on region methods); earlier 1-seed
   run had mixup full ~0.678 with soft labels. To be added for completeness.
+
+## MultiMNIST — content-aware (fill) vs content-blind (checker grid) — 3 seeds
+
+Motivation: `fill` needs to know the background (MNIST: pixel==0; chips: palette
+grade) — content-aware. `checker` needs no such knowledge — content-blind, so it
+is the variant that transfers to natural images where the background is unknown.
+Sweep checker grid granularity. `outputs/multilabel_synth/_checker_sweep.log`.
+
+```
+| config       | full mAP        | holdout mAP     | exact | pos   | neg   |
+|--------------|-----------------|-----------------|-------|-------|-------|
+| fcm_fill     | 0.7645 +-0.0022 | 0.7625 +-0.0074 | 0.262 | 0.597 | 0.091 |
+| oracle       | 0.7591 +-0.0049 | 0.6328 +-0.0068 | 0.253 | 0.593 | 0.091 |
+| cutmix_f0.25 | 0.6980 +-0.0022 | 0.6780 +-0.0089 | 0.142 | 0.496 | 0.102 |
+| chk_g20      | 0.6737 +-0.0087 | 0.6821 +-0.0040 | 0.061 | 0.352 | 0.065 |
+| chk_g10      | 0.6645 +-0.0106 | 0.6758 +-0.0008 | 0.063 | 0.365 | 0.063 |
+| chk_g6       | 0.6566 +-0.0042 | 0.6677 +-0.0083 | 0.075 | 0.388 | 0.068 |
+| chk_g4       | 0.6485 +-0.0073 | 0.6564 +-0.0069 | 0.085 | 0.415 | 0.094 |
+| chk_g8       | 0.6455 +-0.0101 | 0.6501 +-0.0124 | 0.065 | 0.356 | 0.063 |
+| chk_g2       | 0.6303 +-0.0047 | 0.6378 +-0.0139 | 0.098 | 0.435 | 0.094 |
+```
+
+### Findings
+
+1. **Finer checker climbs** (full g2 0.630 -> g20 0.674; holdout 0.638 -> 0.682):
+   as cells shrink toward pixel dither, both digits survive interleaved.
+2. **Content-blind synthesis also beats the oracle on held-out combos**
+   (chk_g20 holdout 0.682 > oracle 0.633). Compositional generalization does NOT
+   require knowing the background — encouraging for natural images.
+3. **Content-aware fill still wins** (0.76 vs blind 0.67-0.68, ~0.08 edge), with
+   much better exact-match / confidence. Fine checker lifts per-class mAP but
+   lowers exact-match and pos_prob (dither halves each object's density:
+   detectable but less confident, worse joint accuracy).
+
+Domain implication: where the background is known (MNIST pixel==0; chip palette
+grade) fill dominates; where it is unknown (natural scenes) a content-blind
+method still yields compositional generalization above the oracle.
