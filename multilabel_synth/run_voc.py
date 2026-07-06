@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 from .datasets.voc import build_single_pool, build_single_pool_crops, build_multi
-from .synthesis.voc_arms import synth_arm
+from .synthesis.voc_arms import synth_arm, synth_copypaste
 from .models.resnet import build_resnet18
 from .metrics import compute_map, pos_neg_prob, bit_f1, far
 
@@ -77,11 +77,10 @@ def main():
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/voc_matrix.csv")
     args = ap.parse_args()
 
-    print(f"loading VOC single pool (mode={args.single_mode}) / oracle multi / test ...", flush=True)
-    if args.single_mode == "crops":
-        spX, spY, _ = build_single_pool_crops(args.root, "trainval", args.per_class_cap, args.size, seed=0)
-    else:
-        spX, spY, _ = build_single_pool(args.root, "trainval", args.per_class_cap, args.size, seed=0)
+    print(f"loading VOC pools (mode={args.single_mode}) / oracle multi / test ...", flush=True)
+    natX, natY, _ = build_single_pool(args.root, "trainval", args.per_class_cap, args.size, seed=0)
+    crpX, crpY, _ = build_single_pool_crops(args.root, "trainval", args.per_class_cap, args.size, seed=0)
+    spX, spY = (crpX, crpY) if args.single_mode == "crops" else (natX, natY)
     orX, orY = build_multi(args.root, "trainval", args.n_train, args.size, seed=5)
     teX, teY = build_multi(args.root, "test", args.n_test, args.size, seed=1)
     print(f"single pool {spX.shape[0]}, oracle multi {orX.shape[0]}, test {teX.shape[0]}", flush=True)
@@ -94,6 +93,11 @@ def main():
                 trX, trY = orX, orY
             elif arm == "single_only":
                 trX, trY = spX, spY
+            elif arm == "copypaste":
+                # paste balanced crops onto natural scene backgrounds
+                sX, sY = synth_copypaste(natX, natY, crpX, crpY, args.n_train, seed)
+                trX = np.concatenate([sX, natX])
+                trY = np.concatenate([sY, natY])
             else:
                 sX, sY = synth_arm(arm, spX, spY, args.n_train, seed, frac=args.cutmix_frac)
                 trX = np.concatenate([sX, spX])

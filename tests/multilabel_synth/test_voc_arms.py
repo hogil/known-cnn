@@ -37,3 +37,12 @@ def test_unknown_arm_raises():
         assert False
     except ValueError:
         pass
+
+
+def test_copypaste_two_labels():
+    from multilabel_synth.synthesis.voc_arms import synth_copypaste
+    bgX, bgY = _fake()
+    crX, crY = _fake()
+    sX, sY = synth_copypaste(bgX, bgY, crX, crY, 16, seed=0)
+    assert sX.shape == (16, 3, 32, 32)
+    assert (sY.sum(1) == 2).all()
