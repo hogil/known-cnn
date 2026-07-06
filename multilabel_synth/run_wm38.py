@@ -14,7 +14,7 @@ from .synthesis.wm38_arms import synth_wm38
 from .models.small_cnn import SmallCNN
 from .metrics import pos_neg_prob, bit_f1, far, exact_match
 
-ARMS = ["oracle", "fcm_pm", "overlay", "cutmix", "mixup", "single_only"]
+ARMS = ["oracle", "fcm_pm", "fcm_pm_pm", "overlay", "cutmix", "mixup", "single_only"]
 FIELDS = ["arm", "seed",
           "tr_bitF1", "tr_pos", "tr_neg",
           "ev_bitF1", "ev_FAR", "ev_exact", "ev_pos", "ev_neg",
@@ -65,6 +65,10 @@ def main():
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--grid", type=int, default=9)
     ap.add_argument("--n-groups", type=int, default=3)
+    ap.add_argument("--neg-target", type=float, default=0.0,
+                    help="soft target for negative bits: tgt = y*1 + (1-y)*neg")
+    ap.add_argument("--mpos", type=float, default=0.65,
+                    help="pair-mask positive target (fcm_pm_pm)")
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/wm38_matrix.csv")
     args = ap.parse_args()
 
@@ -109,11 +113,18 @@ def main():
             elif arm == "single_only":
                 bX = np.empty((0,) + X.shape[1:], np.float32)
                 bY = np.empty((0, Y.shape[1]), np.float32)
+            elif arm == "fcm_pm_pm":
+                bX, bY = synth_wm38("fcm_pm", sX_all, sY_all, args.n_train, seed,
+                                    grid=args.grid, n_groups=args.n_groups,
+                                    pair_mask=True, mpos=args.mpos)
             else:
                 bX, bY = synth_wm38(arm, sX_all, sY_all, args.n_train, seed,
                                     grid=args.grid, n_groups=args.n_groups)
             trX = np.concatenate([bX, sX_all[aug]])
             trY = np.concatenate([bY, sY_all[aug]])
+            if args.neg_target > 0:
+                # pos/neg target independence: tgt = y*pos + (1-y)*neg (pos=1)
+                trY = trY + (1.0 - trY) * args.neg_target
 
             model = train_model(trX, trY, args.epochs, args.bs, args.lr,
                                 args.device, seed)

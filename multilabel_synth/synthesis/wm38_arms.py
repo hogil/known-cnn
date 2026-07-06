@@ -19,25 +19,37 @@ def _pair_indices(Y, rng, n):
 
 
 def _complement_mix(ca, cb, grid, n_groups, rng):
-    """Faithful FCM-PM: B base + A overwrites 1/n_groups random-scattered cells."""
+    """Faithful FCM-PM: B base + A overwrites 1/n_groups random-scattered cells.
+
+    Returns (mix, cellmask) where cellmask [1,H,W] marks A's cells — needed by
+    the pair-mask branch.
+    """
     _, H, W = ca.shape
     ch, cw = H // grid, W // grid
     n_cells = grid * grid
     perm = rng.permutation(n_cells)
     a_cells = perm[: n_cells // n_groups]
     img = cb.copy()
+    cellmask = np.zeros_like(ca, dtype=bool)
     for ci in a_cells:
         gi, gj = int(ci) // grid, int(ci) % grid
         y0, x0 = gi * ch, gj * cw
         y1 = (gi + 1) * ch if gi < grid - 1 else H
         x1 = (gj + 1) * cw if gj < grid - 1 else W
         img[:, y0:y1, x0:x1] = ca[:, y0:y1, x0:x1]
-    return img
+        cellmask[:, y0:y1, x0:x1] = True
+    return img, cellmask
 
 
 def synth_wm38(arm, X, Y, n, seed, grid=9, n_groups=3, cutmix_frac=0.33,
-               mixup_alpha=1.0):
-    """Return (X_synth, Y_synth) built from single-label wafers only."""
+               mixup_alpha=1.0, pair_mask=False, mpos=0.65):
+    """Return (X_synth, Y_synth) built from single-label wafers only.
+
+    pair_mask (fcm_pm only): for each complement mix also emit a mask sample —
+    A's cells kept, B's cells with defects erased (min(cb, 0.5) keeps the wafer
+    disc but removes B's defect dies). Target: A bit = mpos, rest 0. This is
+    the chip PM branch that suppresses cross-class false alarms.
+    """
     rng = np.random.default_rng(seed)
     if arm == "single_only":
         idx = rng.integers(0, len(X), size=n)
@@ -45,12 +57,24 @@ def synth_wm38(arm, X, Y, n, seed, grid=9, n_groups=3, cutmix_frac=0.33,
 
     out_x, out_y = [], []
     for a, b in _pair_indices(Y, rng, n):
+        if len(out_x) >= n:
+            break
         ca, cb = X[a], X[b]
         if arm == "overlay":
             # max: defect(1.0) wins over normal die(0.5); bg stays bg.
             img = np.maximum(ca, cb)
         elif arm == "fcm_pm":
-            img = _complement_mix(ca, cb, grid, n_groups, rng)
+            img, cellmask = _complement_mix(ca, cb, grid, n_groups, rng)
+            if pair_mask:
+                erased_b = np.minimum(cb, 0.5)        # B defects -> normal die
+                mask_img = np.where(cellmask, ca, erased_b).astype(np.float32)
+                out_x.append(img)
+                out_y.append(np.maximum(Y[a], Y[b]))
+                if len(out_x) >= n:
+                    break
+                out_x.append(mask_img)
+                out_y.append(Y[a] * mpos)             # A-only, soft positive
+                continue
         elif arm == "cutmix":
             _, H, W = ca.shape
             side = max(1, min(H, int(round(H * cutmix_frac ** 0.5))))
