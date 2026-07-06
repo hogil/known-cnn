@@ -170,3 +170,29 @@ multi split, no SPML label masking) is feasible on VOC.
 Next: build ResNet-50 + mAP training on this split (GPU needed; CPU impractical
 for a multi-arm sweep). Adapt the synthesis arms to natural images (content-blind
 overlay/cutmix; content-aware needs masks -> COCO).
+
+## VOC 2007 — first real run (ResNet-18, bit_F1/FAR, 8 epochs, 1 seed, subsampled/CPU)
+
+Single pool 765 (cap 40/class), oracle multi 800, test 300, size 128.
+
+```
+| arm         | TRAIN bitF1 | EVAL bitF1 | EVAL FAR | exact | ev_pos | ev_neg | ev_mAP |
+|-------------|-------------|------------|----------|-------|--------|--------|--------|
+| oracle      |       1.000 |      0.355 |    0.021 | 0.293 |  0.615 |  0.043 |  0.511 |
+| cutmix      |       0.997 |      0.285 |    0.010 | 0.013 |  0.243 |  0.024 |  0.474 |
+| single_only |       1.000 |      0.262 |    0.002 | 0.000 |  0.230 |  0.016 |  0.511 |
+| mixup       |       0.919 |      0.162 |    0.001 | 0.000 |  0.174 |  0.011 |  0.482 |
+```
+
+Findings: (1) ordering oracle > cutmix > single_only > mixup — synthesis beats
+the single-only floor, region (cutmix) beats blend (mixup), consistent with
+MNIST. (2) But synthesis does NOT match oracle here (0.285 vs 0.355), unlike
+MNIST. Two causes: heavy overfitting on 800-image subsample (train bitF1 ~1.0,
+eval ~0.16-0.36) and cutmix label-noise on natural RGB (random rectangle rarely
+captures a whole object -> underconfident, pos 0.243). (3) bit_F1/FAR
+discriminate arms; mAP did not (all ~0.49).
+
+Next: Mosaic arm (tile whole single images in a 2x2 grid = label-honest blind
+synthesis, natural-image analog of MNIST overlay) to test the label-fidelity
+mechanism. Absolute VOC performance (overfitting) needs more data -> GPU.
+MNIST metric note: exact-match / bit_F1 discriminate arms far better than mAP.
