@@ -12,9 +12,26 @@ def _grid_mask(canvas, grid):
     return m
 
 
+def _complement_mix(ca, cb, canvas, grid, n_groups, rng):
+    """Faithful FCM-PM complement: B base, A overwrites 1/n_groups scattered
+    grid cells (random partition). Mirrors chip _train_chip_variant complement."""
+    cell = canvas // grid
+    n_cells = grid * grid
+    perm = rng.permutation(n_cells)
+    a_cells = perm[: n_cells // n_groups]
+    img = cb.copy()
+    for ci in a_cells:
+        gi, gj = int(ci) // grid, int(ci) % grid
+        y0, x0 = gi * cell, gj * cell
+        y1 = (gi + 1) * cell if gi < grid - 1 else canvas
+        x1 = (gj + 1) * cell if gj < grid - 1 else canvas
+        img[y0:y1, x0:x1] = ca[y0:y1, x0:x1]
+    return img
+
+
 def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
                    canvas=40, n_classes=10, grid=4, fcm_mode="checker",
-                   cutmix_frac=0.5, mixup_alpha=1.0):
+                   cutmix_frac=0.5, mixup_alpha=1.0, n_groups=3):
     if arm in ("oracle", "overlay"):
         # max-overlay of two whole single digits: blind (no location knowledge),
         # both objects preserved whole, full-cover -> label-honest. This is the
@@ -71,6 +88,8 @@ def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
                 for r in range(grid):
                     src = ca if r % 2 == 0 else cb
                     img[r * cell:(r + 1) * cell, :] = src[r * cell:(r + 1) * cell, :]
+            elif fcm_mode == "complement":
+                img = _complement_mix(ca, cb, canvas, grid, n_groups, rng)
             else:  # "checker"
                 mask = _grid_mask(canvas, grid)
                 img = np.where(mask, ca, cb)

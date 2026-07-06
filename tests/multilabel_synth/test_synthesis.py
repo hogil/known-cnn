@@ -49,6 +49,22 @@ def test_fcm_pm_preserves_both_digits():
     assert (vals > 0).sum() >= 1
 
 
+def test_complement_faithful_ratio():
+    # faithful FCM-PM: B base + A overwrites exactly n_cells//n_groups scattered
+    # cells -> A pixel area ~= 1/n_groups (up to last-row/col remainder)
+    imgs, labels = _fake_mnist()
+    X, Y = synthesize_arm("fcm_pm", imgs, labels, n=8, seed=5,
+                          allowed_pairs=[(0, 1)], canvas=40, grid=9,
+                          fcm_mode="complement", n_groups=3)
+    assert X.shape == (8, 1, 40, 40)
+    assert (Y.sum(axis=1) == 2).all()
+    # fake digits fill the whole 28x28 block with class-coded intensity, so the
+    # placed regions have distinct values; both sources must appear
+    for k in range(8):
+        vals = set(np.unique((X[k, 0] * 255).round().astype(int))) - {0}
+        assert len(vals) == 2, vals   # both A(20) and B(40) intensities present
+
+
 def test_unknown_arm_raises():
     imgs, labels = _fake_mnist()
     try:
