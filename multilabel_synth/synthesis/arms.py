@@ -15,7 +15,12 @@ def _grid_mask(canvas, grid):
 def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
                    canvas=40, n_classes=10, grid=4, fcm_mode="checker",
                    cutmix_frac=0.5, mixup_alpha=1.0):
-    if arm == "oracle":
+    if arm in ("oracle", "overlay"):
+        # max-overlay of two whole single digits: blind (no location knowledge),
+        # both objects preserved whole, full-cover -> label-honest. This is the
+        # MNIST analog of the chip min-blend (defect wins over normal).
+        # 'oracle' vs 'overlay' differ only in allowed_pairs (caller restricts
+        # oracle to train pairs; overlay may use all pairs).
         return synthesize_multi(imgs, labels, n, seed, allowed_pairs, canvas, n_classes)
 
     rng = np.random.default_rng(seed)

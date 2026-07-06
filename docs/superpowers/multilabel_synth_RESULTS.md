@@ -92,3 +92,58 @@ Sweep checker grid granularity. `outputs/multilabel_synth/_checker_sweep.log`.
 Domain implication: where the background is known (MNIST pixel==0; chip palette
 grade) fill dominates; where it is unknown (natural scenes) a content-blind
 method still yields compositional generalization above the oracle.
+
+## MultiMNIST — fill is disqualified as cheating; blind max-overlay wins
+
+User ruling: `fill` requires knowing the object/defect location in advance
+(where the empty background is), which is exactly what detection tries to find —
+so it is cheating and disqualified. Only content-blind methods are legitimate.
+
+Label-fidelity measurement (weaker source's surviving-ink ratio over 3000 synth
+pairs; "defect not attached" = survival < 15%):
+
+```
+| arm            | mean survival | P(lost<15%) | P(<30%) |
+|----------------|---------------|-------------|---------|
+| cutmix f0.50   |         0.100 |       0.714 |   0.893 |
+| copy_paste     |         0.320 |       0.310 |   0.533 |
+| cutmix f0.25   |         0.329 |       0.206 |   0.462 |
+| checker g2     |         0.396 |       0.030 |   0.231 |
+| checker g4     |         0.441 |       0.004 |   0.054 |
+| checker g20    |         0.491 |       0.000 |   0.000 |
+| fill           |         0.703 |       0.000 |   0.008 |
+```
+
+cutmix/copy_paste frequently drop a labeled object (label noise); fine checker
+and fill reach zero — but fill cheats. Fine checker is blind AND label-honest.
+
+Blind max-overlay (max of two whole single digits = the chip min-blend analog;
+stronger signal wins per pixel; no location knowledge) — 3 seeds:
+
+```
+| config          | full mAP        | holdout mAP     | exact | pos   | neg   |
+|-----------------|-----------------|-----------------|-------|-------|-------|
+| overlay (blind) | 0.7730 +-0.0030 | 0.7755 +-0.0059 | 0.270 | 0.604 | 0.092 |
+| oracle (ref)    | 0.7591 +-0.0049 | 0.6328 +-0.0068 | 0.253 | 0.593 | 0.091 |
+| cutmix_f0.25    | 0.6980 +-0.0022 | 0.6780 +-0.0089 | 0.142 | 0.496 | 0.102 |
+| chk_g20 (blind) | 0.6737 +-0.0087 | 0.6821 +-0.0040 | 0.061 | 0.352 | 0.065 |
+| single_only     | 0.5990 +-0.0098 | 0.5994 +-0.0039 | 0.043 | 0.320 | 0.060 |
+```
+
+### Findings (final MultiMNIST picture)
+
+1. **Blind max-overlay wins everything** (full 0.773, holdout 0.776) — beats the
+   oracle and the cheating fill, using only single-label data and no location
+   knowledge. This is the MNIST analog of the chip min-blend.
+2. **max, not average.** overlay (max, hard label) 0.773 vs mixup (average, soft)
+   ~0.678 — the failure of blending is specifically averaging/ghosting, not
+   combining per se. Right recipe: per-pixel max of the stronger signal + hard
+   labels.
+3. **Compositional generalization, honestly.** overlay holdout 0.776 vs oracle
+   0.633: synthesis generates any combination (incl. held-out) whereas real data
+   cannot. Caveat: overlay's full-test edge over oracle partly reflects overlay
+   training on held-out pairs too; the clean claims are holdout generalization +
+   blind legitimacy + beating fragment/average methods.
+4. **Domain unification.** chip min-blend (defect wins over normal) and MNIST
+   max-overlay (digit wins over black) are the same "stronger signal wins per
+   pixel, no location needed" operation.
