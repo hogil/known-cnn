@@ -282,10 +282,11 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--error-cap", type=int, default=200)
     # 260506 — runtime sampling (memory rule feedback_no_subset_archive_folders.md)
-    # When --eval-set has manifest.csv, these flags subsample the manifest at runtime
-    # WITHOUT creating any subset folder on disk.
+    # These flags subsample the eval root at runtime WITHOUT creating any subset
+    # folder. discover_records_runtime also handles legacy class subfolders when
+    # manifest.csv is absent.
     ap.add_argument("--n-per-class", type=int, default=None,
-                    help="cap chips per class_key at runtime (None = take all from manifest).")
+                    help="cap chips per class_key at runtime (None = take all available).")
     ap.add_argument("--strength-min", type=float, default=0.0,
                     help="filter defect classes by manifest defect_pixel_ratio >= strength-min "
                          "(applies only to 10 defect classes; Normal/Invalid pass through).")
@@ -296,6 +297,8 @@ def main() -> None:
                          "'bank_boundary,fork,Normal,Invalid'.")
     ap.add_argument("--sample-seed", type=int, default=None,
                     help="separate seed for runtime sampling rng (None = use --seed).")
+    ap.add_argument("--skip-invalid-heuristic", action="store_true",
+                    help="force invalid heuristic masks to all false; use only after identical root/cap/seed verified pred=0.")
     # 260506 — I13 max-prob Normal gate threshold sweep
     ap.add_argument("--i13-prob-max", type=float, default=None,
                     help="override I13 max-prob Normal threshold (default 0.55). "
@@ -331,7 +334,7 @@ def main() -> None:
     print(f"[eval] discovering eval set at {args.eval_set}")
     eval_root_p = Path(args.eval_set)
     has_manifest = (eval_root_p / "manifest.csv").exists()
-    use_runtime_sampling = has_manifest and (
+    use_runtime_sampling = (
         args.n_per_class is not None or args.strength_min > 0.0
         or args.strength_max < 1.0 or args.include_classes is not None
     )
@@ -363,8 +366,17 @@ def main() -> None:
 
     ds = ChipEvalDataset(records, img_size=meta["img_size"])
 
-    print(f"[eval] computing invalid heuristic masks")
-    inv_mask, inv_score = _compute_invalid_masks(records)
+    if args.skip_invalid_heuristic:
+        print("[eval] skipping invalid heuristic masks (forced all false)")
+        inv_mask = np.zeros(len(records), dtype=bool)
+        inv_score = np.zeros(len(records), dtype=np.float32)
+    else:
+        print(f"[eval] computing invalid heuristic masks")
+        inv_mask, inv_score = _compute_invalid_masks(
+            records,
+            progress_label="[eval] invalid-mask",
+            progress_every=max(5000, args.batch_size * 100),
+        )
     print(f"[eval]   invalid detected pred={int(inv_mask.sum())} (gt={sum(r.is_invalid_gt for r in records)})")
 
     print(f"[eval] forward pass batch={args.batch_size} workers={args.num_workers} "

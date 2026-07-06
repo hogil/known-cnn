@@ -16,20 +16,57 @@ class AsymmetricLoss(nn.Module):
     """ASL — Ridnik 2021.
 
     Defaults: gamma_pos=1, gamma_neg=4, clip=0.05.
-    Target must be multi-hot (B, C) {0,1}.
+    Target multi-hot (B, C) {0,1}.
+
+    260527: soft-label support (BCE+LS+ASL). The focal modulators pt0/pt1 stay a
+    function of p (asymmetric hard-negative focusing, unchanged); only the regression
+    target is smoothed (pos 1->pos_target, neg 0->neg_target, or symmetric LS). Set via
+    pos_target/neg_target (independent, 260513 rule), per-bit lists, or label_smoothing.
+    All None / 0 => original hard-target ASL (Ridnik 2021).
     """
 
     def __init__(self, gamma_pos: float = 1.0, gamma_neg: float = 4.0,
-                 clip: float = 0.05, eps: float = 1e-8):
+                 clip: float = 0.05, eps: float = 1e-8,
+                 label_smoothing: float = 0.0,
+                 pos_target: float | None = None,
+                 neg_target: float | None = None,
+                 pos_target_per_bit: list | None = None,
+                 neg_target_per_bit: list | None = None):
         super().__init__()
         self.gamma_pos = gamma_pos
         self.gamma_neg = gamma_neg
         self.clip = clip
         self.eps = eps
+        self.smoothing = float(label_smoothing)
+        self.pos_target = float(pos_target) if pos_target is not None else None
+        self.neg_target = float(neg_target) if neg_target is not None else None
+        if pos_target_per_bit is not None:
+            self.register_buffer("pos_target_per_bit",
+                                 torch.tensor(pos_target_per_bit, dtype=torch.float32))
+        else:
+            self.pos_target_per_bit = None
+        if neg_target_per_bit is not None:
+            self.register_buffer("neg_target_per_bit",
+                                 torch.tensor(neg_target_per_bit, dtype=torch.float32))
+        else:
+            self.neg_target_per_bit = None
 
     def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         p = torch.sigmoid(logits)
         target = target.float()
+        # soft regression target (LS); focal modulators below stay on p only.
+        if isinstance(self.pos_target_per_bit, torch.Tensor) or isinstance(self.neg_target_per_bit, torch.Tensor):
+            ptb = self.pos_target_per_bit if isinstance(self.pos_target_per_bit, torch.Tensor) else torch.ones(target.shape[-1], device=target.device)
+            ntb = self.neg_target_per_bit if isinstance(self.neg_target_per_bit, torch.Tensor) else torch.zeros(target.shape[-1], device=target.device)
+            if ptb.device != target.device: ptb = ptb.to(target.device)
+            if ntb.device != target.device: ntb = ntb.to(target.device)
+            target = target * ptb.unsqueeze(0) + (1.0 - target) * ntb.unsqueeze(0)
+        elif self.pos_target is not None or self.neg_target is not None:
+            pt = self.pos_target if self.pos_target is not None else 1.0
+            nt = self.neg_target if self.neg_target is not None else 0.0
+            target = target * pt + (1.0 - target) * nt
+        elif self.smoothing > 0:
+            target = target * (1.0 - self.smoothing) + 0.5 * self.smoothing
         p_neg = (p - self.clip).clamp(min=self.eps) if self.clip > 0 else p
         log_pos = torch.log(p.clamp(min=self.eps))
         log_neg = torch.log((1 - p_neg).clamp(min=self.eps))
@@ -237,6 +274,23 @@ def build_loss(loss_name: str, **kw):
             gamma_pos=kw.get("gamma_pos", 1.0),
             gamma_neg=kw.get("gamma_neg", 4.0),
             clip=kw.get("clip", 0.05),
+            label_smoothing=kw.get("ls", 0.0),
+            pos_target=kw.get("pos_target", None),
+            neg_target=kw.get("neg_target", None),
+            pos_target_per_bit=kw.get("pos_target_per_bit", None),
+            neg_target_per_bit=kw.get("neg_target_per_bit", None),
+        ), "multi_hot"
+    if loss_name == "asl_ls":
+        # 260527 — BCE+LS+ASL: ASL asymmetric focal weighting on LS-smoothed targets.
+        return AsymmetricLoss(
+            gamma_pos=kw.get("gamma_pos", 1.0),
+            gamma_neg=kw.get("gamma_neg", 4.0),
+            clip=kw.get("clip", 0.05),
+            label_smoothing=kw.get("ls", 0.30),
+            pos_target=kw.get("pos_target", None),
+            neg_target=kw.get("neg_target", None),
+            pos_target_per_bit=kw.get("pos_target_per_bit", None),
+            neg_target_per_bit=kw.get("neg_target_per_bit", None),
         ), "multi_hot"
     if loss_name == "bce":
         return BCEMultiHot(label_smoothing=kw.get("ls", 0.0),

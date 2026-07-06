@@ -55,7 +55,7 @@ DO_TRAIN=1
 DO_EVAL=1
 DO_REPORT=1
 RUN_DIR=""
-FROZEN_SOTA_RUN="outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015"
+FROZEN_SOTA_RUN="${FROZEN_SOTA_RUN:-models/iter116J_frozen}"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -142,7 +142,8 @@ log "epochs=$EPOCHS batch=$BATCH accum=$ACCUM workers(train/eval)=$TRAIN_WORKERS
 if [ $DO_TRAIN -eq 1 ]; then
     stamp=$(date +%Y%m%d_%H%M%S)
     TRAIN_RUN_STAMP="$stamp" python -u -m chip_multilabel._train_chip_variant \
-        --variant T7 --ls 0.30 --epochs "$EPOCHS" --batch "$BATCH" --accum "$ACCUM" --seed 1 \
+        --variant T7 --ls 0.30 --epochs "$EPOCHS" --batch "$BATCH" --accum "$ACCUM" --seed "${SEED:-1}" \
+        ${DETERMINISTIC:+--deterministic} \
         --num-workers "$TRAIN_WORKERS" \
         --lr 1e-4 --no-normal --val-criterion margin_max \
         --multi-val-set "$EVAL_SET" --multi-val-n-per-class 50 \
@@ -165,14 +166,14 @@ fi
 log "run_dir=$RUN_DIR"
 
 if [ $DO_EVAL -eq 1 ]; then
-    EVAL_OUT="$RUN_DIR/eval_sota_i10"
+    EVAL_OUT="$RUN_DIR/eval_sota_i10_i13"
     if [ -d "$EVAL_OUT" ]; then
         log "eval exists; skip: $EVAL_OUT"
     else
         python -u -m chip_multilabel.run_stage1 \
             --model "$RUN_DIR/best_model.pth" \
             --eval-set "$EVAL_SET" --out-root "$EVAL_OUT" \
-            --variants I10 --n-per-class "$EVAL_N_PER_CLASS" \
+            --variants I10,I13 --n-per-class "$EVAL_N_PER_CLASS" \
             --batch-size "$EVAL_BATCH" --num-workers "$EVAL_WORKERS" \
             --strength-min 0.0 --strength-max 1.0 --seed 42 \
             2>&1 | tee -a "$LOG"
@@ -181,7 +182,7 @@ fi
 
 if [ $DO_REPORT -eq 1 ]; then
     python -u -X utf8 mega_matrix/make_single_sota_report.py \
-        --run-dir "$RUN_DIR" --eval-name eval_sota_i10 \
+        --run-dir "$RUN_DIR" --eval-name eval_sota_i10_i13 \
         2>&1 | tee -a "$LOG"
 fi
 

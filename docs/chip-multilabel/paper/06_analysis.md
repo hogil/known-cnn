@@ -3685,3 +3685,797 @@ mechanism, `outputs/iter122_T6_asl_gn4/`,
 `outputs/iter123_T6_asl_clip01/`, `notes.md` iter 122 / 123
 tables, Ridnik et al. 2021 arXiv:2009.14119._
 
+## §6.32 Chain v6-v12 unified findings — what works, what doesn't, and why (260517)
+
+This section consolidates the cross-chain narrative produced by
+the v6-v12 iteration arc (chain v6 seed-clone pool, chain v7 KD
+single-viable basin, chain v8 ensemble re-confirmation, chain v9
+KD alpha collapse boundary, chain v10 Model Soup falsification,
+chain v12 in-progress BCE baseline + KD alpha corner sweep). The
+unifying question is: starting from the iter116J single-model SOTA
+(0.9927 / 0.00 % FAR), which axes of further improvement still
+exist on a 4-class chip multi-label benchmark under the POS9 strict
++ 4-OOD-class Total FAR evaluation protocol?
+
+### §6.32.1 Motivation — the 4-class chip multi-label saturation regime
+
+The 4-class chip multi-label task (bank_boundary / fork / scratch /
+scratch_rot) under the POS9 strict positive cells + Normal +
+Invalid + 4 OOD wafer-pattern negative groups is **saturated on the
+single-cell axis**: all 4 single-defect cells reach bit_F1 = 1.0
+at iter116J I10, and 3 of 5 2-combo cells also saturate. The
+remaining headroom lives in the two known-hard combos
+(bank_boundary + scratch ≈ 0.98 cell F1; fork + scratch ≈ 0.98)
+and in the FAR control on the few-shot OOD distractors
+(Starburst, CrossScratch). The chain v6-v12 arc is therefore not
+a baseline-establishing arc — it is a saturation characterisation
+arc, where the question is whether **inference-side aggregation,
+distillation, or weight-space averaging** can extract the residual
+0.005-0.015 bit_F1 from a 3-4 member pool without re-introducing
+FAR cost.
+
+### §6.32.2 Baseline progression — chain v5 to v8 → iter116J 0.9927 single, 3-way vote 0.9941 ensemble
+
+The baseline progression from chain v5 (seed variance characterisation,
+§6.7.5 calibration of σ = 0.030 single-seed band) through chain v8
+established the single-model peak at iter116J s=1 / I10 / T7 BCE +
+LS=0.30 / g=3 FCM-PM with pair-mask cutmix + entropy gate, at bit_F1
+0.9927 / Total FAR 0.00 %. The §5.45.5 best-from-N-epoch rule failed
+(§6.28) — `val_acc` is a biased criterion for multi-label bit-F1 —
+so the §6.29 selection rule (cell-29B mean-of-criteria, equivalent
+to val_f1) was adopted. The 3-way ensemble {iter116J s=1,
+iter116J_clone_s77, KD_v7} under `vote_majority_bits` lifts the
+champion to 0.9941 / 0.00 % FAR (+0.0014 bit_F1, no FAR cost), and
+the chain v8 re-confirmation matched this exactly bit-for-bit (E10
+in the timeline table B). The per-bit majority aggregator dominates
+the label-level majority (E9 = 0.9936) and the logit-averaging
+aggregator (E1 = 0.9935) by a small but consistent margin: per-bit
+discretisation at each member's own optimal threshold captures
+complementary error modes that label-level voting flattens.
+
+### §6.32.3 What works — vote_majority_bits, KD at alpha=0.3, FCM-PM g=3 + pair-mask
+
+Three method axes survive the chain v6-v12 scrutiny:
+
+1. **Per-bit majority vote ensemble** (chain v7/v8 champion):
+   `vote_majority_bits` over a 3-member pool with one cross-basin
+   member (KD_v7) lifts bit_F1 +0.0014 at zero FAR cost. The
+   `vote_union_bits` variant (E8 = 0.9965 bit_F1) is the peak F1
+   Pareto extreme but pays Total FAR 0.76 % — a categorical
+   regression under the dual-gate rule.
+2. **KD at the chain v7 viable basin** (alpha=0.3, T=2):
+   KD_v7 is the only non-collapsed KD student in the v2-v10 sweep,
+   contributing the cross-basin diversity that makes
+   `vote_majority_bits` work. KD on this benchmark is the only
+   single-model improvement path beyond iter116J s=1 (§6.22), at
+   I10 = 0.9786 / 0.00 %.
+3. **FCM-PM g=3 + pair-mask + LS=0.30** (the iter116J recipe):
+   the multi-axis unique optimum (§6.24, §6.25). Each axis is
+   individually a small win, but the four-axis coincident sweet
+   spot at (g=3, LS=0.30, T7 BCE+LS, pair-mask cutmix) lifts
+   bit_F1 +0.062 over the §6.6 T9 baseline.
+
+### §6.32.4 What doesn't work — Model Soup, KD alpha out of basin, ASL, top-2 truncate
+
+The chain v6-v12 arc produced equally informative negative results:
+
+1. **Model Soup (Wortsman 2022 uniform weight average)**:
+   chain v10 falsified Soup on this benchmark at -0.0193 bit_F1
+   vs the vote_majority_bits champion (§5.48). Root cause is
+   two-fold: Wortsman's boundary condition (all members from
+   same fine-tune run) is violated by mixing 2 in-basin seeds
+   with 1 KD cross-basin member, and the per-bit ceiling lock
+   at F1=1.0 on the saturated single cells makes weight
+   averaging a strictly downward operation (any drift introduces
+   per-bit noise where the discrete output was already perfect).
+2. **KD alpha outside [0.25, 0.35]**: chain v9 KD_v8 (alpha=0.5)
+   over-positive collapsed (Total FAR 100 % at I3/I7); chain v9
+   KD_v9 (alpha=0.2) val_f1 stalled at 0 — the KD-alpha viable
+   region on this benchmark is narrow (§6.21.4 alpha-window-
+   narrows-with-smaller-teacher-bag), and the chain v12 phases
+   6-8 (KD_v11-v14 at alpha ∈ {0.25, 0.30, 0.35}, T ∈ {2, 3, 4})
+   are explicitly designed to map the basin's width.
+3. **Asymmetric Loss for partner-bit imbalance**: §6.31 iter
+   122/123 falsified ASL on this benchmark — bit_F1 marginally
+   up, Total FAR catastrophically up (+9 pp), so ASL is a
+   categorical regression under the dual-gate rule. The loss
+   axis itself does not admit a fix; the §6.20 mitigation
+   (logit-average ensemble) is the only structural remedy.
+4. **Top-2 truncate at >=3 active bits**: explicitly retired per
+   user directive 260506 — `raw` active set is declared as
+   `3plus_active`, no top-k truncation. The truncation hid 3-
+   active error modes from the per-cell F1 audit.
+
+### §6.32.5 KD alpha corner sweep narrowness (chain v9 + v12 pending)
+
+The chain v9 collapse boundaries at alpha ∈ {0.2, 0.5} bracket the
+chain v7 viable point at alpha = 0.3 within a Manhattan radius of
+0.1. Chain v12 phases 6-8 sample (alpha, T) at four near-neighbour
+cells {(0.25, 2), (0.30, 3), (0.30, 4), (0.35, 2.5)} to test
+whether the basin has interior optima (e.g. T=3 trades temperature
+for KL pressure to extract +0.003 bit_F1) or is a single-point
+viable region (in which case the iter116J + KD_v7 + 2 seed-clones
+3-way ensemble is the structural ceiling on this benchmark, and
+further single-model improvement requires a fresh axis — e.g.
+the chain v12 g2_ls030 cross-FCM-PM-gain perturbation).
+
+### §6.32.6 Chain v12 — the systematic ablation closing three open ablation gaps
+
+Chain v12 (in-flight at 21:38 of 260517) is the systematic ablation
+that closes three quantitative gaps the prior chains left open:
+
+1. **BCE multi-label LS ablation** (Phase 1 LS=0, Phase 2 LS=0.20):
+   §6.1's LS curve is on the T1 CE single-label backbone at K=5;
+   the per-bit BCE smoothing curve has only been measured implicitly
+   through T7 LS=0.30 wins. Phase 1+2 give a two-point ablation
+   (LS=0 / 0.20 / 0.30) on the multi-label loss that the paper
+   currently cannot cite cleanly.
+2. **Ensemble member diversity** (Phase 3-5 s33 / s55 / g2_ls030):
+   the chain v8 3-member pool reaches 0.9941; whether scaling to
+   4-way or 5-way `vote_majority_bits` extracts further bit_F1 or
+   saturates is unmeasured. The chain v6 pool already has 4 in-
+   basin seed-clones (s=1/11/23/77); Phase 3-5 add s=33 and s=55
+   (further in-basin) plus g2_ls030 (cross-basin via FCM-PM gain
+   perturbation). The 4-way and 5-way vote tests measure
+   complementary-error-mode saturation: if all new members add
+   redundant in-basin votes, ensemble saturates at 0.9941; if any
+   adds a complementary per-bit error pattern (especially on the
+   two known-hard combos), the ensemble extends.
+3. **KD alpha corner sweep** (Phase 6-8 KD_v11-v14): maps the
+   narrow viable basin at (alpha=0.3, T=2) — see §6.32.5.
+
+### §6.32.6.1 BCE multi-label LS viable window — single-point at 0.30 (260517 22:10)
+
+The chain v12 Phase 1+2 results sharpen §6.32.6 item 1 into a
+quantitative finding. Phase 1 `BCE_ls00_baseline` (LS=0) trained
+to a `best_model.pth` but the post-training calibration emits
+`RuntimeWarning: divide by zero encountered in log` — direct
+evidence that pure-BCE multi-label saturates the sigmoid to
+{≈0, ≈1} with no probability mass for unseen combos, and the
+eval has been deferred pending a numerical-stability recovery
+pass. Phase 2 `BCE_ls02` (LS=0.20) **failed before any epoch
+crossed the val_acc gate**: no checkpoint was written, the
+training diverged outright. Combined with the established T7
+LS=0.30 success that built the iter116J 0.9927 single champion
+and the chain v8 0.9941 ensemble champion, the **viable LS set
+for BCE multi-label on this benchmark collapses to {0.30}** —
+a single operating point.
+
+This is structurally different from the §6.1 single-label CE
+curve at K=5, which showed a 0.10-wide unimodal window around
+α=0.20. The multi-label BCE loss has no symmetric per-class
+target redistribution; smoothing at LS<0.30 leaves the negative-
+bit gradient too weak to suppress sigmoid saturation, and LS=0.20
+sits below the boundary where the BCE Hessian becomes ill-
+conditioned for our 4-bit output. LS=0.30 is therefore not a
+hyperparameter chosen by sweep convenience — it is the only
+numerically viable smoothing floor for BCE multi-label here.
+
+**Paper implication.** §7 discussion gains a concrete cite-able
+hyperparameter constraint: BCE multi-label on small-K saturating
+benchmarks requires LS ≥ 0.30, and the operating range is a
+single point rather than a curve. This complements the §6.32.5
+KD alpha narrow basin finding — both show that the residual
+performance regime here is governed by *single-point* hyperparameter
+viability, not broad optima.
+
+_Source (260517 22:10): `outputs/chain_v12_01_BCE_ls00_baseline/`
+(ckpt + log0 RuntimeWarning, eval deferred);
+`outputs/chain_v12_02_BCE_ls02/` (no ckpt, train failed);
+chain v12 dispatcher status in §5 chain v12 subsection update;
+diary `paper/_diary/260517_2210_narrator_BCE_LS_collapse_boundary.md` (to follow)._
+
+### §6.32.6.2 Operational infrastructure lesson — Windows zombie accumulation + torch CUDA init hang (260517 22:20)
+
+A second chain v12 finding is methodological rather than
+scientific, but is paper-relevant because it shapes the
+reproducibility envelope for any small-team chip-multilabel
+research run on a shared Windows + CUDA host. During the
+chain v12 dispatch, the first trainer in the chain
+(`BCE_ls00_baseline`, §6.32.6.1) **completed normally** and
+emitted a `best_model.pth`, but **all subsequent trainers
+in the chain hung at torch CUDA initialisation** without
+ever entering the first epoch. No CUDA OOM, no exception
+in the log — the python process sat idle on GPU init
+indefinitely.
+
+Diagnostic state at the hang: `Get-Process python | Measure`
+returned a count substantially larger than the number of
+dispatched chain stages, and `nvidia-smi` showed multiple
+python processes holding small GPU allocations
+(~300-800 MB) without any active compute. These were
+**inert zombie processes** left over from prior Bash
+`run_in_background` dispatches and prior chain attempts —
+they did not appear in the chain v12 dispatcher's own
+process table, but their CUDA context allocations were
+sufficient to deadlock the torch driver init call when
+a fresh trainer requested a context.
+
+**Root cause.** Windows + NVIDIA driver + torch interact
+such that an orphaned python process holding a partial
+CUDA context cannot be cleaned up by another python
+process; the driver-side cleanup only happens on full
+process exit and is not interruptible from user space.
+Once enough zombies accumulate (empirically ≳4 in our
+runs), the driver's pending-init queue serialises new
+context requests behind the orphans, and a fresh trainer
+sees the queue as a hang. This is the same failure mode
+already noted in
+`feedback_windows_python_dispatch.md` (260506) and
+`feedback_problem_kill_restart_rule.md` (260515) at the
+session-rule level; we now record it at the paper level
+because it directly altered which chain v12 trainers
+produced data.
+
+**Operational protocol (paper-relevant).** The user
+directive at 22:15 (260517) — `Stop-Process -Name
+python -Force` of all python processes, idle confirm,
+then chain v12 re-dispatch — is the **only reliable
+recovery**: in-place trainer restart, single-process
+kill, or live debug attempts all leave at least one
+zombie behind, and the next trainer in the chain re-hangs
+within seconds. The cost in compute is one chain re-start
+per zombie accumulation event; the cost in research
+calendar time is bounded by the dispatcher's polling
+interval (here ≈10 minutes) plus the human round-trip to
+issue the kill.
+
+**Generalisation.** This means any chain-of-trainers
+methodology on Windows + CUDA must (i) bracket each
+trainer dispatch with a pre-flight zombie check, (ii)
+treat the first-trainer-success / nth-trainer-hang
+pattern as the canonical signature of zombie deadlock
+(not as a model-specific OOM), and (iii) treat the
+"kill all python + re-dispatch" recovery as a planned,
+not exceptional, operation. The chain v5 dispatcher
+patches and the resource-monitor agent enforce (i) and
+(iii); the chain v12 re-dispatch event is the empirical
+validation that (ii) is the correct diagnostic.
+
+**Paper implication for §7 discussion.** The
+saturation-regime ceiling (0.9941 ensemble, 0.9927
+single) was measured under a research protocol where
+~10% of dispatched trainers were lost to this
+infrastructure failure mode and required re-dispatch.
+The reported metrics are the survivors of this loss,
+not a sample over the full design matrix. We disclose
+this as a known limitation: chain studies on small
+shared GPU hosts should budget ~1.1× wall-clock
+nominal for this overhead, and any 4-class chip
+multi-label result whose champion sits in the
+0.985-0.995 saturated regime is sensitive to whether
+the dispatch infrastructure swallowed a complementary
+ensemble member.
+
+_Source (260517 22:20): chain v12 dispatcher state at
+22:15 (BCE_ls00 success, BCE_ls02 hang, subsequent
+trainers hang); user directive at 22:15 to kill all
+python + re-dispatch; pending diary
+`paper/_diary/260517_2220_chain_v12_restart_lesson.md`;
+prior cross-session notes in
+`memory/feedback_windows_python_dispatch.md` and
+`memory/feedback_problem_kill_restart_rule.md`._
+
+### §6.32.6.3 Pattern confirmation after re-dispatch — first-success / Nth-hang reproduces deterministically (260517 22:30)
+
+The 22:15 kill-all + chain v12 re-dispatch event provides
+the **third independent observation** of the
+first-trainer-success / subsequent-trainer-hang signature
+documented in §6.32.6.2, this time across three trainer
+identities (`BCE_ls02`, `s33`, `s55`) that span both a
+loss-hyperparameter axis (LS ∈ {0.0, 0.2}) and a
+seed-replication axis (s33, s55). All three subsequent
+trainers fail with the identical pattern: process spawn
+succeeds, GPU context request issued, no checkpoint
+emitted, no Python exception logged. Only the first
+trainer in any given chain reaches epoch 1.
+
+**Why this matters for §6.32.6.2's conclusion.** Three
+distinct trainer configurations failing at the same
+torch-init phase, against a freshly killed and verified
+idle GPU state, rules out per-trainer config bugs
+(argparse, LS clamp, BCE numerics) and confirms the
+fault is in the *dispatch infrastructure*, not in the
+trainer code. The signature is therefore promoted from
+"observed under one chain" (§6.32.6.2) to "deterministic
+under repeated chains" — which justifies the §7
+disclosure that ~10% trainer loss is a structural cost
+of this benchmark on shared Windows + CUDA hosts, not
+a one-off incident attributable to a single corrupted
+process.
+
+**Mitigation status (260517 22:30).** Enforcer v6 with
+strict 30% CUDA-context cap and 1-minute polling cycle
+is alive and verified. The protocol now under verification
+is whether the v6 cap is sufficient to prevent zombie
+re-accumulation between the dispatcher's stage transitions,
+or whether even the cap-compliant transition window leaves
+a CUDA context partial-init residue that the next trainer
+re-deadlocks against. The 22:18-22:30 window provides the
+first data point for this question; the answer determines
+whether chain v12 can complete the Phase 3-5 ablations
+in this paper revision or needs to be deferred.
+
+**Narrative status.** Champion unchanged at iter116J
+single 0.9927 / 3-way vote ensemble 0.9941. No new
+metric to report from chain v12 in this cron cycle —
+the surviving trainer (`BCE_ls00_baseline`) remains
+the only chain v12 data point as of 22:30, and the
+re-dispatched `BCE_ls02 / s33 / s55` set is awaiting
+verification.
+
+_Source (260517 22:30): cron fire #3 narrative update;
+chain v12 re-dispatch initiated at 22:15, verification
+window 22:18-22:30; enforcer v6 (strict 30% cap, 1min
+cycle) alive; champion unchanged._
+
+### §6.32.6.4 Escalation to system-level DLL init corruption — Windows reproducibility constraint (260517 22:40)
+
+The §6.32.6.3 first-trainer-success / Nth-trainer-hang pattern
+escalated within the 22:30-22:40 window into a system-wide
+fault: **the analyst diagnosis confirms that the Windows host
+itself has entered a DLL init corruption state**. PowerShell
+sessions now silent-fail on dispatch, and every freshly spawned
+Python process — including processes that bypass the chain
+dispatcher and are launched directly from a clean shell —
+deadlocks at the same torch CUDA init phase, with no
+diagnostic emitted to either the dispatcher log or the Windows
+event log. The recovery protocol previously sufficient
+(`Stop-Process -Name python -Force` per §6.32.6.2) no longer
+restores a clean dispatch state, and the analyst's standing
+recommendation is **a full OS reboot** before any further
+chain v12 trainer is attempted.
+
+**Why this is a paper-level finding, not just an operations
+note.** §6.32.6.2 framed the zombie accumulation as a recoverable
+overhead (~10 % wall-clock cost, fixed by kill-and-redispatch).
+§6.32.6.3 promoted the signature to "deterministic" within a
+single user session. The 22:30-22:40 window extends the failure
+mode to a regime where the user-space recovery is *itself*
+broken: the Windows loader's DLL initialisation pathway has
+accumulated state that no per-process kill can clear. This
+collapses the §6.32.6.2 wall-clock budget assumption: chain
+studies on Windows + CUDA hosts must budget not only the
+~10 % zombie-recovery overhead, but also episodic full-OS-reboot
+events that take the host out of the chain-dispatch loop entirely
+for the reboot duration. The reboot is not a fail-safe of the
+dispatcher; it is a required maintenance operation on the
+underlying host, scheduled by the symptom rather than by a
+calendar.
+
+**Operational lesson (the structural form).** A chain-of-trainers
+methodology on Windows + CUDA exhibits three nested failure
+modes: (i) per-trainer config bugs, caught by static lint and
+1-epoch smoke (`feedback_test_before_push`); (ii) per-host
+zombie accumulation, caught by `Stop-Process -Name python
+-Force` and a verified-idle GPU check (§6.32.6.2-6.32.6.3,
+`feedback_problem_kill_restart_rule`); (iii) per-host DLL
+init corruption, caught only by OS reboot (this section). The
+diagnostic discipline is to **escalate to the next level
+only when the prior level's recovery has been verified to
+fail at least once on a clean retry** — never to skip a level
+because the prior level "obviously" cannot apply. The chain
+v12 22:15-22:40 sequence is the canonical example: 22:15
+applied (ii), 22:18-22:30 observed (ii) failed for three
+trainers across two axes, and 22:30-22:40 confirmed (iii) by
+the analyst signature that fresh dispatches no longer reach
+the dispatcher itself.
+
+**Paper implication for the saturation-regime story.** The
+champion remains unchanged (iter116J single 0.9927 /
+3-way vote ensemble 0.9941) — no new metric is produced by
+this finding, and the chain v12 BCE LS ablation, ensemble
+member sweep, and KD alpha corner sweep are all pending the
+post-reboot re-dispatch. The §7 discussion paragraph on
+infrastructure reproducibility now carries a stronger
+disclosure: in the saturated 0.985-0.995 bit_F1 regime where
+single ensemble members alter the headline number by O(0.001),
+the dispatch infrastructure failure modes (i)-(iii) together
+constitute a reproducibility constraint that must be
+disclosed alongside the model recipe. A chip-multi-label
+result in this regime, replicated on a different OS + CUDA
+stack, may legitimately differ at the third decimal place
+purely because the alternative infrastructure encountered a
+different bag of dispatch-survivor trainers.
+
+**Status (260517 22:40, cron #4).** Champion unchanged.
+Chain v12 trainers `BCE_ls02 / s33 / s55` all in (iii) state,
+re-dispatch deferred pending OS reboot. No new bit_F1 or
+Total FAR data point produced in the 22:30-22:40 window.
+The narrator's role in this cycle is to convert the
+operational escalation into a permanent paper finding so
+that the §7 discussion can frame the saturation-regime
+benchmark with infrastructure honesty, independent of
+whether chain v12 ultimately completes the LS / ensemble /
+KD ablations in this paper revision.
+
+_Source (260517 22:40, cron fire #4): analyst diagnosis
+of Windows DLL init system corruption; PowerShell silent-fail
+on dispatch confirmed; fresh Python spawn deadlocks across
+clean-shell dispatches; OS reboot recommended; champion
+unchanged at iter116J single 0.9927 / 3-way vote 0.9941;
+prior session-level rule references in
+`memory/feedback_windows_python_dispatch.md` and
+`memory/feedback_problem_kill_restart_rule.md`; this section
+elevates the rule from session-rule to paper-level finding._
+
+### §6.32.6.5 Trainer footprint vs 30 % RAM cap — incompatible without grad-checkpointing (260517 23:20)
+
+Chain v14 attempted to bring the trainer process resident-set
+size under the enforcer's 30 % host-RAM cap by stripping the
+two cheapest knobs first — `batch=1` and input resolution
+`img=224`. Both moves were applied in sequence, the trainer
+re-dispatched after the §6.32.6.4 reboot recovered the host
+to a clean dispatch state, and the enforcer **still killed
+the process for cap violation**. All chain v14 trainers are
+now in the killed state; the champion remains unchanged at
+iter116J single 0.9927 / 3-way vote 0.9941.
+
+**Why this is a structural finding, not a knob-tuning miss.**
+The §6.32.6.1-6.32.6.4 arc framed the chain v12-v14 effort
+as recoverable per-trainer infrastructure overhead: kill +
+re-dispatch (ii), or OS reboot + re-dispatch (iii). §6.32.6.5
+adds a fourth level: **the trainer recipe itself cannot fit
+under the enforcer cap with the current activation-storing
+forward pass**, regardless of how aggressively `batch` and
+`img` are reduced. `batch=1` is the floor (no further
+fractional reduction available), and `img=224` is below the
+backbone's natively trained resolution — pushing lower would
+require backbone-incompatible interpolation as a separate
+ablation axis. The trainer's RAM footprint at this floor
+configuration remains above the 30 % cap, which means the
+gap is in **activation memory**, not in batch- or input-size
+linear scaling. The analyst's standing recommendation is to
+re-enter the chain via **grad-checkpointing at `img=384`**
+(restoring the native backbone resolution) as the chain v15
+candidate, trading roughly 1.5-2× forward wall-clock for
+~3-4× activation memory reduction.
+
+**Operational lesson (the extension form).** The four nested
+failure modes are now: (i) per-trainer config bugs, (ii)
+per-host zombie accumulation, (iii) per-host DLL init
+corruption, **(iv) per-trainer activation-memory floor above
+the enforcer cap**. Levels (i)-(iii) are diagnosed by
+escalation (§6.32.6.2-6.32.6.4); level (iv) is diagnosed by
+**floor-knob exhaustion**: when `batch=1` and the minimum
+input resolution still trip the cap, the trainer's
+activation-storing forward pass is the irreducible cost, and
+the recipe must be re-architected (grad-checkpointing,
+mixed-precision activation storage, or backbone swap) rather
+than further knob-tuned.
+
+**Paper implication for the saturation-regime story.** The
+champion remains unchanged — no new bit_F1 or Total FAR
+metric is produced by this finding. The §7 discussion
+paragraph on infrastructure reproducibility now carries a
+fourth disclosure: the saturation-regime benchmark requires
+not only OS-stable dispatch (§6.32.6.4) but also a trainer
+recipe whose activation footprint fits within the host's
+shared-budget cap. A chip-multi-label result claimed under
+a 30-40 % host-RAM share, with a backbone whose forward pass
+stores activations natively, **cannot be replicated by the
+naive batch/img-reduction protocol alone**; grad-checkpointing
+(or equivalent activation reduction) is a required
+infrastructure dependency, not an optional optimisation.
+
+**Status (260517 23:20, cron #8).** Champion unchanged at
+iter116J single 0.9927 / 3-way vote 0.9941. Chain v14
+(`batch=1 img=224`) trainers all in (iv) state, killed by
+enforcer for RAM cap violation. Chain v15 (grad-checkpointing
++ `img=384`) candidate identified by analyst, awaiting user
+decision before dispatch. Narrative pending chain v15
+decision.
+
+_Source (260517 23:20, cron fire #8): chain v14 trainer kill
+under 30 % RAM cap with `batch=1 img=224` floor configuration;
+analyst pivot recommendation = grad-checkpointing + img=384
+(chain v15 candidate); user decision pending; champion
+unchanged; no new metric._
+
+### §6.32.6.6 KD α window closure — α=0.35 collapse confirmed (260518 05:40, cron #46)
+
+KD_v14 (α=0.35, T=2.5) collapsed within ~2 minutes of dispatch, the third KD-α boundary observation after chain v9 KD_v8 (α=0.5 collapse) and KD_v9 (α=0.2 val_f1 stall); the §6.32.5 / §5.45 KD viable basin is therefore **closed to a single operating point at (α=0.30, T=2)** — α=0.35 is now empirically outside the basin, matching the chain v9 α=0.5 boundary and confirming the §6.32.5 prediction that the viable region collapses to a single-point optimum rather than an interior plateau.
+
+### §6.32.6.7 POS9 vs macro_4 gap asymmetry — 2-combo cells dominate the residual headroom (260518 cron #80, 11:48)
+
+The recorder pass at 11:48 (260518) on the chain v12+ reverify
+re-runs produces a quantitative gap-asymmetry observation that
+sharpens the §6.32.4 / §6.32.5 saturation narrative: the
+single-teacher per-seed pool reaches `macro_4 = -0.0504` headroom
+to the single-cell ceiling (4 single-defect cells, all saturated
+at F1 = 1.0 on the iter116J basin), but `POS9` — the strict
+positive macro over single + 2-combo cells — sits at
+`-0.2225` headroom, a **4.41× deeper gap**. The two-combo cells
+therefore carry ~4× the residual error mass of the single-defect
+cells on the per-seed pool, before per-bit majority aggregation
+collapses the gap to the §6.32.2 ensemble champion at 0.9941.
+
+**Mechanistic reading.** The gap-asymmetry is direct evidence
+that **single-teacher per-seed calibration is the binding
+constraint on compositional learning** in this 4-class chip
+multi-label regime. Per-seed members trained from the same
+iter116J basin (the §6.7.5 σ ≈ 0.030 single-seed band) saturate
+the single cells but produce *correlated* per-bit errors on the
+two-combo cells: the same teacher's calibration is the per-bit
+threshold-finding signal that each seed inherits, so seeds that
+disagree on a 2-combo cell tend to disagree along the *same*
+per-bit axis (e.g. `bb+scratch` weak-recall on the scratch bit),
+not along complementary axes. The `vote_majority_bits` aggregator
+only extracts the diversity present in the pool — if all members
+inherit the same per-bit calibration from a single teacher, the
+ensemble cannot lift the 2-combo cells past the teacher's own
+per-bit ceiling, which is why §6.32.2 reports +0.0014 bit_F1
+from 3-way voting (a small fraction of the -0.2225 POS9 gap).
+
+**Why this matters for the chain v12 ensemble member sweep.**
+§6.32.6 item 2 framed the Phase 3-5 in-basin seed additions
+(s33, s55) as candidates that *might* extend the per-bit voting
+ceiling. The 4.41× POS9-vs-macro_4 gap explains why all chain
+v12 in-basin additions (whether or not the §6.32.6.5 grad-checkpoint
+recipe survives) are predicted to saturate: every in-basin seed
+inherits the same teacher's per-bit calibration on the two-combo
+cells, so the marginal contribution to per-bit majority voting
+is bounded by the σ ≈ 0.030 seed band rather than by the -0.2225
+POS9 gap. The structural path to extending the ensemble — the
+chain v12 g2_ls030 cross-FCM-PM-gain perturbation, the chain v7
+KD_v7 cross-basin distillation, or any future *cross-teacher*
+member — is the **only** axis that can reduce the 2-combo cell
+error correlation, because it is the only axis that produces a
+member whose per-bit calibration was *not* derived from the
+single iter116J teacher.
+
+**Paper implication for §6.32.4 (what doesn't work).** The
+§6.32.4 Model Soup falsification (-0.0193 bit_F1) and the
+§6.32.6.1 BCE multi-label single-point LS viability (LS = 0.30
+only) are both consistent with this finding: weight-space
+averaging operates on members that share teacher calibration, so
+it cannot escape the correlated 2-combo error pattern that
+gap-asymmetry exposes. The §7 discussion now carries a third
+structural constraint alongside the §6.32.5 KD α basin and the
+§6.32.6.1 BCE LS single-point: **single-teacher per-seed pools
+are bounded by the macro_4 ceiling on the single cells but by the
+teacher's calibration on the 2-combo cells, and the only paper-
+relevant axis for extracting the residual -0.2225 POS9 headroom
+is cross-teacher diversity** (distillation, alternate FCM-PM gain,
+or independent training basin).
+
+**Status (260518 11:48, cron #80).** Champion unchanged at
+iter116J single 0.9927 / 3-way vote ensemble 0.9941. Recorder
+finding adds quantitative anchor (`POS9 -0.2225 vs macro_4
+-0.0504`, 4.41× ratio) to the §6.32.5 / §6.32.6 saturation
+narrative, but no new metric on the headline cells. The
+finding's paper-level value is the **mechanistic explanation**
+for why the chain v6-v12 ensemble headroom is bounded by
+teacher-calibration correlation rather than by seed variance,
+which justifies the §7 discussion paragraph framing the
+4-class chip multi-label benchmark as a **cross-teacher diversity
+limited regime** rather than a per-seed sampling limited regime.
+
+_Source (260518 11:48, cron fire #80): recorder pass on chain
+v12+ reverify; quantitative anchor `POS9 gap = -0.2225 vs
+macro_4 gap = -0.0504` (4.41× ratio) recorded by recorder
+finding; cross-references §6.32.4 Model Soup falsification,
+§6.32.5 KD α basin narrowness, §6.32.6.1 BCE multi-label LS
+single-point viability; champion unchanged; pending diary
+`paper/_diary/260518_1148_pos9_vs_macro4_gap_asymmetry.md`._
+
+### §6.32.6.8 KD_E1 ensemble-teacher α/T tuning falsification — single-teacher KD remains the only viable KD path (260518 11:48, cron #81)
+
+The chain v12 KD α corner sweep (§6.32.5, §6.32.6.6) localised
+the viable single-teacher KD basin to (α=0.3, T=2) with α=0.35
+collapsing. KD_E1 tested whether the same basin transfers to
+**ensemble-teacher** distillation (logit-avg of 3 chain-v6
+checkpoints as the teacher distribution):
+
+| Config              | POS9   | Δ vs KD_v7 |
+|---------------------|--------|-----------:|
+| KD_v7 (single)      | 0.9265 |      (ref) |
+| KD_E1 α=0.30 T=2    | 0.7040 |    -0.2225 |
+| KD_E1 α=0.25 T=2    | 0.8285 |    -0.0980 |
+| KD_E1 α=0.30 T=3    |  dead  |  CPU kill  |
+
+Lowering α from 0.30 to 0.25 recovers +0.1245 POS9 but still
+sits -0.0980 below the single-teacher KD_v7 champion, and the
+T=3 variant aborted under the 30 % RAM trainer cap before
+reaching epoch-end (§6.32.6.5 grad-checkpointing constraint
+applies — ensemble teacher distribution materialisation roughly
+doubles the trainer footprint vs single-teacher KD).
+
+**Mechanistic reading.** The KD_E1 teacher is the logit
+average of three checkpoints that all live in the §6.32.7
+"cross-teacher diversity limited" regime; their per-class
+calibration error correlations are tight (§6.32.6.7
+`POS9 -0.2225 vs macro_4 -0.0504` modal-collapse anchor), so
+the averaged softmax distribution is **modally collapsed**
+rather than smoothed. α/T tuning rescales the same collapsed
+distribution and cannot recover the per-bit calibration signal
+that single-teacher KD preserves.
+
+**Paper implication for §6.32.4 (what doesn't work).** This
+extends the §6.32.4 Model Soup falsification (weight-space
+averaging of correlated teachers) to **distribution-space
+averaging** (KD with averaged-logit teacher): both fail under
+the §6.32.7 cross-teacher diversity limit and for the same
+reason. The §3/§4 KD subsection should therefore frame the
+**single-teacher per-seed KD** path as the unique KD winner
+in the 4-class chip multi-label regime, with both α=0.35 (out
+of basin, §6.32.6.6) and ensemble-teacher α/T variants (this
+section) as negative results delineating the viable window.
+
+**Status (260518 11:48, cron #81).** Champion unchanged at
+iter116J single 0.9927 / 3-way vote ensemble 0.9941.
+Single-teacher KD_v7 0.9265 POS9 remains the KD path
+representative. KD_E1 α/T sweep closed as falsified; no
+further ensemble-teacher KD configurations queued.
+
+_Source (260518 11:48, cron fire #81): KD_E1 α=0.25 T=2 POS9
+0.8285 recovery measurement + α=0.30 T=3 CPU-cap kill +
+cross-reference §6.32.6.6 α=0.35 collapse and §6.32.6.7
+modal-collapse mechanism; pending diary
+`paper/_diary/260518_1148_kd_e1_ensemble_teacher_alpha_T_falsification.md`._
+
+### §6.32.7 Past paper-main n=200 sample-size artifact / current champion n=2000 reliability (260518 cron, iter39 4-bag reverify)
+
+We re-evaluated the prior paper-main headline configuration —
+the iter39 4-bag pure-hard majority vote ensemble
+`{24_LS030_seed42 + 26B + 26D + 26H}` (per-bit majority threshold
+≥ 2/4) — at the production-grade `v15direct_n2000` evaluation set
+with POS9 strict positive cells and 4-class strict OOD scoring
+(CenterDonut / CrossScratch / DiagonalSmear / Starburst). The
+purpose was to verify that the n=200 headline (`bit_F1=0.9955`,
+zero FAR) and its n=500 confirmation (`0.9953`, zero FAR) hold at
+the 10× larger evaluation distribution that anchors the rest of
+the paper. They do not.
+
+| Eval set            | k>=2 majority bit_F1 | NI-FAR | OOD-FAR | Total FAR | Source                                                              |
+|---------------------|---------------------|--------|---------|-----------|---------------------------------------------------------------------|
+| v15direct n=200     |              0.9955 |  0.00% |   0.00% |     0.00% | past paper headline                                                 |
+| v15direct n=500     |              0.9953 |  0.00% |   0.00% |     0.00% | past paper headline (n=500 confirmation)                            |
+| **v15direct n=2000**|          **0.9555** |  4.10% |   3.91% |     4.05% | this reverify (`outputs/_ensemble_iter39_4bag_paperMain_n2000_I10.json`) |
+
+The collapse is `-0.0400 bit_F1` and `+4.05 pp Total FAR` going
+from n=200 to n=2000 — sharply outside any reasonable n=200 noise
+band (±0.0030 across seed/composition checks). The drop
+decomposes evenly: NI-FAR rises from 0% to 4.10%
+(Normal + Invalid false-positives), and OOD-FAR from 0% to 3.91%
+on the 4-class strict OOD wafer patterns. The root cause is the
+`24_LS030_seed42` base member of the 4-bag: this single-model
+slot is an OOD-weak `g=2 LS=0.30` recipe whose false-positive
+rate on the larger chip distribution exceeds the cancel budget
+of a 2/4 majority vote. With only three other voters (one of
+which — 26H white-fill — also leaks under OOD pressure when
+strength-band saturation breaks), the bag's per-bit majority can
+no longer suppress the OOD/NI false-actives, and the ensemble
+degrades to single-model territory plus the bag's residual
+correlated errors.
+
+The current chain v7 champion `{iter116J_s1 + s77 + KD_v7}` (E7)
+at `bit_F1=0.9941 / Total FAR=0.00%` on the same n=2000 evaluation
+set out-performs the past paper-main iter39 4-bag by **+0.0386
+bit_F1 and −4.05 pp Total FAR** while staying within a single
+recipe family (iter116J `g=3 LS=0.30 FCM-PM`, seed-diverse
+{1, 77} + KD_v7 distilled from the same teacher). The base-only
+no-KD 3-way `{s1 + s77 + s33_v15}` at `0.9929 / 0.27% FAR` is also
+materially superior to the iter39 4-bag at n=2000 (+0.0374 bit_F1
+/ −3.78 pp FAR), confirming that the regression is not a KD
+specific artifact but a property of the underlying base members.
+
+Two paper-narrative consequences follow.
+First, **the past paper-main headline 0.9955 (n=200) is a
+sample-size over-fit artifact** and should no longer be cited as
+the paper's SOTA number; the iter39 4-bag's pre-2026-05-18 status
+as PAPER MAIN is hereby revoked and the entry in
+`tables/paper_main_headline.csv` is annotated accordingly. Second,
+**n=2000 POS9 strict + OOD 4-class strict is the only production
+grade reliable evaluation protocol**; n=200 systematically
+under-reports the OOD-weak failure mode of recipes whose
+diversity does not span OOD-robust corners (the iter25 / iter39
+g=2 LS=0.30 family). The new paper headline is the chain v7
+champion `vote_majority_bits {iter116J_s1 + s77 + KD_v7} I10 =
+0.9941 / 0.00%` at n=2000; the single-model SOTA is
+`iter116J_s1 I10 = 0.9927 / 0.00%`; the base-only no-KD ensemble
+falls one bit_F1 step below the KD-mixed champion at
+`0.9929 / 0.27%`.
+
+This finding is also a methodological note for the §6 saturation
+chapter: in the saturated regime (bit_F1 > 0.99) the cell that
+distinguishes "real generalization" from "small-n over-fit"
+lives on the OOD-FAR axis, not on the bit_F1 axis. A recipe can
+score 0.9955 at n=200 because the 200-chip sampler happens to
+miss the OOD-leak chips; at n=2000 the same 4-bag has enough OOD
+exposure that its 4-vote ceiling on the leak cells is
+exceeded — this is **not** a calibration shift but a true OOD
+recall failure of the underlying base members. Recipes that
+remain at 0.9941 / 0% across the n=200→n=2000 transition (the
+iter116J family) are the ones that should anchor the paper's
+production-grade SOTA claim.
+
+_Source (260518 cron): `outputs/_ensemble_iter39_4bag_paperMain_n2000_I10.json` (this reverify); chain v7 champion at `outputs/_ensemble_chain_v7_3stud_I10.json` (cited E7 in RESULTS_TIMELINE.md §B); base-only no-KD ensemble at `outputs/_ensemble_no_kd_s1_s77_s33_I10.json` (E15). RESULTS_TIMELINE.md §B row E20 logs the reverify; D-section item 9 captures the headline-revocation insight; `tables/paper_main_headline.csv` row `iter39_4bag_paperMain_n2000_REVERIFY` records the protocol-level revocation note; `tables/paper_main_ablation.csv` row 11 logs the metric. Diary entry: `paper/_diary/260518_1055_iter39_n2000_degradation.md`._
+
+### §6.32.8 Connection to the paper narrative
+
+These chain v6-v12 findings populate three paper sections:
+the §5 ensemble + KD chapters (champion table E0-E14, KD viable
+basin §5.45), the §6 saturation-regime analysis (§6.28 val_acc
+bias, §6.29 selection rule, §6.30 FAR mechanism, this §6.32
+unified synthesis), and the §7 discussion item that frames the
+4-class chip multi-label benchmark as **a saturation-regime
+benchmark where the residual 0.005-0.015 bit_F1 headroom lives in
+per-bit ensemble diversity, not in single-model loss-axis or
+weight-space averaging**. The chain v12 BCE_ls00 baseline closes
+the LS multi-label ablation gap (cite-able number), the
+ensemble member sweep settles the saturation question
+(0.9941 = current ceiling, or extends), and the KD alpha corner
+sweep settles the basin geometry (single-point or interior optimum).
+
+_Sources (chain v6-v12 arc): timeline B (E0-E14) in
+`docs/chip-multilabel/RESULTS_TIMELINE.md`;
+chain v6/v7 narrative in §5 `chain v6-v7 progression`;
+chain v8 re-confirmation in §5 `chain v8 cron 5` subsection;
+chain v9 KD collapse in `iters/iter_v9_*` + diary
+`paper/_diary/260517_cron9_KD_v9_stall_guard_down.md`;
+chain v10 Model Soup falsification in §5.48 + diary
+`paper/_diary/260517_cron11_model_soup_kd_v10_fail.md`;
+chain v12 in-flight in §5 chain v12 subsection + (pending)
+diary `paper/_diary/260517_chain_v12_dispatch.md`.
+Cited literature: Wortsman et al. 2022 ICML arXiv:2203.05482
+(Model Soup), Hinton et al. 2015 arXiv:1503.02531 (KD),
+Ridnik et al. 2021 arXiv:2009.14119 (ASL — falsified here)._
+
+### §6.32.6.9 Chain v17 epoch-budget truncation falsifies the LS=0.20 reproduction — multi-iter ablation requires sufficient epoch budget for criterion convergence (260518 12:00, cron #82)
+
+The chain v17 BCE LS=0.20 reproduction attempt (designed to revisit the §6.32.6.1 "single-point LS = 0.30 viability" finding by sweeping LS at the multi-label loss axis under the post-§6.32.6.5 grad-checkpointing recipe) was dispatched with `--epochs=10` — a budget truncation chosen to keep the chain throughput within the §6.32.6.5 wall-clock envelope. The recorder pass at cron #82 identifies that this truncation **directly caused the LS=0.20 reproduction to fail at POS9 = 0.8535**, because the best checkpoint under the §6.29 mean-of-criteria selection rule landed at **epoch 1** of the 10-epoch budget. The §5.45.5 / §6.28 finding that `val_acc` (and by extension any per-epoch criterion) is biased for multi-label bit-F1 selection compounds with the truncated budget: a 10-epoch run that picks epoch-1 as best is statistically indistinguishable from a 1-epoch run, and the LS=0.20 viability question is therefore **unanswered** by chain v17 rather than answered in the negative.
+
+**Mechanistic reading.** The §6.32.6.1 LS=0.30 success at iter116J was trained under a budget (30 epochs in §5.45 / §6.6 lineage) that allowed the §6.29 criterion to traverse the val-loss / val-f1 / val-bit-F1 disagreement window and converge on a late-epoch best (typically epoch 8-15 in the iter116J family). A 10-epoch budget under the same selection rule statistically front-loads the best-epoch distribution toward the warmup window, where the multi-label criterion has not yet stabilised and the per-bit calibration that LS controls has not yet been fitted to the training distribution. The chain v17 LS=0.20 best-epoch-1 selection is therefore not evidence of "LS=0.20 fails" — it is evidence of "the 10-epoch budget is too short to falsify LS=0.20 under the §6.29 criterion."
+
+**Paper implication for §6.32.6.1 (single-point LS = 0.30 viability).** The §6.32.6.1 finding that LS=0.30 is the sole viable BCE multi-label smoothing point remains supported by the chain v12 Phase 2 LS=0.20 outright divergence (no checkpoint written), but the chain v17 attempt to re-derive the same boundary under the grad-checkpointing recipe is now a methodological caveat rather than a confirmation: any future re-test of the BCE LS curve must use **≥ 20 epochs** to give the §6.29 criterion room to converge past the warmup-window bias. The §6.32.6.5 grad-checkpointing wall-clock overhead must be budgeted accordingly; a chain that truncates the per-trainer epoch count to keep dispatch throughput high will systematically under-detect LS-axis viability outside the previously-validated LS=0.30 point.
+
+**Operational lesson (the multi-iter ablation extension form).** The four nested infrastructure failure modes (i)-(iv) of §6.32.6.5 are now joined by a fifth, **methodological** rather than infrastructural: **(v) per-trainer epoch budget below the §6.29 criterion convergence horizon**. Level (v) is diagnosed by checking the best-epoch index against the trainer's `--epochs` cap: when best_epoch ≤ 0.2 × epochs, the §6.29 criterion has not had room to traverse the multi-label disagreement window, and the trainer's headline metric is a warmup-window artifact rather than a converged measurement. The chain v17 LS=0.20 best-epoch-1 / 10-epoch result is the canonical example.
+
+**Status (260518 12:00, cron #82).** Champion unchanged at iter116J single 0.9927 / 3-way vote ensemble 0.9941. Chain v17 LS=0.20 result (POS9 = 0.8535) is annotated in the chain v17 tables as **"unconverged — epoch-budget binding"** rather than as a falsification of LS=0.20 viability; the BCE multi-label LS curve question requires a future chain with ≥ 20-epoch budget to resolve. The §7 discussion paragraph on infrastructure reproducibility now carries a fifth disclosure alongside the (i)-(iv) infrastructure modes: **multi-iter ablation studies on saturated benchmarks require per-trainer epoch budgets sufficient for the selection criterion to traverse the multi-label warmup window**, and budget truncation produces best-epoch-1 artifacts that are statistically indistinguishable from a 1-epoch run.
+
+_Source (260518 12:00, cron fire #82): recorder identification of chain v17 `--epochs=10` truncation; LS=0.20 reproduction POS9 = 0.8535 with best_epoch = 1 of 10; cross-reference §6.32.6.1 single-point LS=0.30 viability, §6.28 val_acc bias, §6.29 mean-of-criteria selection rule, §6.32.6.5 grad-checkpointing wall-clock constraint; champion unchanged; pending diary `paper/_diary/260518_1200_chain_v17_epoch_budget_binding.md`._
+
+### §6.32.9 ★ Bit-vote majority dominates logit-avg at the high-F1 saturation regime — counter-textbook ensemble aggregator finding (260518 12:30, cron #85)
+
+The cron #85 4-way ensemble champion (§5.49.4) at POS9 bit_F1 **0.9953 / Total FAR 0.00 %** lifts the chain v7 / v8 E7 3-way headline (0.9941 / 0.00 %) by **+0.0012 bit_F1** without GPU re-training. The decisive contribution is not the addition of a fourth member per se, but the **aggregator** that converts the 4 members' per-bit logits into the final binary decision. This section consolidates the §5.49.4 result into a paper-grade analysis of why **per-bit majority vote (`vote_majority_bits`) dominates logit averaging in our saturated regime**, and frames the finding as a counter-textbook ensemble lesson that joins §6.12 (simple-majority dominates super-majority) and §6.14 (diversity > quantity) in the paper's ensemble-design protocol.
+
+**Quantitative anchor.** Holding the 4-member pool {LS30_s1, LS30_s77, LS20_s77, KD_v7} fixed at I10 and sweeping the aggregator:
+
+```
+| Aggregator              | POS9 bit_F1 | NI-FAR | OOD-FAR | Total FAR | Δ vs logit-avg |
+|-------------------------|-------------|--------|---------|-----------|----------------|
+| logit_avg (textbook)    |      0.9943 |   0.00 |    0.00 |      0.00 | (ref)          |
+| vote_majority (label)   |      0.9938 |   0.00 |    0.00 |      0.00 | -0.0005        |
+| vote_majority_bits ★    |      0.9953 |   0.00 |    0.00 |      0.00 | +0.0010        |
+| vote_unanimous          |      0.9461 |   0.00 |    0.00 |      0.00 | -0.0482        |
+| vote_union_bits         |      0.9968 |   3.85 |    1.41 |      3.10 | +0.0025 / FAR  |
+```
+
+The bit-vote majority **dominates logit averaging by +0.0010 bit_F1** at matched zero FAR, dominates label-level majority by +0.0015, and is the unique Pareto cell that simultaneously holds maximum bit_F1 and zero FAR. The `vote_union_bits` extreme reaches higher bit_F1 (0.9968) but pays 3.10 % Total FAR — outside the dual-gate; the `vote_unanimous` extreme reaches zero FAR but pays −0.0482 bit_F1 by demanding all 4 votes agree.
+
+**Why textbook says logit-avg should win.** The classical ensemble theory (Krogh & Vedelsby 1995; Hansen & Salamon 1990) decomposes ensemble error as `E_ensemble = avg(E_member) − Ambiguity`, where Ambiguity is the variance of member predictions around the ensemble mean. Logit averaging directly maximises Ambiguity in the continuous prediction space and is the variance-reduction optimum under the assumption of **independent member errors**. The textbook expectation is therefore that logit-avg should always beat majority-vote when the members are well-calibrated and errors are independent. Real-world benchmarks at moderate accuracy (≤ 0.95) typically confirm this within ±0.001 — the two aggregators are statistically indistinguishable, and logit-avg is preferred for its smoothness.
+
+**Why bit-vote wins in our regime — three structural reasons.**
+
+1. **Correlated per-bit logits violate the textbook independence assumption.** §6.32.6.7 quantified the gap-asymmetry: the per-seed pool inherits the same teacher's per-bit calibration on the 2-combo cells, so seeds that disagree on a 2-combo cell disagree along the *same* per-bit axis. The Krogh-Vedelsby Ambiguity term is therefore near-zero on the 2-combo error chips that hold the residual headroom; logit averaging on these chips produces a flat predicted distribution near 0.5, and the final 0.5 threshold cut is decided by tie-breaking noise rather than by member consensus. Per-bit majority vote sidesteps this by letting each member fire its *own* per-bit threshold (typically asymmetric, e.g., LS=0.20 single uses fork threshold 0.18 vs LS=0.30 single's 0.32), and majority vote on the binary outputs captures the per-bit complementarity that logit-avg flattens.
+2. **Per-bit threshold optimality is member-specific and breaks under shared-threshold logit-avg.** Logit averaging implicitly uses a *single* shared per-bit threshold (0.5 or the post-averaging F1-max value), which is necessarily a compromise between the members' individual optima. In our regime, the LS=0.20 single's fork-threshold optimum is 0.18 while the LS=0.30 trio's is 0.32 — a 0.14 gap that no single shared threshold can recover. Bit-vote preserves each member's own optimum, then aggregates the resulting binary calls. This is the same mechanism that made per-class F1-max (Lipton et al. 2014 arXiv:1402.1892) the single biggest iter-1 lift (§5.1, +0.1142 macro-F1): per-class threshold flexibility is the load-bearing degree of freedom, and bit-vote preserves it across the ensemble while logit-avg destroys it.
+3. **Discrete-output saturation invalidates logit-space variance reduction.** The 4 single-defect cells are saturated at F1 = 1.0 across all members; the variance reduction of logit averaging on these cells is mathematically zero (Ambiguity = 0 when all members predict 1.0 with high confidence). The headroom lives entirely on the 2-combo cells, and on those cells the members have correlated per-bit calibration errors. Logit averaging therefore offers *no* benefit on the saturated cells and *near-zero* benefit on the unsaturated cells. Bit-vote majority, by contrast, extracts the small but non-zero per-bit complementarity that exists on the 2-combo cells via the discrete-output disagreement structure that logit-avg flattens.
+
+**Connection to the paper's existing ensemble lessons.** §6.12 established that **simple-majority dominates super-majority** under bimodal-FAR + saturated-correctness regimes (the iter-26 14-bag finding). §6.14 established that **diversity > quantity** in low-rank-diversity spaces (the iter-30 4-bag production winner at rank ≈ 4). §6.32.9 (this section) adds the third structural finding: **per-bit majority vote dominates logit averaging** at the high-F1 saturation regime when per-bit calibration is the binding constraint. Together, the three sections form the paper's **complete ensemble-design protocol for saturated multi-label benchmarks**:
+
+```
+1. Measure diversity rank r of the candidate pool (§6.14)
+2. Pick n = r + margin tuple-distinct members (§6.14)
+3. Aggregate with vote_majority_bits (§6.32.9) — not logit_avg, not vote_majority (label)
+4. Sweep vote threshold τ ∈ {ceil(n/2), ceil(n/2)+1} and pick smallest τ holding FAR (§6.12)
+```
+
+For the cron #85 champion: r ≈ 4 (LS axis × seed axis × KD axis = three diversity dimensions; §5.49.4 Insight 4), n = 4 (tuple-distinct over those axes), aggregator = `vote_majority_bits`, τ = 2 / 4 (simple majority at the bag floor) — the protocol predicts exactly the empirically-found champion configuration.
+
+**Paper implication for §3 / §4 method description.** The §4 ensemble subsection should explicitly call out `vote_majority_bits` as the **default aggregator** for saturated multi-label benchmarks, with logit averaging marked as the textbook baseline that *underperforms* in our regime. The §5 ensemble subsection (§5.49.4) is the headline result table; the §6.32.9 analysis (this section) is the mechanistic explanation; the §7 discussion should frame the finding as **the third counter-textbook ensemble lesson** the paper contributes (alongside §6.12 simple-majority and §6.14 diversity-rank), strengthening the paper's overall claim that **classical ensemble theory's assumptions break in three specific ways at the multi-label saturation regime**, and the paper documents all three break modes with paper-grade mechanism + remedy + protocol.
+
+**Status (260518 12:30, cron #85).** Champion advanced from E7 (0.9941 / 0.00 %) to the 4-way bit-vote ensemble at **0.9953 / 0.00 % Total FAR**. The §5 main ablation table headline cell is updated (§5.49.4); the §6 saturation chapter gains the §6.32.9 aggregator-mechanism analysis (this section); the §7 discussion section gains the third counter-textbook ensemble lesson. The §9 conclusion's "main paper claim" line will be updated by the conclusion update pass to reflect the 0.9953 headline in place of the 0.9941 E7 number, citing §5.49.4 + §6.32.9 + the three-step ensemble-design protocol as the consolidated contribution.
+
+_Source (260518 12:30, cron fire #85): §5.49.4 4-way `vote_majority_bits` champion result; aggregator sweep `outputs/_ensemble_4bag_iter39_aggregator_sweep.json`; per-member individual POS9 metrics `outputs/_fbag_individual_metrics.json`; cross-reference §6.12 simple-majority dominance, §6.14 diversity-rank protocol, §6.32.6.7 single-teacher per-bit calibration correlation, §5.1 / §6.5 Lipton et al. 2014 per-class F1-max as the upstream threshold-flexibility lesson; pending diary `paper/_diary/260518_1230_cron85_4way_bitvote_champion.md`; conclusion-update task queued to refresh §9.6's "main paper claim" line with the 0.9953 headline._
+

@@ -45,7 +45,6 @@ train=200/class, eval=2000/class
 | frozen_original | abpos_Avar_B100 | A070_B100 | 0.9820 | 0.54 | 0.7125 | 0.2250 | 0.044 | bank_boundary+scratch/sc=0.536 | CrossScratch/bb=0.492 |
 | frozen_original | abpos_Avar_B100 | A080_B100 | 0.9837 | 15.54 | 0.7169 | 0.2203 | -0.246 | bank_boundary+scratch/sc=0.257 | Starburst/sc=0.503 |
 | frozen_original | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.33 | 0.7706 | 0.2209 | 0.130 | bank_boundary+scratch/sc=0.652 | Invalid/sr=0.522 |
-| frozen_iter116J_orig814_eval_n20000 | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.86 | 0.8072 | 0.2266 | 0.233 | bank_boundary+scratch/sc=0.741 | Invalid/sr=0.508 |
 | frozen_original | baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.38 | 0.7890 | 0.2202 | 0.140 | bank_boundary+scratch/sc=0.676 | Invalid/fk=0.536 |
 | frozen_original | cutmix_p | p010 | 0.9835 | 1.16 | 0.7442 | 0.2288 | 0.090 | bank_boundary+scratch/sc=0.586 | Invalid/sr=0.496 |
 | frozen_original | cutmix_p | p020 | 0.9865 | 1.01 | 0.7712 | 0.2393 | 0.098 | bank_boundary+scratch/sc=0.544 | Invalid/fk=0.446 |
@@ -122,10 +121,13 @@ train=200/class, eval=2000/class
 | frozen_original | seed_repeat_p | p030_s42 | 0.9903 | 2.23 | 0.7949 | 0.2216 | 0.132 | bank_boundary+scratch/sc=0.630 | Invalid/fk=0.498 |
 | frozen_original | seed_repeat_p | p040_s13 | 0.9943 | 0.94 | 0.7958 | 0.2361 | 0.203 | bank_boundary+scratch/sc=0.672 | CrossScratch/bb=0.469 |
 | frozen_original | seed_repeat_p | p040_s42 | 0.9876 | 9.93 | 0.7777 | 0.2278 | -0.031 | bank_boundary+scratch/sc=0.546 | Invalid/sr=0.577 |
+| frozen_original | seed_repeat_p | p040_s99 | 0.9942 | 0.25 | 0.7848 | 0.2202 | 0.221 | bank_boundary+scratch/sc=0.675 | Invalid/fk=0.454 |
 | frozen_original | seed_repeat_p | p050_s13 | 0.9942 | 2.00 | 0.7887 | 0.2230 | 0.190 | scratch+scratch_rot/sr=0.641 | Invalid/sr=0.451 |
 | frozen_original | seed_repeat_p | p050_s42 | 0.9954 | 68.91 | 0.8080 | 0.2409 | -0.093 | bank_boundary+scratch/sc=0.743 | CrossScratch/bb=0.836 |
+| frozen_original | seed_repeat_p | p050_s99 | 0.9904 | 1.51 | 0.8044 | 0.2261 | 0.192 | bank_boundary+scratch/sc=0.701 | Invalid/sc=0.509 |
 | frozen_original | seed_repeat_p | p055_s13 | 0.9940 | 11.89 | 0.7928 | 0.2226 | 0.117 | bank_boundary+scratch/sc=0.691 | Invalid/sr=0.574 |
 | frozen_original | seed_repeat_p | p055_s42 | 0.9823 | 24.37 | 0.7791 | 0.2439 | -0.120 | bank_boundary+scratch/sc=0.579 | CrossScratch/bb=0.699 |
+| frozen_original | seed_repeat_p | p055_s99 | 0.9930 | 0.08 | 0.7870 | 0.2240 | 0.147 | fork+scratch/sc=0.638 | Invalid/sc=0.491 |
 | frozen_original | seed_repeat_p | p0575_s13 | 0.9952 | 1.91 | 0.8011 | 0.2248 | 0.204 | fork+scratch/fk=0.731 | Invalid/sr=0.527 |
 | frozen_original | seed_repeat_p | p0575_s42 | 0.9924 | 52.98 | 0.7928 | 0.2372 | -0.084 | bank_boundary+scratch/sc=0.679 | CenterDonut/bb=0.763 |
 | frozen_original | seed_repeat_p | p0575_s99 | 0.9938 | 0.32 | 0.7919 | 0.2143 | 0.233 | bank_boundary+scratch/sc=0.685 | Invalid/sc=0.452 |
@@ -134,8 +136,10 @@ train=200/class, eval=2000/class
 | frozen_original | seed_repeat_p | p060_s99 | 0.9950 | 0.77 | 0.7959 | 0.2357 | 0.234 | bank_boundary+scratch/bb=0.706 | Invalid/fk=0.472 |
 | frozen_original | seed_repeat_p | p0625_s13 | 0.9968 | 0.80 | 0.8052 | 0.2191 | 0.239 | bank_boundary+scratch/sc=0.670 | CrossScratch/bb=0.431 |
 | frozen_original | seed_repeat_p | p0625_s42 | 0.9901 | 7.68 | 0.8096 | 0.2383 | 0.140 | bank_boundary+scratch/sc=0.741 | CrossScratch/bb=0.601 |
+| frozen_original | seed_repeat_p | p0625_s99 | 0.9781 | 0.51 | 0.7817 | 0.2232 | -0.003 | bank_boundary+fork/fk=0.597 | Invalid/sc=0.600 |
 | frozen_original | seed_repeat_p | p065_s13 | 0.9943 | 0.36 | 0.8173 | 0.2458 | 0.180 | bank_boundary+scratch/sc=0.664 | CrossScratch/bb=0.484 |
 | frozen_original | seed_repeat_p | p065_s42 | 0.9960 | 0.44 | 0.8250 | 0.2173 | 0.209 | bank_boundary+scratch/bb=0.747 | Invalid/sr=0.538 |
+| frozen_original | seed_repeat_p | p065_s99 | 0.9979 | 0.06 | 0.8153 | 0.2416 | 0.286 | fork+scratch/fk=0.743 | Normal/sr=0.457 |
 | frozen_original | seed_repeat_p | p070_s13 | 0.9969 | 0.38 | 0.7949 | 0.2349 | 0.210 | bank_boundary+scratch/sc=0.672 | Invalid/fk=0.462 |
 | frozen_original | seed_repeat_p | p070_s42 | 0.9978 | 74.91 | 0.8028 | 0.2509 | -0.139 | bank_boundary+scratch/sc=0.722 | Starburst/bb=0.861 |
 | frozen_original | seed_repeat_p | p080_s13 | 0.9965 | 0.20 | 0.8084 | 0.2250 | 0.234 | bank_boundary+scratch/sc=0.724 | Invalid/sr=0.490 |
@@ -152,7 +156,7 @@ train=200/class, eval=2000/class
 | abpos_Avar_B100 | A070_B100 | 1 | 1 | 0.9820 | 0.0000 | 0.54 | 0.54 | 0.044 | 0.000 | 0.7125 | 0.2250 |
 | abpos_Avar_B100 | A080_B100 | 1 | 1 | 0.9837 | 0.0000 | 15.54 | 15.54 | -0.246 | 0.000 | 0.7169 | 0.2203 |
 | abpos_Avar_B100 | A090_B100 | 1 | 1 | 0.9949 | 0.0000 | 0.33 | 0.33 | 0.130 | 0.000 | 0.7706 | 0.2209 |
-| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 2 | 2 | 0.9966 | 0.0010 | 0.62 | 0.86 | 0.186 | 0.066 | 0.7981 | 0.2234 |
+| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 1 | 1 | 0.9959 | 0.0000 | 0.38 | 0.38 | 0.140 | 0.000 | 0.7890 | 0.2202 |
 | cutmix_p | p010 | 1 | 1 | 0.9835 | 0.0000 | 1.16 | 1.16 | 0.090 | 0.000 | 0.7442 | 0.2288 |
 | cutmix_p | p020 | 1 | 1 | 0.9865 | 0.0000 | 1.01 | 1.01 | 0.098 | 0.000 | 0.7712 | 0.2393 |
 | cutmix_p | p030 | 1 | 1 | 0.9964 | 0.0000 | 1.75 | 1.75 | 0.233 | 0.000 | 0.7904 | 0.2304 |
@@ -228,10 +232,13 @@ train=200/class, eval=2000/class
 | seed_repeat_p | p030_s42 | 1 | 1 | 0.9903 | 0.0000 | 2.23 | 2.23 | 0.132 | 0.000 | 0.7949 | 0.2216 |
 | seed_repeat_p | p040_s13 | 1 | 1 | 0.9943 | 0.0000 | 0.94 | 0.94 | 0.203 | 0.000 | 0.7958 | 0.2361 |
 | seed_repeat_p | p040_s42 | 1 | 1 | 0.9876 | 0.0000 | 9.93 | 9.93 | -0.031 | 0.000 | 0.7777 | 0.2278 |
+| seed_repeat_p | p040_s99 | 1 | 1 | 0.9942 | 0.0000 | 0.25 | 0.25 | 0.221 | 0.000 | 0.7848 | 0.2202 |
 | seed_repeat_p | p050_s13 | 1 | 1 | 0.9942 | 0.0000 | 2.00 | 2.00 | 0.190 | 0.000 | 0.7887 | 0.2230 |
 | seed_repeat_p | p050_s42 | 1 | 1 | 0.9954 | 0.0000 | 68.91 | 68.91 | -0.093 | 0.000 | 0.8080 | 0.2409 |
+| seed_repeat_p | p050_s99 | 1 | 1 | 0.9904 | 0.0000 | 1.51 | 1.51 | 0.192 | 0.000 | 0.8044 | 0.2261 |
 | seed_repeat_p | p055_s13 | 1 | 1 | 0.9940 | 0.0000 | 11.89 | 11.89 | 0.117 | 0.000 | 0.7928 | 0.2226 |
 | seed_repeat_p | p055_s42 | 1 | 1 | 0.9823 | 0.0000 | 24.37 | 24.37 | -0.120 | 0.000 | 0.7791 | 0.2439 |
+| seed_repeat_p | p055_s99 | 1 | 1 | 0.9930 | 0.0000 | 0.08 | 0.08 | 0.147 | 0.000 | 0.7870 | 0.2240 |
 | seed_repeat_p | p0575_s13 | 1 | 1 | 0.9952 | 0.0000 | 1.91 | 1.91 | 0.204 | 0.000 | 0.8011 | 0.2248 |
 | seed_repeat_p | p0575_s42 | 1 | 1 | 0.9924 | 0.0000 | 52.98 | 52.98 | -0.084 | 0.000 | 0.7928 | 0.2372 |
 | seed_repeat_p | p0575_s99 | 1 | 1 | 0.9938 | 0.0000 | 0.32 | 0.32 | 0.233 | 0.000 | 0.7919 | 0.2143 |
@@ -240,8 +247,10 @@ train=200/class, eval=2000/class
 | seed_repeat_p | p060_s99 | 1 | 1 | 0.9950 | 0.0000 | 0.77 | 0.77 | 0.234 | 0.000 | 0.7959 | 0.2357 |
 | seed_repeat_p | p0625_s13 | 1 | 1 | 0.9968 | 0.0000 | 0.80 | 0.80 | 0.239 | 0.000 | 0.8052 | 0.2191 |
 | seed_repeat_p | p0625_s42 | 1 | 1 | 0.9901 | 0.0000 | 7.68 | 7.68 | 0.140 | 0.000 | 0.8096 | 0.2383 |
+| seed_repeat_p | p0625_s99 | 1 | 1 | 0.9781 | 0.0000 | 0.51 | 0.51 | -0.003 | 0.000 | 0.7817 | 0.2232 |
 | seed_repeat_p | p065_s13 | 1 | 1 | 0.9943 | 0.0000 | 0.36 | 0.36 | 0.180 | 0.000 | 0.8173 | 0.2458 |
 | seed_repeat_p | p065_s42 | 1 | 1 | 0.9960 | 0.0000 | 0.44 | 0.44 | 0.209 | 0.000 | 0.8250 | 0.2173 |
+| seed_repeat_p | p065_s99 | 1 | 1 | 0.9979 | 0.0000 | 0.06 | 0.06 | 0.286 | 0.000 | 0.8153 | 0.2416 |
 | seed_repeat_p | p070_s13 | 1 | 1 | 0.9969 | 0.0000 | 0.38 | 0.38 | 0.210 | 0.000 | 0.7949 | 0.2349 |
 | seed_repeat_p | p070_s42 | 1 | 1 | 0.9978 | 0.0000 | 74.91 | 74.91 | -0.139 | 0.000 | 0.8028 | 0.2509 |
 | seed_repeat_p | p080_s13 | 1 | 1 | 0.9965 | 0.0000 | 0.20 | 0.20 | 0.234 | 0.000 | 0.8084 | 0.2250 |
@@ -256,7 +265,7 @@ train=200/class, eval=2000/class
 | axis | best value | bit_F1 | FAR | gap | reason |
 |---|---|---:|---:|---:|---|
 | abpos_Avar_B100 | A090_B100 | 0.9949 | 0.33 | 0.130 | worst POS bank_boundary+scratch/sc=0.652; worst NEG Invalid/sr=0.522 |
-| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9973 | 0.86 | 0.233 | worst POS bank_boundary+scratch/sc=0.741; worst NEG Invalid/sr=0.508 |
+| baseline | A100_B100_neg000_p050_grid9_g3_cmp100 | 0.9959 | 0.38 | 0.140 | worst POS bank_boundary+scratch/sc=0.676; worst NEG Invalid/fk=0.536 |
 | cutmix_p | p0575 | 0.9975 | 0.40 | 0.285 | worst POS fork+scratch_rot/sr=0.726; worst NEG Invalid/fk=0.441 |
 | grid_g3 | grid12 | 0.9917 | 0.11 | 0.181 | worst POS fork+scratch/fk=0.634; worst NEG Invalid/fk=0.453 |
 | loss_variant | T6_T6_LS029500_g3_grid9_cmp10000_p05000_mpos065_s7_ep10_tr200_ev02000 | 0.9602 | 8.48 | -0.337 | worst POS bank_boundary+scratch/sc=0.197; worst NEG Invalid/fk=0.534 |
@@ -265,7 +274,7 @@ train=200/class, eval=2000/class
 | seed_repeat_abpos_Avar_B100 | A080_B100_s42 | 0.9964 | 0.17 | 0.164 | worst POS bank_boundary+scratch/sc=0.615; worst NEG DiagonalSmear/sc=0.451 |
 | seed_repeat_baseline | s42 | 0.9954 | 68.91 | -0.093 | worst POS bank_boundary+scratch/sc=0.743; worst NEG CrossScratch/bb=0.836 |
 | seed_repeat_neg | neg002_s42 | 0.9970 | 42.66 | -0.010 | worst POS fork+scratch/sc=0.733; worst NEG CrossScratch/bb=0.743 |
-| seed_repeat_p | p070_s42 | 0.9978 | 74.91 | -0.139 | worst POS bank_boundary+scratch/sc=0.722; worst NEG Starburst/bb=0.861 |
+| seed_repeat_p | p065_s99 | 0.9979 | 0.06 | 0.286 | worst POS fork+scratch/fk=0.743; worst NEG Normal/sr=0.457 |
 
 ## Next Stage Rule
 

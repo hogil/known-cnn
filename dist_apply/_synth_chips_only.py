@@ -61,7 +61,7 @@ def render_chip(obj: str, rng: np.random.Generator,
     # 260527: chip rendering delegated to the current-version synth (sota_h100.synth).
     # bank_boundary / fork / scratch / scratch_rot -> render_single_chip;
     # invalid_main -> render_invalid_chip. (Legacy alpha path retired here.)
-    from sota_h100 import synth
+    import chip_synth as synth
     if obj == 'invalid_main':
         return synth.render_invalid_chip(rng)
     return synth.render_single_chip(obj, rng, intensity_tier=intensity_tier,

@@ -21,6 +21,7 @@ except Exception:
     pass
 
 import argparse
+import gc
 import time
 from pathlib import Path
 from typing import List
@@ -65,11 +66,31 @@ INCLUDE_DIRS = ("bank_boundary", "fork", "scratch", "scratch_rot",
 
 
 def _resolve_ckpt(run_dir: str) -> Path:
-    """Find best_model.pth under outputs/<iter>/T*/best_model.pth."""
-    cands = sorted(Path(run_dir).glob("T*/best_model.pth"))
-    if not cands:
-        raise FileNotFoundError(f"no T*/best_model.pth under {run_dir}")
-    return cands[0]
+    """Find best_model.pth.
+
+    Two supported layouts (260517 fix):
+      a) <run_dir>/best_model.pth         (run_dir IS the trained run, e.g. T7_iter116J_g3_ls30_260513_010015)
+      b) <run_dir>/T*/best_model.pth      (run_dir is iter parent, e.g. outputs/iter21E_19C_repeat)
+      c) <run_dir> is already a .pth checkpoint path.
+    """
+    rd = Path(run_dir)
+    if rd.is_file():
+        return rd
+    direct = rd / "best_model.pth"
+    if direct.is_file():
+        return direct
+    cands = sorted(rd.glob("T*/best_model.pth"))
+    if cands:
+        return cands[0]
+    # 260518 fix: also match timestamp_T*/best_model.pth (e.g. 20260518_051617_T7_*)
+    cands2 = sorted(rd.glob("*_T*/best_model.pth"))
+    if cands2:
+        return cands2[0]
+    # final fallback: any */best_model.pth
+    cands3 = sorted(rd.glob("*/best_model.pth"))
+    if cands3:
+        return cands3[0]
+    raise FileNotFoundError(f"no best_model.pth under {run_dir} (tried direct, T*/, *_T*/, */ glob)")
 
 
 def _list_chips(root: Path) -> List[Path]:
@@ -118,7 +139,7 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--device", default=None)
     ap.add_argument("--bag-runs", default=None,
-                    help="optional comma-separated override of BAG_RUNS list")
+                    help="optional comma-separated run dirs or checkpoint paths")
     args = ap.parse_args()
 
     device = torch.device(args.device or
@@ -140,11 +161,16 @@ def main() -> None:
         probs = _forward_all(model, chips, meta["img_size"],
                              keep_indices, device, batch_size=args.batch_size)
         all_probs.append(probs)
-        del model
+        img_size_str = meta["img_size"]
+        del model, meta, keep_indices
+        gc.collect()
         if device.type == "cuda":
             torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        mem_alloc = torch.cuda.memory_allocated() / 1e9 if device.type == "cuda" else 0
         print(f"[kd] {ri + 1}/{len(bag_runs)}  {run_dir}  "
-              f"img_size={meta['img_size']}  {time.time() - t0:.1f}s")
+              f"img_size={img_size_str}  {time.time() - t0:.1f}s  "
+              f"cuda_alloc={mem_alloc:.2f}GB", flush=True)
 
     avg = np.mean(np.stack(all_probs, axis=0), axis=0)   # (N, 4)
     print(f"[kd] avg probs shape={avg.shape}  "

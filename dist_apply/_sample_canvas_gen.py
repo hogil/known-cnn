@@ -30,7 +30,7 @@ try:
         PALETTE, KEY_TO_INDEX, IDX_BG,
         BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
         SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
-        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
+        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE, CHIP_NOISE_DELTA,
         pick_baseline_tier, pick_intensity_tier,
         rand_prefix, LT_OPTIONS, TM_OPTIONS,
     )
@@ -40,7 +40,7 @@ except ImportError:
         PALETTE, KEY_TO_INDEX, IDX_BG,
         BIN_TO_BORDER_IDX, DEFECT_BIN_POOL, DEFECT_BIN_WEIGHTS,
         SIZE, GRID, CHIP, PNG_OUT_DIR, JSON_OUT_DIR,
-        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE,
+        CUM_BASE, CUM_BASELINE_TIERS, INTENSITY_ALPHA_SCALE, CHIP_NOISE_DELTA,
         pick_baseline_tier, pick_intensity_tier,
         rand_prefix, LT_OPTIONS, TM_OPTIONS,
     )
@@ -475,8 +475,11 @@ def render_canvas_in_memory(class_name, seed):
     del field_medium, field_high, fine_noise
     alpha *= inside_pix.astype(np.float32)
 
-    u = rng.random((SIZE, SIZE))
-    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
+    # 260527: chip-by-chip baseline noise (per-die threshold offset) — see render_canvas.
+    chip_jit = rng.uniform(-CHIP_NOISE_DELTA, CHIP_NOISE_DELTA, (GRID, GRID)).astype(np.float32)
+    chip_jit_pix = np.repeat(np.repeat(chip_jit, CHIP, axis=0), CHIP, axis=1)
+    u = np.clip(rng.random((SIZE, SIZE)).astype(np.float32) + chip_jit_pix, 0.0, 1.0)
+    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u, chip_jit, chip_jit_pix
     canvas[~inside_pix] = IDX_BG
 
     cum_peak = _build_peak_cum(class_name)
@@ -565,8 +568,13 @@ def render_canvas(class_name, seed):
     alpha *= inside_pix.astype(np.float32)              # outside-wafer = 0
 
     # 2. baseline canvas (round 29 v15: per-wafer baseline_tier)
-    u = rng.random((SIZE, SIZE))
-    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u
+    #    260527: + chip-by-chip noise — per-die offset on the grade threshold so each
+    #    chip's baseline darkness varies independently (real fab per-die noise), on top
+    #    of the wafer-by-wafer baseline_tier. +jit -> noisier/darker chip, -jit -> cleaner.
+    chip_jit = rng.uniform(-CHIP_NOISE_DELTA, CHIP_NOISE_DELTA, (GRID, GRID)).astype(np.float32)
+    chip_jit_pix = np.repeat(np.repeat(chip_jit, CHIP, axis=0), CHIP, axis=1)
+    u = np.clip(rng.random((SIZE, SIZE)).astype(np.float32) + chip_jit_pix, 0.0, 1.0)
+    canvas = np.searchsorted(cum_base_use, u).astype(np.uint8); del u, chip_jit, chip_jit_pix
     canvas[~inside_pix] = IDX_BG
 
     # 3. baseline ↔ peak distribution mix (사용자 spec: alpha=0 → baseline, alpha=1 → peak)

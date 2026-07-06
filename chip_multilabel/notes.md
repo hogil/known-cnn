@@ -1621,3 +1621,74 @@ raw artifacts:
 - `outputs/_iter123_T6_train.log`, `_iter123_T6_eval_best.log`, `_iter123_T6_eval_ep10.log`
 - analysis scripts: `_iter123_metrics.py`, `_iter123_partner.py`
 
+
+---
+
+## chain v7 (2026-05-17 12:18-12:24, partial summary)
+
+**Phase 1 (ensemble) FIXED via direct call** — `_ensemble_3fcmpm_v2.py` does NOT take `--parquets` or `--mode` (chain v7 used wrong CLI). Re-ran manually with correct `--p-g2 --p-g3 --p-g4 --variant T0__I10`:
+
+```
+| Recipe                                                          | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Note         |
+|-----------------------------------------------------------------|--------|--------|---------|-----------|--------------|
+| iter116J_g3_ls30 T0__I10 (prior single-model champion)          | 0.9911 |   0.00 |    0.00 |      0.00 | prev best    |
+| ensemble vote_majority_bits (g_ls30 + s77 + KD_v7) on I10       | 0.9941 |   0.00 |    0.00 |      0.00 | NEW BEST     |
+| ensemble vote_majority (3-way pred_class_key) on I10            | 0.9936 |   0.00 |    0.00 |      0.00 | tie cand     |
+| ensemble vote_intersection_bits on I10                          | 0.9735 |   0.00 |    0.00 |      0.00 | safer        |
+| ensemble vote_union_bits on I10                                 | 0.9965 |   0.40 |    1.88 |      0.76 | F1 max FAR>0 |
+| ensemble vote_unanimous on I10                                  | 0.9495 |   0.00 |    0.00 |      0.00 | strict       |
+```
+
+→ **NEW CHAMPION**: ensemble vote_majority_bits (per-bit AND-majority on 3 single-model preds, all with `pred_class_key` already gated by I10 entropy) yields **bit_F1=0.9941 / 0% Total FAR**, beats single-model 0.9911 by +0.0030 at same FAR.
+
+**Phase 2 (val_f1 criterion)** FAIL — `--val-criterion val_f1` invalid; valid options are `{acc, f1, auroc, bce_min, brier_min, margin_max, f1_best_tau}`. Should have used `--val-criterion f1`. Skipped; will be retried in chain v9 if needed.
+
+**Phase 3 (KD sweep)** in progress (12:18 launched):
+- KD_v8_a05_T2_skipcm (alpha=0.5 T=2 skip-on-cutmix) — ep2 done at 12:23 (~5 min, ETA full ~25 min)
+- KD_v9_a02_T2_skipcm (queued)
+- KD_v10_a03_T1_skipcm (queued)
+
+**chain v8 dispatched** (supervisor waiting for v7 completion):
+- Phase 1: re-ensemble (KD_v8/v9/v10 pool)
+- Phase 2: cutmix-p sweep p=0.15/0.20/0.30/0.35/0.40 (5 trainings, ~25 min each)
+- Phase 3: complement-label-scale sweep 0.3/0.7/1.0 (3 trainings)
+
+---
+
+## chain v8 abandoned + chain v9 dispatched (2026-05-17 14:00-16:03)
+
+**Chain v8 issues**:
+- Phase 0 KD_v8 re-eval: GPU 95% → CUBLAS_STATUS_EXECUTION_FAILED at 13:59 after 43 min in forward pass
+- Phase 2 iter116J_cmp015 train: started 14:00, hung 62 min with ZERO output (no train log, no ckpt) — process alive but no GPU allocation
+- KD_v9/v10 train (chain v7): both crashed at startup with OOM
+- Root cause: other GPU users spiked to 95% / 15.5GB used out of 16GB — chip training (10-12GB needed) impossible
+
+**chain v8 killed at 15:03** — process tree (cmp015 + chain_v8 bash + supervisor_v8 bash) terminated. Stuck artifact dirs cleaned.
+
+**chain v9 GPU-gated design**:
+- `wait_gpu_free <THRESHOLD_PCT> <MAX_WAIT_MIN>` blocks until GPU mem usage < threshold
+- 50% for train (safe budget for ~10GB chip model)
+- 60% for eval (smaller footprint)
+- Max wait 120 min (train) / 30 min (eval) before forced launch
+- Other procs NOT killed, just waits
+
+**Chain v9 plan (12 jobs)**:
+1. KD_v8 re-eval (gated)
+2-3. KD_v9 + KD_v10 retry (3 train+eval each, all KD α/T sweep)
+4-8. cutmix-p sweep p=0.15/0.20/0.30/0.35/0.40 (recipe iter116J seed=42)
+9-11. complement-label-scale sweep 0.3/0.7/1.0
+Total ETA: 12 × ~50 min (incl. eval) ≈ 10 h
+
+**Phase 0 result — KD_v8 re-eval DONE 16:02:48 (POS9 strict)**:
+
+```
+| Recipe                                                          | Cell    | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Status         |
+|-----------------------------------------------------------------|---------|--------|--------|---------|-----------|----------------|
+| iter116J_g3_ls30 (prior single-model champion)                  | T0__I10 | 0.9911 |   0.00 |    0.00 |      0.00 | prev best      |
+| ensemble vote_majority_bits (g_ls30 + s77 + KD_v7) on I10       | -       | 0.9941 |   0.00 |    0.00 |      0.00 | NEW BEST       |
+| KD_v7  (alpha=0.3 T=2 skip-on-cutmix)                           | T0__I10 | 0.9723 |   0.00 |    0.00 |      0.00 | KD baseline    |
+| KD_v8  (alpha=0.5 T=2 skip-on-cutmix)                           | T0__I10 | 0.8609 |  32.15 |   28.12 |     31.17 | KD α too high  |
+| KD_v8  (alpha=0.5 T=2 skip-on-cutmix)                           | T0__I13 | 0.7977 |  31.45 |   16.72 |     27.88 | regression     |
+```
+
+→ **KD_v8 alpha=0.5 over-distills**, FAR explodes from 0% → 31%. Higher distillation weight = student becomes too confident on background → both FAR and bit_F1 drop. KD_v9 (alpha=0.2) might be sweet spot, retry queued.

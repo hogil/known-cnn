@@ -600,10 +600,12 @@ def _env_range(name, default):
     lo, hi = (float(x) for x in v.split(","))
     return (lo, hi)
 
-BG_NOISE_RANGE = (0.03, 0.10)          # Normal, OOD — 260528 step10: micro reduce (was 0.05-0.13)
+BG_NOISE_RANGE = _env_range("BG_NOISE_RANGE", (0.03, 0.10))   # Normal/OOD (env-overridable 260528)
 SINGLE_BG_RANGE = _env_range("SINGLE_BG_RANGE", (0.015, 0.06))  # 260528 step10: micro reduce (was 0.02-0.08)
-SINGLE_BG_RANGE_BY_KEY = {             # bank_boundary keeps the lighter background (unchanged)
-    'bank_boundary': _env_range("SINGLE_BG_RANGE_BANK", (0.008, 0.045)),  # 260528 step10: micro reduce (was 0.01-0.06)
+SINGLE_BG_RANGE_BY_KEY = {             # per-class bg overrides (env-tunable 260528)
+    'bank_boundary': _env_range("SINGLE_BG_RANGE_BANK", (0.008, 0.045)),  # step10
+    'fork':          _env_range("SINGLE_BG_RANGE_FORK", SINGLE_BG_RANGE), # default: general
+    'scratch_rot':   _env_range("SINGLE_BG_RANGE_SR",   SINGLE_BG_RANGE), # default: general
 }
 # noise grade-2 ratio for DEFECT-chip clean area. micro-reduce in step10.
 DEFECT_BG_G2_RATIO = 0.003

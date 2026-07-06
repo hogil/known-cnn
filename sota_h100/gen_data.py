@@ -27,11 +27,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-try:
-    from . import synth
-except ImportError:  # allow direct `python sota_h100/gen_data.py`
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from sota_h100 import synth
+# chip synthesis lives in the MAIN project root (chip_synth.py); sota_h100 calls it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import chip_synth as synth
 
 TRAIN_CLASSES = synth.SINGLE_DEFECTS                                   # 4
 EVAL_CLASSES = (synth.SINGLE_DEFECTS + synth.COMBO_2 +

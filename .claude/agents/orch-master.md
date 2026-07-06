@@ -1,6 +1,6 @@
 ---
 name: orch-master
-description: Top-level loop orchestrator. compound > wafer-only 마진 도달까지 v_n → v_{n+1} 자동 반복. cnn-master / stage3-compound / result-trace / compound-review / cnn-analyze / cnn-plan 을 round 별 chain dispatch. super claude (sc:sc-pm-agent) 협조.
+description: Top-level loop orchestrator. compound > wafer-only 마진 도달까지 v_n → v_{n+1} 반복. cnn-master / stage3-compound / result-trace / compound-review / cnn-analyze / cnn-plan 을 round 별 chain dispatch. super claude (sc:sc-pm-agent) 협조.
 model: opus
 tools: Bash, Read, Glob, Agent, Write
 ---
@@ -31,7 +31,7 @@ slash command `/compound-loop` 또는 직접 호출:
 - `--n-per-class-chip N` (default 100) — chip CNN subset
 - `--n-per-class-wafer N` (default 50) — wafer / compound subset
 - `--skip-stage 1,2` (optional) — chip / obj_id_maps 이미 있으면 skip
-- `--auto-loop` (default **on** ★ 사용자 명시: "내가 끝내랄때 끝내고") — converge / max-rounds / fatal error 까지 자동. 사용자 stop 명시 만 정지.
+- `--auto-loop` (default **on**) — converge / max-rounds / fatal error / 사용자 stop 까지 자동. 루프는 허용하지만 새 cmd/PowerShell 창을 만들지 않는다.
 
 ## Round workflow (v_n)
 
@@ -128,3 +128,4 @@ converge 시 최종 `outputs/converged_summary.md` — best version + 사용된 
 - chip 학습 결과 무단 삭제
 - 새 round 가 이전 best 미달이라도 그 round 폴더 삭제 금지 (실패도 정보)
 - result-trace 로 우회해서 outputs/results_master.csv 직접 수정 금지
+- loop / helper script 자체는 허용. 단, `cmd /c`, `pwsh -Command`, PowerShell `Start-Process`, `cmd /c npx` 로 새 console 창을 만드는 실행 방식 금지

@@ -14,7 +14,7 @@ Only data generation + orchestration + reporting are new.
 
 | file | role |
 |---|---|
-| `synth.py` | self-contained 200x200 palette-PNG chip synthesis. Palette, grade tiers, Lorentzian/Gaussian alpha profiles, 4 single defects (bank_boundary/fork/scratch/scratch_rot), 6 two-combos (min-blend), 4 OOD (CenterDonut/CrossScratch/DiagonalSmear/Starburst), Normal, Invalid. |
+| `../chip_synth.py` | (repo ROOT) self-contained 200x200 palette-PNG chip synthesis. Palette, grade tiers, Lorentzian/Gaussian alpha profiles, 4 single defects (bank_boundary/fork/scratch/scratch_rot), 6 two-combos (min-blend), 4 OOD (CenterDonut/CrossScratch/DiagonalSmear/Starburst), Normal, Invalid. |
 | `gen_data.py` | `--mode train` -> `classification_chips/` (4 single, N/class); `--mode eval` -> `eval_set/` (16 classes, N/class) + manifest.csv + `_preview/`. |
 | `run_seed_sweep_1gpu.sh` | single-GPU sequential seed sweep: gen data -> per-seed train+eval -> RESULTS.md. |
 | `run_seed_sweep_ddp.sh` | true-DDP (torchrun) seed sweep: each seed trains one model across G GPUs. |

@@ -2,6 +2,23 @@
 
 이 파일은 Claude Code(claude.ai/code) 새 세션에 프로젝트 진입점을 알려준다.
 
+## ★★★ 절대 규칙 — 이미지 출력 루트 (260528) ★★★
+
+**모든 이미지 (chip / wafer / eval set / preview / sample / 합성 산출물) 는
+무조건 `E:/data/images/` 아래에 생성**. D: 드라이브 (repo) 는 코드만.
+
+frozen iter116J 도 `E:/data/images/classification_chips` 에서 학습됨 — 이게 표준.
+frozen SOTA 재현 eval 은 과거 exact-repro 로그 기준
+`E:/data/images/chip_multilabel_v15direct_n2000` 이 표준.
+`E:/data/images/chip_multilabel_v15direct` 는 새 24-class 확장 eval 이라 과거 SOTA 와 직접 비교 금지.
+새 데이터 합성 (`gen_data.py`, `chip_synth.py`, `_regen_*.py`, `_exp_*.sh`,
+`sota_h100/gen.sh` 등) 호출 시 `--out E:/data/images/<name>/` 로.
+
+기존 `D:/project/known-cnn/data/images/sota_*` 등은 보존 (no-delete 규칙),
+**새 생성은 E:** 만.
+
+memory: `~/.claude/projects/D--project-known-cnn/memory/feedback_image_root_e_drive.md`.
+
 ## ★★★ 절대 규칙 — 학습 성능 보고는 train + eval + pos/neg prob (260528) ★★★
 
 학습/실험 성능을 보고할 때 **무조건** 다음을 모두 표시 (하나라도 빠지면 위반):
@@ -12,6 +29,13 @@
    - **neg prob** = GT bit = 0 (defect 부재) 인 (sample,bit) 의 sigmoid prob 평균 — 낮을수록 좋음
    - eval 의 Normal/Invalid/OOD 는 all-negative → neg prob 에만 기여
 3. bit_F1 / FAR (NI / OOD / Total 분리) 기본 동반
+4. class 별 4-bit probability 표 필수
+   - TRAIN: `bank_boundary/fork/scratch/scratch_rot` 단일 POS 의 `bb/fk/sc/sr`, `bit_F1`, `min_pos_prob`
+   - EVAL: POS(single+combo) 와 NEG(Normal/Invalid/OOD) 의 `bb/fk/sc/sr`, `metric`, `min_pos / max_prob`
+5. 저장/표시 제목은 항상 실제 recipe/tag 이름으로:
+   - `<recipe_tag> (T7 LS=0.30 g=3 cmp=0.7 s=1) -- TRAIN (4 single class):`
+   - `<recipe_tag> (T7 LS=0.30 g=3 cmp=0.7 s=1) -- EVAL per-class 4-bit prob (POS = single+combo, NEG = Normal/Invalid/OOD):`
+   - 임의 라벨 금지. `R1/R2/R3/R4` 같은 임의 variant 이름 절대 사용 금지.
 
 이유: neg prob 가 FAR 의 근본 원인을 드러냄 (frozen OOD fork neg prob 0.23 / FAR 0% vs
 noisy-train OOD fork neg prob 0.56 / FAR 48% — bit_F1 으론 안 보이고 neg prob 으로만 보임).

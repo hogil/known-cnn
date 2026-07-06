@@ -3,6 +3,675 @@
 All numbers reported to 4 decimal places. Eval set: 2200 chips, 11-class
 multi-label.
 
+## 2026-05-24 cron #983 — n200 frozen-match retrain + v15direct eval (best fresh-clone repro to date)
+
+Fresh T7 retrain on `train_n200` (200/class × 4 = 800 chips) with
+frozen-match recipe, evaluated against the v5-restored
+`chip_multilabel_v15direct_n2000` canvas. Best ckpt @ ep5
+(val_margin = 0.7011), 629 s wall. Reference row — does NOT supersede
+the frozen 0.9918 / 0.9927 champion rows.
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Tot-FAR | bb     | fk     | sc     | sr     | OOD: Nrm/CD/CS/ST  | vs frozen iter116J (delta) | Status                       |
+|---------|--------|--------|---------|---------|--------|--------|--------|--------|--------------------|----------------------------|------------------------------|
+| I10     | 0.9793 |   0.20 |    1.25 |    0.45 | 0.9901 | 0.9702 | 0.9646 | 0.9923 | 0.25/1.25/1.87/1.87 |      -0.0125 / +0.45       | best fresh-clone repro       |
+| I13     | 0.8891 |   0.30 |    1.09 |    0.49 | -      | -      | -      | -      | -                  |      -0.1036 / +0.49       | conservative decoder         |
+```
+
+Notes:
+1. **Best fresh-clone reproduction to date** of the frozen iter116J
+   single SOTA. Ranking among full-pipeline reproductions:
+   n200+v15direct (this, 0.9793) > classification_chips+v15 (0.9682) >
+   train_n400+fresh-canvas (0.9593). The narrower train_n200 + v5-pinned
+   canvas axes recover ~+0.02 bit_F1 vs the cron #977 fresh-everything
+   trial.
+2. **Gap vs frozen** (0.9918): -0.013 bit_F1 / +0.45 pp Tot-FAR. Per-bit
+   I10 saturates bb (0.9901) / sr (0.9923) and recovers scratch to
+   0.9646 (cf. cron #977 0.8831). Fork stable at 0.9702.
+3. **FAR breakdown (I10)** — Normal 0.25 %, CenterDonut 1.25 %,
+   CrossScratch 1.87 %, Starburst 1.87 %, DiagonalSmear 0 %. OOD-FAR
+   weighted = 1.25 %, NI-FAR = 0.20 %. CrossScratch + Starburst remain
+   the soft OOD cells under fresh canvas seeds.
+4. Source artifact:
+   `outputs/iter116J_n200_v15direct_repro/20260524_162211_T7_iter116J_exact/eval_sota_i10_i13/eval_260524_163253/`
+
+## 2026-05-24 cron #977 — FULL fresh train+eval github-style mega_matrix reproduction (reference)
+
+End-to-end fresh reproduction of the iter116J SOTA recipe using current
+github-tip mega_matrix pipeline: fresh `train_n400` 10ep training
+(val_margin best = ep9, 0.6955; elapsed 1071.8 s) + fresh eval_n2000
+canvas synthesis + I10 / I13 decode. Reference row — does NOT supersede
+the frozen 0.9918 / 0.9927 champion rows (recorded as paper-style
+end-to-end repro for github reviewer trace).
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Tot-FAR | bb     | fk     | sc     | sr     | vs frozen iter116J (delta)  | Status                       |
+|---------|--------|--------|---------|---------|--------|--------|--------|--------|-----------------------------|------------------------------|
+| I10     | 0.9593 |   0.00 |    0.03 |    0.02 | 0.9884 | 0.9710 | 0.8831 | 0.9948 |       -0.0334 / +0.02       | FULL fresh train+eval gh repro |
+| I13     | 0.8851 |   0.00 |    0.00 |    0.00 | -      | -      | -      | -      |       -0.0876 / 0.00        | FULL fresh train+eval gh repro |
+```
+
+Notes:
+1. **Full pipeline = train (n400 fresh) + eval (n2000 fresh canvas)**,
+   not artifact-only re-eval. Both stages run on current github-tip
+   mega_matrix. Recipe matches iter116J T7 BCE+LS=0.30 g=3 complement
+   pair exactly; only the random seed of the canvas generator and the
+   training data sample changes (vs the frozen 260513 snapshot).
+2. **I10 = 0.9593** sits ~0.033 below the frozen 0.9927 single-replicate
+   reference. Consistent with the cron #726 / #687 same-recipe variance
+   probe: fresh training runs lie below the frozen upper-tail seed.
+   OOD-FAR collapse to 0.03 % (Starburst only 0.13 %) is excellent — NI
+   locked to 0 %.
+3. **Per-bit (I10)**: scratch (0.8831) is the soft cell; bb / scratch_rot
+   essentially saturated (0.99+). Fork at 0.9710 healthy. Same per-bit
+   ordering as frozen artifact.
+4. **I13 = 0.8851 / 0.00 % FAR** — conservative decoder, zero FAR but
+   bit_F1 drops ~0.088 vs frozen (0.9709). Consistent with I13's
+   high-precision low-recall character at the cost of softer positives
+   on fresh canvas.
+
+Source artifact:
+`outputs/iter116J_train400_freshgen/20260524_151713_T7_iter116J_exact/eval_sota_i10_i13/eval_260524_153520/`
+
+## 2026-05-24 cron #960 — mega_matrix github reproducibility verified (iter116J SOTA recipe, I10 + I13)
+
+Re-eval of the frozen iter116J past-best checkpoint
+(`outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015/best.pt`,
+T7 BCE+LS=0.30 g=3 complement-pair seed=1 best ckpt = ep8) on the
+canonical n2640 POS9 strict + 4 OOD strict eval set using the current
+mega_matrix github-tip eval pipeline. Confirms training/eval determinism
+of the SOTA artifact after recent repo refactors.
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Tot-FAR | vs frozen record (delta) | Source                         | Status            |
+|---------|--------|--------|---------|---------|--------------------------|--------------------------------|-------------------|
+| I10     | 0.9919 |   0.00 |    0.00 |    0.00 |       -0.0001 / 0.00     | eval_sota_i10/eval_260524_1238 | repro match noise |
+| I13     | 0.9709 |   0.00 |    0.00 |    0.00 |       (true frozen base) | eval_sota_i13_v5/eval_260524   | true frozen value |
+```
+
+Notes:
+1. **I10 reproduces frozen 0.9918 within +0.0001 noise** (POS9 macro-F1
+   over 4 single + 5 2-combo cells, sc+sr excluded) on identical eval
+   set composition. Github-tip mega_matrix pipeline is deterministic vs
+   the artifact snapshot used at training time (260513).
+2. **I13 true frozen value = 0.9709**, not 0.9927 as recorded in the
+   row "iter116J s=1 (single) I13 bit_F1=0.9927" appearing in the
+   2026-05-17 chain-v7 ensemble champion section (line 421) and
+   replicated downstream. The 0.9927 figure appears to be a
+   transcription error (possibly the I10 value, or a different
+   ckpt-sel/variant cell). Per recorder policy this is flagged only;
+   champion rows are NOT auto-edited. Defer to manual correction or
+   explicit user directive before touching prior result tables.
+3. FAR is 0.00 / 0.00 / 0.00 across both variants — the pair-mask +
+   I10/I13 decision band on this checkpoint truly zero-out NI and
+   OOD-strict at n2640. Matches all prior frozen FAR records.
+
+Source artifacts:
+`outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015/eval_sota_i10/eval_260524_123841/bit_far_metrics.json`
+`outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015/eval_sota_i13_v5/eval_260524_124611/bit_far_metrics.json`
+
+## 2026-05-22 cron #726 — iter116J_exact_repro v12 (second same-recipe replicate; per-seed variance probe)
+
+Single-cell SOTA selector (`T0__I10`, n_eval = 18 640) on a second
+exact-recipe replicate of iter116J past best (T7 BCE+LS=0.30 complement
+pair, seed=1, 10ep, best ckpt = ep8). Companion to cron #687 v1 repro.
+
+```
+| Recipe                                        | Ckpt | Variant | bit_F1 | NI-FAR | OOD-FAR | Tot-FAR | vs E22 (0.9956/0.00) | vs iter116J past best (0.9927/0.00) | Status                |
+|-----------------------------------------------|------|---------|--------|--------|---------|---------|----------------------|-------------------------------------|-----------------------|
+| iter116J_exact_repro v12 (cron 726, this run) | best | I10     | 0.9691 |   0.00 |    8.13 |    1.97 |    -0.0265 / +1.97   |              -0.0236 / +1.97        | SOTA repro v12        |
+| iter116J_exact_repro (cron 687 first repro)   | best | I10     | 0.9691 |   0.00 |    3.75 |    0.91 |    -0.0265 / +0.91   |              -0.0236 / +0.91        | SOTA repro v1         |
+| iter116J_nopair_10ep_s1 (cron 685 nopair ref) | best | I10     | 0.9237 |   0.50 |    8.44 |    2.42 |    -0.0719 / +2.42   |              -0.0690 / +2.42        | nopair short-ep gap   |
+| E22 champion ensemble (frozen)                | -    | -       | 0.9956 |   0.00 |    0.00 |    0.00 |              -       |              +0.0029 /  0.00        | champion              |
+| iter116J past best single (frozen)            | -    | -       | 0.9927 |   0.00 |    0.00 |    0.00 |    -0.0029 /  0.00   |                       -             | single ref            |
+```
+
+**Cross-replicate variance** (v1 cron #687 vs v12 cron #726, same recipe / seed=1 / 10ep):
+
+```
+| Metric    | v1 (cron 687) | v12 (cron 726) | delta  | source of variance              |
+|-----------|---------------|----------------|--------|---------------------------------|
+| bit_F1    |        0.9691 |         0.9691 |  0.000 | deterministic (positive cells)  |
+| NI-FAR    |        0.00 % |         0.00 % |   0.00 | pair-mask locks NI to 0         |
+| OOD-FAR   |        3.75 % |         8.13 % |  +4.38 | OOD-strict decision band drift  |
+| Total-FAR |        0.91 % |         1.97 % |  +1.06 | wholly OOD-driven               |
+```
+
+**Headline insight**: bit_F1 is **deterministic across two same-recipe
+seed=1 replicates** (0.9691 to 4dp, per-bit identical: bb 0.9974, fork
+0.9840, scratch 0.8951, scratch_rot 0.9999), while OOD-FAR varies by
+~4.4 pp (3.75 % -> 8.13 %). NI-FAR locks to 0 % in both. Two same-recipe
+replicates **bracket** iter116J past best (0/640 OOD = 0 %) on the OOD
+axis without matching — the past best lives on the upper tail of the
+T7-pair-10ep seed/run distribution, not at its center.
+
+**Implication for ensemble**: the +4.4 pp OOD-FAR variance band across
+replicates directly motivates E22's 4-way bit-vote OOD filter; single
+SOTA repro cannot stably reach 0 % OOD-FAR.
+
+**Champions frozen.** E22 (0.9956 / 0 %) and iter116J past best single
+(0.9927 / 0 %) remain untouched. v12 does not challenge either.
+
+_Source: `outputs/iter116J_exact_repro/20260522_211945_T7_iter116J_exact/eval_sota_i10/eval_260522_213802/preds_chip.parquet` (n_eval = 18 640, ep8 best ckpt, SOTA single-cell selector; cron #726). Detail iter: `docs/chip-multilabel/iters/iter_v12_single_sota.md`._
+
+## 2026-05-19 NEW CHAMPION — E22 5-way KD-T-temperature-diversity bit-vote ensemble
+
+Eval-only sweep (no train, no kill risk) — `_kd_swap_sweep/` over 14
+candidate KD-axis-extended pools. Champion **E22 = 5-way pool** at per-bit
+majority k=2 over I10 binarized predictions of v15direct_n2000 (POS9 strict
+positives; OOD strict 4-class CenterDonut/CrossScratch/DiagonalSmear/Starburst).
+
+```
+| Rank | Combo                                          | k | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Note                  |
+|------|------------------------------------------------|---|--------|--------|---------|-----------|-----------------------|
+| 1    | E22 5-way {4-way E21 + KD_v12 (T=3)} I10       | 2 | 0.9956 |   0.00 |    0.00 |      0.00 | NEW CHAMPION          |
+| 2    | E21 prev champ 4-way {3-strong + KDv7} I10     | 2 | 0.9953 |   0.00 |    0.00 |      0.00 | DETHRONED 260519      |
+| 3    | E22 5-way k=1 I10 (loose FAR alt)              | 1 | 0.9957 |   8.45 |    2.19 |      6.93 | F1 peak, FAR fail     |
+| 4    | E22 5-way k=3 I10                              | 3 | 0.9935 |   0.00 |    0.00 |      0.00 | over-conservative     |
+| 5    | E7 chain v7 champ {s1+s77+KDv7} logit          | - | 0.9941 |   0.00 |    0.00 |      0.00 | DETHRONED 260518      |
+| 6    | iter116J s1 I10 (single SOTA)                  | - | 0.9927 |   0.00 |    0.00 |      0.00 | single best           |
+```
+
+**E22 5-way member composition** (added KD_v12 over E21):
+
+```
+| Member        | Recipe                                            | Source parquet                                                                                                                                       |
+|---------------|---------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| LS30_s1       | iter116J g3 LS=0.30 seed=1 (single SOTA 0.9927)   | outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015/eval_n2000_pred/stage1_260514_161529/preds_chip.parquet                                   |
+| LS30_s77      | iter116J g3 LS=0.30 seed=77 (chain v6 micro-win)  | outputs/iter116J_clone_s77/20260517_091330_T7_iter116J_clone_s77/eval_n2000_pred/stage1_260517_092932/preds_chip.parquet                             |
+| LS20_s77      | iter116J g3 LS=0.20 seed=77 (LS-axis 260518)      | outputs/iter116J_g3_ls20_s77_v17/20260518_115424_T7_iter116J_g3_ls20_s77/eval_n2000_pred/stage1_260518_120545/preds_chip.parquet                     |
+| KD_v7         | iter116J g3 LS=0.30 KD α=0.30 T=2 skip-cm         | outputs/KD_v7_iter116J_a03_T2_skipcutmix/20260517_095713_T7_KD_v7_iter116J_a03_T2_skipcutmix/eval_n2000_pred/stage1_260517_101336/preds_chip.parquet |
+| KD_v12 (NEW)  | iter116J g3 LS=0.30 KD α=0.30 T=3 skip-cm         | outputs/KD_v12_a030_T3_skipcm_v15/20260518_044903_T7_KD_v12_a030_T3_skipcm/eval_n2000_pred/stage1_260518_045541/preds_chip.parquet                   |
+```
+
+**Diversity decomposition** (paper §6 ensemble lift attribution):
+2× LS=0.30 seeds (s1+s77) + 1× LS=0.20 seed (s77) + **2× KD students at
+distinct teacher temperatures (T=2 KD_v7 + T=3 KD_v12)** — the new
+**KD-T-temperature axis** is the marginal lift carrier. E21 pool was KD T=2
+only; adding T=3 introduces a softer-target student whose vote pattern is
+mildly more entropy-rich and complements KD_v7. Net effect at k=2 majority:
++0.0003 bit_F1 / 0 FP retained over E21.
+
+**FP count**: 0/2000 NI + 0/640 OOD = 0/2640 total (full FP elimination,
+identical to E21, lift purely on POS9 strict positive bit-F1).
+
+**Sweep context**: 14 KD-axis-swap candidates (C1-C14) at outputs/_kd_swap_sweep/;
+C5 (= E22) is the only candidate achieving 0% FAR with strict bit_F1 > 0.9953.
+
+## 2026-05-18 NEW CHAMPION — 4-way LS-axis-extended bit-vote ensemble
+
+Eval-only sweep (no train, no kill risk) — `_ensemble_4bag_iter39.py`
+per-bit majority k-threshold over freshly assembled 4/5/6-member pools that
+extend the chain v7 champion pool with a new LS=0.20 seed=77 student
+(`outputs/iter116J_g3_ls20_s77_v17`, trained 260518 12:05) and an
+already-landed LS=0.30 seed=11 student (`outputs/iter116J_clone_s11`,
+landed 260517 08:44).
+
+```
+| Rank | Combo                                  | k | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Note                |
+|------|----------------------------------------|---|--------|--------|---------|-----------|---------------------|
+| 1    | 4-way {3-strong + KDv7} I10            | 2 | 0.9953 |   0.00 |    0.00 |      0.00 | NEW CHAMPION        |
+| 2    | 6-way {5+LS20_s1} I10                  | 3 | 0.9947 |   0.00 |    0.00 |      0.00 | no further lift     |
+| 3    | iter116J 4-seed bag I10 (prev cand)    | 2 | 0.9946 |      - |       - |      0.95 | prev candidate      |
+| 4    | 5-way {4+LS30_s11} I10                 | 3 | 0.9942 |   0.00 |    0.00 |      0.00 | LS30_s11 add neutral|
+| 5    | E7 prev champion {s1+s77+KDv7} logit   | - | 0.9941 |   0.00 |    0.00 |      0.00 | DETHRONED           |
+| 6    | 3-strong {LS30_s1+s77+LS20_s77} I10    | 2 | 0.9940 |   0.00 |    0.00 |      0.00 | base-only (no KD)   |
+```
+
+Pareto loose-FAR (acceptable) alternatives:
+
+```
+| Combo                                  | k | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Note                  |
+|----------------------------------------|---|--------|--------|---------|-----------|-----------------------|
+| 5-way {4+LS30_s11} I10                 | 2 | 0.9964 |   0.05 |    1.56 |      0.42 | peak F1 (+0.42pp FAR) |
+| 4-way {3-strong + KDv7} I13            | 1 | 0.9955 |      - |       - |      0.49 | I13 alt (+0.49pp FAR) |
+```
+
+**Champion 4-way member composition**:
+
+```
+| Member        | Recipe                                          | Source parquet                                                                                                            |
+|---------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| LS30_s1       | iter116J g3 LS=0.30 seed=1 (single SOTA 0.9927) | outputs/iter116J_g3_ls30/T7_iter116J_g3_ls30_260513_010015/eval_n2000_pred/stage1_260514_161529/preds_chip.parquet        |
+| LS30_s77      | iter116J g3 LS=0.30 seed=77 (chain v6 micro-win)| outputs/iter116J_clone_s77/20260517_091330_T7_iter116J_clone_s77/eval_n2000_pred/stage1_260517_092932/preds_chip.parquet  |
+| LS20_s77      | iter116J g3 LS=0.20 seed=77 (NEW 260518 axis)   | outputs/iter116J_g3_ls20_s77_v17/20260518_115424_T7_iter116J_g3_ls20_s77/eval_n2000_pred/stage1_260518_120545/preds_chip.parquet |
+| KD_v7         | iter116J g3 LS=0.30 KD α=0.3 T=2 skip-cm        | outputs/KD_v7_iter116J_a03_T2_skipcutmix/20260517_095713_T7_KD_v7_iter116J_a03_T2_skipcutmix/eval_n2000_pred/stage1_260517_101336/preds_chip.parquet |
+```
+
+**Diversity decomposition** (paper §6 ensemble lift attribution):
+2× LS=0.30 seeds (s1+s77) + 1× LS=0.20 seed (s77, new axis) + 1× KD
+distillation. The LS=0.20 axis adds a complementary calibration profile
+(prior chain v7 pool was all LS=0.30); 4-way k=2 lifts bit_F1 by +0.0012
+vs E7 at identical 0% FAR.
+
+**Saturation observation**: 5-way (E23 adding LS30_s11) and 6-way (E22
+adding LS20_s1) at k=3 both stay at 0% FAR but **do not improve bit_F1**
+over E21 4-way — the k-of-N margin saturates at 4 strong members.
+Additional KD/seed members past the 4-way only add inference cost without
+ensemble lift at 0% FAR. The aggressive Pareto point (E25 5-way k=2 at
+0.9964 / 0.42 % FAR) gives +0.0011 bit_F1 for a +0.42 pp FAR cost — both
+operating points are publishable: **E21 = conservative 0% FAR headline**,
+**E25 = F1-max Pareto extreme**.
+
+**Champion timeline through 2026-05-18 cron**:
+
+```
+| cron tick    | chain  | champion cell                          | bit_F1 | Total FAR | status              |
+|--------------|--------|----------------------------------------|--------|-----------|---------------------|
+| cron 4       | v7.1   | 3-way vote_majority_bits I10           | 0.9941 |      0.00 | NEW CHAMPION        |
+| cron 5       | v8.1   | 3-way vote_majority_bits I10           | 0.9941 |      0.00 | re-confirmed        |
+| cron 11      | v10.0  | Model Soup 3-way I10                   | 0.9941 |      0.00 | soup below vote     |
+| cron 49      | v15.E  | no-KD 3-way s1+s77+s33_v15 I10         | 0.9929 |      0.27 | base-only sub-champ |
+| 260518 cron  | (E21)  | 4-way {s1+s77+LS20_s77+KDv7} k=2 I10   | 0.9953 |      0.00 | NEW CHAMPION (+12)  |
+```
+
+Sources:
+- `outputs/_ens_4way_3strong_plus_KDv7_I10.json` (E21, champion)
+- `outputs/_ens_5way_3strong_KDv7_LS30s11_I10.json` (E23, E25)
+- `outputs/_ens_6way_5plus_LS20s1_I10.json` (E22)
+- `outputs/_ens_3strong_v18analyst_I10.json` (E24 base-only 3-way)
+- `outputs/_ens_4way_3strong_KDv7_I13.json` (E26 I13 alt)
+
+---
+
+## 2026-05-17 chain v10 — Model Soup 3-way landing (cron 11 tick, 20:45)
+
+Cron 11 tick (20:45) catches the chain v10 phase 0 landing: uniform-weight
+Model Soup (Wortsman et al. 2022 ICML, arXiv 2203.05482) over the same
+3 students as the chain v7/v8 champion pool — iter116J seed=1 (val_f1 ckpt),
+iter116J_clone_s77 (margin_max ckpt), KD_v7 (alpha=0.3 T=2 skip-cm).  Soup
+ckpt assembled by elementwise mean of `state_dict` weights and stored at
+`outputs/soup_v1_3way/best_model.pth`; eval landed at
+`stage1_260517_201557`.
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | vs vote_majority_bits (v8) | direction         |
+|---------|--------|--------|---------|-----------|----------------------------|-------------------|
+| I3      | 0.9274 | 100.00 |  100.00 |    100.00 |                  -         | over-positive     |
+| I7      | 0.9263 | 100.00 |  100.00 |    100.00 |                  -         | over-positive     |
+| I10     | 0.9748 |   0.00 |    0.00 |      0.00 |             -0.0193        | weight-avg below  |
+| I13     | 0.9564 |   0.00 |    0.00 |      0.00 |             -0.0036        | weight-avg below  |
+```
+
+(POS9 strict bit_F1: per-class macro over 9 positive cells = 4 single + 5
+2-combo, sc+sr family-collision excluded.  Same axis as the
+`outputs/_ensemble_v8_g_s77_kdv7_I10.json` aggregator JSONs.)
+
+Source parquet:
+`outputs/soup_v1_3way/eval_n2000_pred/stage1_260517_201557/preds_chip.parquet`.
+
+**Hypothesis falsified.**  Predicted: weight-space averaging recovers the
+discretization loss that per-bit majority vote suffers (continuous prediction
+preserved through averaging vs hard-thresholded 2-of-3 vote).  Observed:
+Soup I10 = 0.9748 / 0.00 % FAR, **below** vote_majority_bits I10 = 0.9941
+by -0.0193 bit_F1.  Soup matches the **mean** quality of the 3 members
+(KD_v7 single 0.9265 + iter116J s=1 single 0.9748 + iter116J_clone_s77
+single 0.9786 individually at I10) rather than exceeding them.  Two operative
+reasons: (a) Wortsman 2022 boundary condition violated — the 3-way pool
+mixes 2 in-basin same-recipe members with 1 cross-basin KD-regularised
+member, and the mean weight drifts away from the in-basin optimum;
+(b) per-bit ceiling lock — 3 of 4 single cells already hit F1=1.0 in
+vote_majority_bits, leaving no headroom for soup to recover from the
+-0.04 single-cell penalty introduced by weight averaging.
+
+Per-cell decomposition (Soup I10 vs vote_majority_bits I10): single cells
+lose -0.04 to -0.06 (bank_boundary 1.0 → 0.9559, scratch_rot 1.0 → 0.9600);
+combo cells lose less (median Δ ≈ -0.015); both known-hard combos remain
+hard (bank_boundary+scratch 0.9791 → 0.9676, fork+scratch 0.9824 → 0.9788).
+
+**KD_v10 (alpha=0.3 T=1 skip-cm) train FAIL** — separate cron 11 event:
+OOM within 9 min when external Python processes pushed sys_ram to 91 %.
+No checkpoint persisted, no parquet produced.  T-axis at T=1 corner
+remains operationally unmapped at alpha=0.3.  Status note only — no metric
+to record.  Recipe family is **not** falsified by this failure (it is an
+operational guard issue, not a recipe defect signal).
+
+Iter file: `iters/iter_v10_01_model_soup.md`.
+Diary: `paper/_diary/260517_cron11_model_soup_kd_v10_fail.md`.
+
+### Champion stability through cron 11
+
+```
+| cron tick | chain  | champion cell                     | bit_F1 | Total FAR | status                  |
+|-----------|--------|-----------------------------------|--------|-----------|-------------------------|
+| cron 3    | v6.3   | iter116J_clone_s77 I10            | 0.9786 |      0.76 | micro-win               |
+| cron 4    | v7.1   | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | NEW CHAMPION            |
+| cron 5    | v8.1   | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | re-confirmed            |
+| cron 6    | v9.0   | (re-eval in flight, no new cell)  |      - |         - | gpu-gated               |
+| cron 7    | v9.0   | (KD_v8 landed, not pool-eligible) | 0.9941 |      0.00 | champion unchanged      |
+| cron 11   | v10.0  | Model Soup 3-way I10              | 0.9941 |      0.00 | champion unchanged      |
+```
+
+Soup did not enter the champion slot.  Vote_majority_bits remains the chain
+v7/v8/v10 headline at 0.9941 / 0.00 %.
+
+---
+
+## 2026-05-17 chain v9 — KD_v8 re-eval landing (cron 7 tick, 16:37)
+
+Cron 7 tick (16:37) catches the chain v9 phase 0 re-eval of
+KD_v8_a05_T2_skipcm.  Eval was dispatched at 15:03:58 after the GPU gate
+released at 55 % foreign usage (under the 60 % eval threshold), the stage1
+output landed at `stage1_260517_150413`, and the parquet was scored at
+cron 7 against the chain v6 KD_v7 baseline.
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | vs KD_v7 (α=0.3) bit | vs KD_v7 FAR-pp |
+|---------|--------|--------|---------|-----------|----------------------|-----------------|
+| I3      | 0.9274 | 100.00 |  100.00 |    100.00 |              +0.0189 |          +96.25 |
+| I7      | 0.9227 | 100.00 |  100.00 |    100.00 |              +0.0113 |          +79.58 |
+| I10     | 0.8924 |  32.15 |   79.46 |     57.15 |              -0.0341 |          +57.15 |
+| I13     | 0.8365 |  31.45 |   71.12 |     52.41 |              -0.0534 |          +52.37 |
+```
+
+Source parquet:
+`outputs/KD_v8_a05_T2_skipcm/20260517_121833_T7_KD_v8_a05_T2_skipcm/eval_n2000_pred/stage1_260517_150413/preds_chip.parquet`.
+
+KD_v8 (α=0.5, T=2, skip-cm) collapsed at training ep01
+(`val_macro_f1=0` in the eval_summary model_meta), and the best ckpt is
+the ep01 collapsed state.  Net result: I3/I7 cells are over-positive (fire
+every bit on every chip → Total FAR 100 %, while micro per-positive-cell
+F1 happens to read ≈ 0.92), I10/I13 cells with entropy / max-prob gates
+partly suppress the over-positive output but still bleed 52-57 % Total FAR.
+
+**KD α grid at T=2 closes with α=0.3 as the only viable cell.**
+α=0.2 (KD_v5) collapsed at 0.1093 / 99.47 % FAR; α=0.3 (KD_v7) viable at
+0.9265 / 0.00 %; α=0.5 (KD_v8, this tick) collapsed at 0.8924 / 57.15 %;
+α=0.7 (KD_v2) over-smoothed at 0.7874 / 0.08 %.  No second viable corner
+exists in the recipe family — the chain v9 KD budget should not re-spend
+on T=2 cells.
+
+Iter file: `iters/iter_v9_01_KD_v8_collapse.md`.
+
+### Champion stability through cron 7
+
+```
+| cron tick | chain  | champion cell                     | bit_F1 | Total FAR | status                  |
+|-----------|--------|-----------------------------------|--------|-----------|-------------------------|
+| cron 3    | v6.3   | iter116J_clone_s77 I10            | 0.9786 |      0.76 | micro-win               |
+| cron 4    | v7.1   | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | NEW CHAMPION            |
+| cron 5    | v8.1   | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | re-confirmed            |
+| cron 6    | v9.0   | (re-eval in flight, no new cell)  |      - |         - | gpu-gated               |
+| cron 7    | v9.0   | (KD_v8 landed, not pool-eligible) | 0.9941 |      0.00 | champion unchanged      |
+```
+
+KD_v8 cannot enter the 3-student majority-vote pool (would pull per-bit
+majority toward over-positive on Normal/Invalid/OOD chips).  Champion
+remains `vote_majority_bits` of {iter116J s=1, iter116J_clone_s77, KD_v7}.
+
+GPU health for cron 7: chain v9 KD_v9 train (α=0.2, T=2) is still
+GPU-gated waiting on free GPU memory (foreign process at 55 % > 50 %
+train threshold) — 30 / 120 min fallback applies, no train parquet yet.
+
+---
+
+## 2026-05-17 chain v9 — GPU-gated supervisor introduction (cron 6 tick)
+
+Cron 6 tick (15:37) reads chain v9 supervisor mid-flight.  Chain v9 differs
+from chain v5-v8 by a single operational rule: every train and every eval
+phase is **gated on free GPU memory** before dispatch.  Codified in
+`_run_chain_v9.sh::wait_gpu_free` and motivated by the two re-eval OOM
+events of chain v8 phase 0 (KD_v8_a05_T2_skipcm re-eval failed at 13:59 due
+to a concurrent foreign-process GPU spike).
+
+```
+| Phase | Threshold        | Max wait | Fallback                              |
+|-------|------------------|----------|---------------------------------------|
+| train | gpu_used < 50 %  | 120 min  | proceed anyway after timeout, log warn|
+| eval  | gpu_used < 60 %  |  30 min  | proceed anyway after timeout, log warn|
+```
+
+Threshold split rationale: training holds ~14 GB peak (batch 2, accum 8,
+ConvNeXtV2-B-384, 4 active classes), so 50 % free of a 80 GB H100 leaves
+~40 GB headroom.  Eval (run_stage1, batch 32, no grad) holds ~6 GB, so 60 %
+free (~32 GB) is comfortable — relaxed threshold trades a small OOM risk
+for faster cron progression.  Aligns with the global rule
+`feedback_gpu_budget_30_40_shared`: this project always shares the GPU
+with 30-40 % foreign load, so the gate is sized against the worst foreign
+plateau, not the median.
+
+### Phase 0 — KD_v8 re-eval (running)
+
+```
+| Time     | Event                                                 |
+|----------|-------------------------------------------------------|
+| 15:03:58 | gpu_used 55 % < 60 % — gate released, dispatch eval   |
+| 15:03:58 | RE_EVAL n2000 KD_v8_a05_T2_skipcm dispatched          |
+| 15:37    | cron 6 tick — eval still running, no parquet yet      |
+```
+
+No new bit_F1 / Total FAR landing this tick.  Next cron tick should pick
+up the KD_v8 re-eval row and start chain v9 phases 1-3 (KD_v9 / KD_v10
+retries + cutmix-p sweep 5 cells + complement-label-scale sweep 3 cells).
+Sources: `outputs/_chain_v9_summary.log`, `outputs/_chain_v9_runner.log`,
+`outputs/_supervisor_v6.log`.
+
+### Champion stability across cron 4-6
+
+```
+| cron tick | chain | champion cell                     | bit_F1 | Total FAR | status        |
+|-----------|-------|-----------------------------------|--------|-----------|---------------|
+| cron 3    | v6.3  | iter116J_clone_s77 I10            | 0.9786 |      0.76 | micro-win     |
+| cron 4    | v7.1  | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | NEW CHAMPION  |
+| cron 5    | v8.1  | ensemble vote_majority_bits I10   | 0.9941 |      0.00 | re-confirmed  |
+| cron 6    | v9.0  | (re-eval in flight, no new cell)  |      - |         - | gpu-gated     |
+```
+
+vote_majority_bits has now held the headline across three independent
+cron cycles (cron 4 dispatch, cron 5 ensemble re-run, cron 6 no change).
+
+---
+
+## 2026-05-17 chain v8 — ensemble re-confirmation + I13 axis (Phase 1 of cron 5 chain)
+
+Chain v8 supervisor (cron 5 tick) re-ran the same 3-student pool as chain v7
+phase 1, adding the I13 inference variant as a second axis.  No new training.
+Source aggregates:
+
+- I10: `outputs/_ensemble_v8_g_s77_kdv7_I10.json`
+- I13: `outputs/_ensemble_v8_g_s77_kdv7_I13.json`
+
+```
+| Variant | Mode                   | bit_F1 | NI-FAR | OOD-FAR | Total FAR | dbit_F1 vs v7 | comment             |
+|---------|------------------------|--------|--------|---------|-----------|---------------|---------------------|
+| I10     | vote_majority_bits     | 0.9941 |   0.00 |    0.00 |      0.00 |       +0.0000 | champion (re-conf)  |
+| I10     | vote_majority          | 0.9936 |   0.00 |    0.00 |      0.00 |       +0.0000 | re-conf             |
+| I10     | vote_union_bits        | 0.9965 |   0.40 |    1.88 |      0.76 |       +0.0000 | re-conf (FAR trap)  |
+| I10     | vote_intersection_bits | 0.9735 |   0.00 |    0.00 |      0.00 |       +0.0000 | re-conf             |
+| I10     | vote_unanimous         | 0.9495 |   0.00 |    0.00 |      0.00 |       +0.0000 | re-conf             |
+| I13     | vote_majority_bits     | 0.9600 |   0.00 |    0.00 |      0.00 |        new    | I13 axis below I10  |
+| I13     | vote_majority          | 0.9595 |   0.00 |    0.00 |      0.00 |        new    | I13 axis below I10  |
+| I13     | vote_union_bits        | 0.9923 |   0.05 |    1.88 |      0.49 |        new    | I13 union mid-pareto|
+| I13     | vote_intersection_bits | 0.8240 |   0.00 |    0.00 |      0.00 |        new    | I13 strict collapse |
+| I13     | vote_unanimous         | 0.7973 |   0.00 |    0.00 |      0.00 |        new    | I13 worst           |
+```
+
+3 핵심 finding:
+
+1. **Champion 0.9941 / 0.00% Total FAR is bit-identical to chain v7 phase 1.**
+   The aggregator is deterministic and no pool ckpt drifted between cron 3
+   and cron 5.  Headline stable.
+2. **I13 ensemble is uniformly worse than I10 by 0.004 ~ 0.15 bit_F1.**  The
+   gap is largest on strict modes (unanimous: -0.15, intersection: -0.15) and
+   concentrated in `fork+scratch` and `fork+scratch_rot` cells where I13's
+   max-prob gate kills the second positive bit.  I10 remains the right
+   inference variant for ensemble reporting.
+3. **I13 union is a mid-Pareto reference (0.9923 / 0.49%) — not headline.**
+   Useful as a "moderate FAR budget" anchor between I10 majority_bits
+   (0.9941 / 0.00) and I10 union (0.9965 / 0.76).
+
+Cron 5 status of other v8 phases: Phase 0 KD_v8 re-eval **FAILED (OOM)**
+already at cron 4; Phase 2 (cutmix-p sweep) **training, not evaluable yet**
+(`iter116J_cmp015` RunDir created 14:00:19 but log 0 bytes); Phase 3
+(label-scale sweep) **not started**.  Detail and per-class breakdown:
+`iters/iter_v8_01_ensemble_reconfirm.md`.  Tick log:
+`paper/_diary/260517_cron5_chain_v8_progress.md`.
+
+## 2026-05-17 ensemble champion — chain v7 (vote_majority_bits beats iter116J SOTA)
+
+Post-hoc 5-mode bit/label vote aggregation across the three chain v6 students
+(iter116J s=1, iter116J_clone_s77, KD_v7_iter116J_a03_T2_skipcutmix) on the
+same n2000 POS9 strict + 4 OOD strict eval set, evaluated at the I10
+inference variant.  No new training.  Source aggregate JSON:
+`outputs/_ensemble_v7_5mode.json`.
+
+Headline (champion cell first, baseline last):
+
+```
+| Mode                   | bestI | bit_F1 | NI-FAR | OOD-FAR | Total FAR | dbit_F1 vs SOTA | dFAR  | status            |
+|------------------------|-------|--------|--------|---------|-----------|-----------------|-------|-------------------|
+| vote_majority_bits     | I10   | 0.9941 |   0.00 |    0.00 |      0.00 |         +0.0014 |  0.00 | NEW CHAMPION      |
+| vote_majority          | I10   | 0.9936 |   0.00 |    0.00 |      0.00 |         +0.0009 |  0.00 | tie at FAR safe   |
+| vote_union_bits        | I10   | 0.9965 |   0.40 |    1.88 |      0.76 |         +0.0038 | +0.76 | peak F1 FAR trap  |
+| vote_intersection_bits | I10   | 0.9735 |   0.00 |    0.00 |      0.00 |         -0.0192 |  0.00 | too conservative  |
+| vote_unanimous         | I10   | 0.9495 |   0.00 |    0.00 |      0.00 |         -0.0432 |  0.00 | too strict        |
+| iter116J s=1 (single)  | I13   | 0.9927 |   0.00 |    0.00 |      0.00 |          0.0000 |  0.00 | prior SOTA        |
+```
+
+**3 핵심 finding**:
+
+1. **vote_majority_bits is the first cell across chain v5+v6+v7 to beat
+   iter116J SOTA on bit_F1 without any FAR penalty** (+0.0014 / 0.00).
+   Per-bit majority over 3 students locks every single-defect class at
+   1.0000 and pushes 4 of 5 combos to ≥0.99.  The two remaining gaps are
+   `bank_boundary+scratch` (0.9791) and `fork+scratch` (0.9824) — both
+   gated by the scratch head, consistent with the chain v6 finding that
+   scratch is the uniquely weak class within recipe.
+2. **vote_union_bits is a publishable Pareto extremum, not the headline.**
+   +0.0038 bit_F1 buys recovery of `bank_boundary+scratch` (0.9913) at the
+   cost of +0.76 pp Total FAR (8 NI FP + 12 OOD FP, vs 0 in every other
+   mode).  Reported as upper-bit-F1 trade-off for downstream pipelines
+   that can absorb sub-1% FAR; not used as headline.
+3. **Strict modes punish the hard scratch combos.**  `vote_unanimous`
+   collapses BB+scratch to 0.6669, `vote_intersection_bits` to 0.8518.
+   These modes are net-negative because one of the three students
+   typically misses the second bit on this exact combo cell.
+
+Per-iter detail and per-class F1 breakdown: `iters/iter_v7_01_ensemble_champion.md`.
+Raw rows appended: `tables/all_runs_n2000.csv` (chain v7).
+
+## 2026-05-17 update — chain v6 종합 분석 (4 phase 완료)
+
+Chain v6 ran 4 phases over a ~1h tick window covering 3 seed clones of
+the iter116J recipe family (seeds 11 / 23 / 77) plus 1 KD experiment
+with the new `--kd-skip-on-cutmix` flag.  All four phases re-evaluated
+on the same n2000 POS9 strict + 4 OOD strict eval set.
+
+Headline cross-phase summary (best variant per row):
+
+```
+| chain | iter | tag                                  | seed | LS   | ep | ckpt_sel   | best | bit_F1 | NI-FAR | OOD-FAR | Total FAR | comment                  |
+|-------|------|--------------------------------------|------|------|----|------------|------|--------|--------|---------|-----------|--------------------------|
+| past  | 116J | T7 LS=0.30 g=3 seed=1 SOTA           |    1 | 0.30 |  6 | val_f1     | I13  | 0.9927 |   0.00 |    0.00 |      0.00 | recorded best            |
+| v6    |    1 | iter116J_clone_s11                   |   11 | 0.30 |  1 | margin_max | I10  | 0.8456 |  72.65 |   63.91 |     70.53 | under-trained ckpt (ep1) |
+| v6    |    2 | iter116J_clone_s23                   |   23 | 0.30 |  9 | margin_max | I10  | 0.4738 |  63.20 |   76.56 |     66.44 | seed adverse fork weak   |
+| v6    |    3 | iter116J_clone_s77                   |   77 | 0.30 |  8 | margin_max | I10  | 0.9786 |   0.40 |    1.88 |      0.76 | bit_F1 micro-win +0.0038 |
+| v6    |    4 | KD_v7_iter116J_a03_T2_skipcutmix     |    1 | 0.30 |  7 | margin_max | I10  | 0.9265 |   0.00 |    0.00 |      0.00 | KD collapse fix new      |
+```
+
+**3 핵심 finding**:
+
+1. **s=77 micro-win + FAR trade-off (Phase 3).** seed=77 is the first
+   non-baseline seed in chain v5+v6 (s1, s7, s11, s23, s42, s77, s99)
+   that beats iter116J SOTA on I10 bit_F1 (+0.0038), at the cost of
+   +0.76 pp Total FAR.  Per-defect at I3 confirms scratch is the
+   uniquely weak class (0.847 vs ~0.99 baseline) — combo seed
+   variability lives almost entirely in the scratch head.  Combined
+   product metric (bit_F1 - 0.01 * FAR) does **not** justify replacing
+   iter116J as headline: 0.9786 - 0.0076 = 0.9710 < 0.9927.  We log
+   the win as informational, not as a new SOTA.
+
+2. **KD_v7 collapse fix via `--kd-skip-on-cutmix` (Phase 6).** Prior 6
+   KD attempts all collapsed (bit_F1 < 0.5 or NaN) because teacher
+   logits computed on clean chips conflicted with the student forward
+   pass on CutMix-complement-active patches (25% of batches under the
+   g=3 corner schedule).  The new flag skips KD loss on those batches.
+   Result: bit_F1 0.9265 / Total FAR 0.00% — no collapse, but also no
+   ceiling-break vs teacher (-0.048 bit_F1 vs iter116J).  Single-teacher
+   KD now behaves as a clean **regulariser** (lowers variance, lowers
+   ceiling).  Multi-teacher KD (s1+s77 ensemble teacher) is the natural
+   next experiment.  Note KD also calibrates I3/I7 gates: KD I3 lands
+   at FAR 3.75% vs no-KD seed-clone I3 at 87-100% — KD makes simpler
+   inference variants viable.
+
+3. **margin_max ckpt criterion variance ±0.13 bit_F1 within recipe.**
+   Phase 1 (s=11 margin_max -> ep1) and Phase 2 (s=23 margin_max -> ep9)
+   both deviate sharply from baseline (s=1 val_f1 -> ep6) on the same
+   recipe family.  bit_F1 spread within seed-clones at best variant =
+   [0.4738, 0.8456, 0.9786] -> std ±0.21 at I10, of which the train
+   trajectory (val_acc 0.9876 plateau with single ep peak at 0.99) is
+   small and the **selector decision (which epoch is "best")** is large.
+   chain v5 implicitly varied both axes; chain v6 isolates the selector
+   axis.  Recommended action: emit ep_by_val_f1 + ep_by_margin_max +
+   last_epoch from the runner so that future iters disentangle seed
+   variance from selector variance in a single train.
+
+Per-iter detail: `iters/iter_v6_0[1-4]_*.md`.  Raw 16 rows appended:
+`tables/all_runs_n2000.csv` (v6 chain).
+
+## 2026-05-17 update — chain v6 iter 1 (ckpt-selection variance, seed=11)
+
+Chain v6 Phase 1 re-ran the iter116J recipe (T7 BCE+LS=0.30 + FCM-PM
+CutMix g=3 corner, batch=2 accum=8, lr=1e-4) at **seed=11** with the
+default margin_max ckpt selector. The selected best_model was **ep1**
+(val_acc 0.9876) while ep7 reached 0.9907 — an under-trained checkpoint
+that ckpt criterion picked over the late-epoch peak.
+
+```
+| chain | iter | tag                       | seed | LS   | ep | ckpt_sel   | best | bit_F1 | NI-FAR | OOD-FAR | Total FAR | comment            |
+|-------|------|---------------------------|------|------|----|------------|------|--------|--------|---------|-----------|--------------------|
+| v6    |    1 | iter116J_clone_s11        |   11 | 0.30 |  1 | margin_max | I10  | 0.8456 |  72.65 |   63.91 |     70.53 | under-trained ckpt |
+| past  | 116J | T7 LS=0.30 g=3 seed=1 SOTA|    1 | 0.30 |  6 | val_f1     | I13  | 0.9927 |   0.00 |    0.00 |      0.00 | recorded best      |
+```
+
+**Finding**: the 0.069 bit_F1 swing (0.9927 -> 0.8456 at best variant)
+is **ckpt-selection variance**, not hparam variance. Same recipe family,
+new seed, default criterion picked ep1 over ep7. **Cannot conclude
+seed=11 is a bad seed** until s11 is re-evaluated at val_f1-selected
+ckpt (ep7) — pending in Phase 2.
+
+**Action**: Phase 2 will (a) re-eval s11 at ep7, (b) generalise the
+runner to emit multiple ckpt candidates (ep_by_val_f1 / ep_by_margin_max
+/ last_epoch) so future iters can disentangle seed effect from selector
+effect in a single training run.
+
+Per-iter detail: `iters/iter_v6_01_s11.md`. Raw 4 rows appended to
+`tables/all_runs_n2000.csv`.
+
+## 2026-05-16 update — chain v5 iter 1-4 (seed-variance + LS atomic)
+
+Chain v5 re-ran the iter116J recipe (T7 BCE+LS=0.30 + FCM-PM CutMix g=3
+corner, batch=2 accum=8, lr=1e-4) under **3 fresh seeds** and **1 atomic
+LS delta** (LS=0.25 at seed=1). Evaluated on n2000 eval set with POS9
+strict (4 single + 5 2-combo, sc+sr excluded) + 4 OOD strict
+(CenterDonut/CrossScratch/DiagonalSmear/Starburst).
+
+```
+| chain | iter | tag                          | seed | LS   | best | bit_F1 | NI-FAR | OOD-FAR | Total FAR | comment          |
+|-------|------|------------------------------|------|------|------|--------|--------|---------|-----------|------------------|
+| v5    |    1 | iter50_clone_seed99_v3       |   99 | 0.30 | I10  | 0.8778 |   0.00 |    0.16 |      0.04 | gated robust     |
+| v5    |    2 | iter50_clone_seed42_v4       |   42 | 0.30 | I10  | 0.9583 |   0.00 |    1.25 |      0.30 | best 3-seed draw |
+| v5    |    3 | iter50_clone_seed07_v4       |    7 | 0.30 | I10  | 0.8787 |  19.40 |   14.53 |     18.22 | gate partial fail|
+| v5    |    4 | iter50_clone_LS025_s1_v4     |    1 | 0.25 | I10  | 0.9121 |   0.05 |    1.56 |      0.42 | LS 0.30->0.25 -- |
+| past  | 116J | T7 LS=0.30 g=3 seed=1 (SOTA) |    1 | 0.30 | I13  | 0.9927 |   0.00 |    0.00 |      0.00 | recorded best    |
+```
+
+**Verdict**:
+1. **iter116J is a seed outlier, not a robust optimum**. 3-seed bit_F1
+   spread at I10 = [0.8778, 0.9583, 0.8787] -> mean 0.9049, std 0.0464.
+   iter116J's 0.9927 sits +1.9σ above this mean.
+2. **Gate (I10/I13) is the FAR robustness mechanism but is not
+   unconditional**. iter1/iter2/iter4 gate FAR <= 0.42%; iter3 gate
+   FAR jumps to 18-23% (60x).
+3. **LS=0.25 strictly regresses vs LS=0.30 at same seed=1**: bit_F1 drops
+   0.0806, Total FAR rises 0.42pp. LS=0.30 is at or near local optimum.
+4. **Recommendation**: stop single-seed reporting for this recipe; either
+   add EMA/warmup to stabilise seed=7-class failures, or report 3-seed
+   mean +/- std as the headline.
+
+Per-iter detail: `iters/iter_v5_0[1-4]_*.md`. Raw 16 rows:
+`tables/all_runs_n2000.csv`.
+
 ## 2026-05-13 update — iter122 + iter123 + iter124 (SOTA unchanged, iter112 still winner)
 
 Three follow-up iters tested **off-recipe axes** against the iter116J/iter112
@@ -790,3 +1459,122 @@ _Source: `tables/backbone_landscape.csv` rows 39-94 (56 new cells, single-seed
 seed=42, v15direct n_per_class=200, 4 inference cells per train run).
 Per-iter detail in `05_backbone_landscape.md` §§ 5.7-5.11 and
 `03_ablations.md` "Best-from-epoch policy ablation (iter99)"._
+
+## Chain v19 final — KD_6way α=0.25 (cron #134, 2026-05-18 20:36)
+
+```
+| Variant | POS9 bit_F1 | NI-FAR | OOD-FAR | Total FAR | vs E21 a025 I10 ref | vs champion (0.9953/0%) |
+|---------|-------------|--------|---------|-----------|---------------------|-------------------------|
+| I3      |      0.8125 | 100.00 |  100.00 |    100.00 |       -0.156 raw    |    -0.1828 / +100pp     |
+| I7      |      0.7515 | 100.00 |  100.00 |    100.00 |       gate fail     |    -0.2438 / +100pp     |
+| I10     |      0.7748 |   0.00 |    0.00 |      0.00 |   -0.1934 / -37.78  |    -0.2205 / 0pp        |
+| I13     |      0.7298 |   0.00 |    0.00 |      0.00 |       gate floor    |    -0.2655 / 0pp        |
+```
+
+KD_6way α=0.25 (6-member teacher = E21 4-way avg + LS30_s11 + LS20_s1) lands at POS9 I10 0.7748 / 0% — **−0.1934 below KD_E21 α=0.25 single-teacher (0.9682 at 37.78% FAR)** and **−0.2205 below the §5.49.4 4-way bit-vote champion (0.9953 / 0%)**. The 6-way teacher's soft-target blur costs ~0.156 bit_F1 of raw discriminative power at I3 vs KD_E21 α=0.25, which no inference-side gate can recover. v19 chain KD-teacher-scaling axis (1 → 3 → 4 → 6 members) now empirically closed: peak at k=4, regression at k=6, champion table unchanged. _Source: `outputs/KD_6way_a025_T2_skipcm_v19/20260518_191740_T7_KD_6way_a025_T2_skipcm/eval_n2000_pred/stage1_260518_200530/preds_chip.parquet` (n_eval = 18 640, epoch-1 best); paper §5.49.6 detail in `paper/05_experiments.md`; diary `paper/_diary/260518_2036_cron134_v19_chain_final_KD_6way_regress.md`._
+
+## Row 5 sweep complete (cron #254, 2026-05-19 15:46)
+
+```
+| Variant   | Recipe                              | bestI | bit_F1 | single | 2combo | NI-FAR | OOD-FAR | Total FAR | vs Row 4 ref (0.9290/42.05) | Status       |
+|-----------|-------------------------------------|-------|--------|--------|--------|--------|---------|-----------|-----------------------------|--------------|
+| A (win)   | LS=0.30 cutmix_p=0.20 rect=0.5 4ep  | I10   | 0.9592 | 1.0000 | 0.9266 |  60.62 |   11.88 |     28.12 |    +0.0233 / -13.93         | new Row 5    |
+| B         | LS=0.30 cutmix_p=0.50 rect=0.5 4ep  | -     |      - |      - |      - |      - |       - |         - |          collapse           | dropped      |
+| C         | LS=0.20 cutmix_p=0.20 rect=0.5 4ep  | -     |      - |      - |      - |      - |       - |         - |     F1 below Row 4          | dropped      |
+| D         | LS=0.30 cutmix_p=0.20 rect=0.25 4ep | -     |      - |      - |      - |      - |       - |         - |     F1 collapse             | dropped      |
+```
+
+Champion E22 (§5.49.7, POS9 0.9956 / 0 %) remains frozen — Row 5 sweep was a main-ablation-table close-out, not a champion contender. Variant A is the first CutMix-only recipe to land single-cell = 1.0000 below 50 % Total FAR, supersedes the prior collapsed "CutMix + Pair Mask" Row 5 entry (0.9174 / 100 % at I3), and beats Row 4 (CutMix random-rectangle, 0.9290 / 42.05 %) on **both** axes (+0.0233 bit_F1, -13.93 pp Total FAR). §5.49 main recipe table updated; paper §5.49.8 logs the sweep close-out. _Source: paper `05_experiments.md` §5.49 Row 5 + §5.49.8._
+
+## FCM nopair g=4 under-converged probe (2026-05-20 21:04)
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | vs E22 (0.9956/0.00) | vs nopair g=3 s7 8ep (0.9943/11.81) |
+|---------|--------|--------|---------|-----------|----------------------|--------------------------------------|
+| I3      | 0.8784 |  99.90 |   95.78 |     98.90 |        -0.1172       |            -0.1159 / +87.09          |
+| I7      | 0.8655 |  98.95 |   90.00 |     96.78 |        -0.1301       |            -0.1288 / +84.97          |
+| I10     | 0.9328 |   0.55 |    1.25 |      0.72 |        -0.0628       |            -0.0615 / -11.09          |
+| I13     | 0.8749 |   2.60 |    0.31 |      2.05 |        -0.1207       |            -0.1194 /  -9.76          |
+```
+
+fcm_nopair_g4 (T7: complement-cutmix p=0.25 g=4, LS=0.30, seed=42) trained **only 2 epochs** (3-min wall) — eval shipped before convergence. Champion E22 (0.9956 / 0%) **not challenged**. Best cell I10 = 0.9328 / 0.72 % Total FAR sits **−0.0628 bit_F1 / +0.72 pp FAR** below E22, and **−0.0615 / −11.09 pp** vs FCM-PM nopair g=3 s7 (full 8 ep, 0.9943 / 11.81 %). Under-converged signature is unambiguous: I3 / I7 gates collapse to 96-99 % FAR (vs 0 % when converged), and 4-single F1 = 0.9582 (scratch) still below 0.99 plateau. The CutMix-only complement mechanism does land I10 / I13 cleanly under 3 % Total FAR even at 2 ep — so the **non-converged g=4 axis stays open** for re-eval at 8 ep before being closed. _Source: `outputs/fcm_nopair_g4/20260520_192505_T7_T7_fcm_nopair_g4/eval_n2000_pred/stage1_260520_195914/preds_chip.parquet` (n_eval = 18 640, epoch 2)._
+
+## FCM pair-masked cls=0.3 1-ep probe (2026-05-20 21:25)
+
+```
+| Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | vs E22 (0.9956/0.00) | vs iter116J cls=0.5 (0.9927/0.00) |
+|---------|--------|--------|---------|-----------|----------------------|------------------------------------|
+| I3      | 0.9183 | 100.00 |  100.00 |    100.00 |        -0.0773       |              -0.0744 / +100.00     |
+| I7      | 0.9143 | 100.00 |  100.00 |    100.00 |        -0.0813       |              -0.0784 / +100.00     |
+| I10     | 0.8876 |   4.40 |    5.00 |      4.55 |        -0.1080       |              -0.1051 /   +4.55     |
+| I13     | 0.7875 |  55.70 |   35.47 |     50.80 |        -0.2081       |              -0.2052 /  +50.80     |
+```
+
+fcm_pair_cls03 (T7: pair-masked complement, cls=0.30 label scale, seed=42) shipped after **only 1 epoch** (train 21:05 → eval 21:25, external chain dispatch). Champion E22 (0.9956 / 0 %) **not challenged**; iter116J cls=0.5 pair 8-ep ref (0.9927 / 0 %) **not challenged**. Best cell I10 = 0.8876 / 4.55 % Total FAR sits **-0.1080 bit_F1 / +4.55 pp FAR** below E22 and **-0.1051 / +4.55 pp** vs iter116J. cls=0.3 label scale (vs 0.5) at 1 ep is severely under-converged — I3 / I7 saturate at 100 % FAR (vs 0 % when converged 8 ep), and val_macro_f1=0.0 in checkpoint confirms epoch-1 only. Cannot yet rule out cls=0.3 as competitive axis — re-eval at 8 ep required before closing this cell. _Source: `outputs/fcm_pair_cls03/20260520_210505_T7_T7_fcm_pair_cls03/eval_n2000_pred/stage1_260520_212540/preds_chip.parquet` (n_eval = 18 640, epoch 1)._
+
+## FCM-PM val_margin chain — 5-cond × pair/nopair × best/final (cron #676, 2026-05-22)
+
+```
+| cond          | side   | sel   | bit_F1 | NI-FAR | OOD-FAR | Tot-FAR | vs iter116J (0.9927/0.00) | vs E22 (0.9956/0.00) | note               |
+|---------------|--------|-------|--------|--------|---------|---------|---------------------------|----------------------|--------------------|
+| g2_cls05_ls30 | pair   | best  | 0.9806 |   0.21 |    0.31 |    0.23 |        -0.0121 / +0.23    |     -0.0150 / +0.23  | val_acc plateau    |
+| g2_cls05_ls30 | pair   | final | 0.9748 |   0.00 |    0.01 |    0.01 |        -0.0179 / +0.01    |     -0.0208 / +0.01  | FAR clean          |
+| g2_cls05_ls30 | nopair | best  | 0.9872 |   0.39 |    0.42 |    0.40 |        -0.0055 / +0.40    |     -0.0084 / +0.40  | F1 lead small      |
+| g2_cls05_ls30 | nopair | final | 0.9689 |   0.04 |    0.02 |    0.04 |        -0.0238 / +0.04    |     -0.0267 / +0.04  | mild best-to-final |
+| g3_cls03_ls30 | pair   | best  | 0.9590 |   0.39 |    0.35 |    0.38 |        -0.0337 / +0.38    |     -0.0366 / +0.38  | cls=0.3 weak       |
+| g3_cls03_ls30 | nopair | best  | 0.9632 |   0.11 |    0.17 |    0.12 |        -0.0295 / +0.12    |     -0.0324 / +0.12  | cls=0.3 weak       |
+| g3_cls05_ls40 | pair   | best  | 0.9699 |   0.00 |    0.01 |    0.01 |        -0.0228 / +0.01    |     -0.0257 / +0.01  | LS=0.40 FAR safe   |
+| g3_cls05_ls40 | pair   | final | 0.9686 |   0.02 |    0.03 |    0.02 |        -0.0241 / +0.02    |     -0.0270 / +0.02  | stable             |
+| g3_cls05_ls40 | nopair | best  | 0.9565 |   0.00 |    0.01 |    0.00 |        -0.0362 / +0.00    |     -0.0391 / +0.00  | strictest FAR      |
+| g3_cls05_ls40 | nopair | final | 0.9705 |   0.00 |    0.02 |    0.01 |        -0.0222 / +0.01    |     -0.0251 / +0.01  | final lifts F1     |
+| g3_cls07_ls30 | pair   | best  | 0.9918 |   0.00 |    0.48 |    0.12 |        -0.0009 / +0.12    |     -0.0038 / +0.12  | high-cls high-FAR  |
+| g3_cls07_ls30 | pair   | final | 0.9924 |   0.00 |    0.48 |    0.12 |        -0.0003 / +0.12    |     -0.0032 / +0.12  | high-cls high-FAR  |
+| g3_cls07_ls30 | nopair | best  | 0.9953 |   0.05 |    0.37 |    0.12 |        +0.0026 / +0.12    |     -0.0003 / +0.12  | single-model peak  |
+| g3_cls07_ls30 | nopair | final | 0.9953 |   0.05 |    0.37 |    0.12 |        +0.0026 / +0.12    |     -0.0003 / +0.12  | single-model peak  |
+| g4_cls05_ls30 | pair   | best  | 0.9620 |   0.15 |    0.76 |    0.30 |        -0.0307 / +0.30    |     -0.0336 / +0.30  | val_acc misleads   |
+| g4_cls05_ls30 | pair   | final | 0.9718 |   0.00 |    0.01 |    0.01 |        -0.0209 / +0.01    |     -0.0238 / +0.01  | best->final +0.01  |
+| g4_cls05_ls30 | nopair | best  | 0.9923 |   0.12 |    0.02 |    0.09 |        -0.0004 / +0.09    |     -0.0033 / +0.09  | strong nopair      |
+| g4_cls05_ls30 | nopair | final | 0.9920 |   0.05 |    0.25 |    0.10 |        -0.0007 / +0.10    |     -0.0036 / +0.10  | strong nopair      |
+```
+
+Ten FCM-PM single-model retrains (5 hparam cond × pair/nopair fork), evaluated under the `val_margin` selector at both `best_model.pth` and `final_model.pth` checkpoints (I10 selector only, n_eval = 18 640). **iter116J single-model frozen** (0.9927 / 0.00 %) — closest challenger `g4_cls05_ls30_nopair_best/I10` reaches **0.9923 / 0.09 %**, a -0.0004 bit_F1 cost for +0.09 pp FAR (Invalid leak 0.575). **Single-model new high posted by `g3_cls07_ls30_nopair`** at **bit_F1 0.9953** (best == final), but at +0.12 pp Total FAR (OOD-FAR = 0.37 % cancels iter116J's perfect-FAR claim); champion ensemble E22 (0.9956 / 0 %) **frozen**.
+
+**Axis findings (10-train cross-section):**
+
+1. **pair vs nopair, FAR axis** — `pair` wins on FAR cleanness in 5/5 conditions: every `pair_final` lands Total FAR <= 0.01 %, while only 2/5 `nopair` reach the same band. Pair-mask continues compressing negative leak after val_acc saturates (§5.54 calibration headroom replicated across all 5 cond).
+2. **pair vs nopair, bit_F1 axis** — `nopair` wins on F1 in 4/5 conditions, decisively at `g3_cls07_ls30` (0.9953 vs 0.9924). Pair-mask costs ~0.003-0.010 bit_F1 in exchange for the FAR cleanup.
+3. **`val_margin` selector** — `best/final` divergence largest at `g4_cls05_ls30_pair` (FAR 0.30 -> 0.006, ~50x reduction with +0.0098 bit_F1) and `g3_cls05_ls40_nopair` (bit_F1 0.9565 -> 0.9705 with FAR stable <= 0.01 %). Validates §5.54 finding that pair-mask + cls/LS combinations have a silent calibration plateau invisible to val_acc.
+4. **cls axis** — `cls=0.3` is dominated (best cell 0.9632 / 0.12 %), `cls=0.5` is the canonical operating point (4/5 sub-axis wins), `cls=0.7` lifts bit_F1 to single-model peak (0.9953) but degrades OOD-FAR (0.37 %). cls trade-off curve is monotone: more cls -> more F1, more OOD leak.
+5. **Clean-FAR ensemble candidates** — six cells satisfy `bit_F1 >= 0.96 AND Total FAR <= 0.02 %`: `g2_cls05_ls30_pair_final` (0.9748), `g3_cls05_ls40_pair_best` (0.9699), `g3_cls05_ls40_pair_final` (0.9686), `g3_cls05_ls40_nopair_final` (0.9705), `g4_cls05_ls30_pair_final` (0.9718). Diversity (pair/nopair × g2/g3/g4 grouping) makes this a strong candidate set for a follow-up vote ensemble targeting both 0 % FAR **and** > E22 bit_F1.
+
+**Insight.** The val_margin selector closes the §5.54 / §5.54-addendum loop empirically: pair-mask + cls/LS = calibration-plateau under val_acc, and the `final` ckpt recovers the headroom. The Invalid-leak in `g3_cls07` nopair (OOD 0.37 %) is the new bottleneck — a perfect-FAR single-model > 0.99 bit_F1 still needs an OOD-aware regularizer. _Source: 10 x `outputs/fcm_margin_*/20260521_*/eval_n2000_margin_{best,final}/eval_*/bit_far_metrics.json` (18 cells; pair/nopair fork x 5 cond x best/final, I10 selector only for clean comparison)._
+
+## iter116J_nopair_val 01 — `iter116J_nopair_10ep_s1` (10ep nopair repro)
+
+```
+| Tag                     | Ckpt  | Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Delta vs iter116J (bit/FAR) | Note                |
+|-------------------------|-------|---------|--------|--------|---------|-----------|-----------------------------|---------------------|
+| iter116J_nopair_10ep_s1 | best  | I3      | 0.8816 | 100.00 |  100.00 |    100.00 |     -0.1111 / +100.00       | raw-thr collapse    |
+| iter116J_nopair_10ep_s1 | best  | I7      | 0.8813 | 100.00 |  100.00 |    100.00 |     -0.1114 / +100.00       | raw-thr collapse    |
+| iter116J_nopair_10ep_s1 | best  | I10     | 0.9237 |   0.50 |    8.44 |      2.42 |     -0.0690 /   +2.42       | val_margin selector |
+| iter116J_nopair_10ep_s1 | best  | I13     | 0.8394 |   0.55 |    8.28 |      2.42 |     -0.1533 /   +2.42       | conservative gate   |
+| iter116J_nopair_10ep_s1 | final | I3      | 0.8816 | 100.00 |  100.00 |    100.00 |     -0.1111 / +100.00       | == best             |
+| iter116J_nopair_10ep_s1 | final | I7      | 0.8813 | 100.00 |  100.00 |    100.00 |     -0.1114 / +100.00       | == best             |
+| iter116J_nopair_10ep_s1 | final | I10     | 0.9237 |   0.50 |    8.44 |      2.42 |     -0.0690 /   +2.42       | == best             |
+| iter116J_nopair_10ep_s1 | final | I13     | 0.8394 |   0.55 |    8.28 |      2.42 |     -0.1533 /   +2.42       | == best             |
+```
+
+Short-epoch (10ep) iter116J-nopair repro under T7 recipe, seed 1. best ckpt and final ckpt produce **identical** per-variant metrics across all 4 cells -> the val_margin selector saturated by ep10 in this nopair branch (no late-epoch drift inside the val_margin window). Best cell I10/best = **0.9237 / 2.42 %** (-0.0690 bit_F1, +2.42 pp Total FAR vs iter116J past best 0.9927 / 0.00 %). OOD-FAR 8.44 % dominates the FAR (vs NI 0.50 %) — the nopair fork at 10ep does not deliver the iter116J cleanness and posts no new high. I3 / I7 raw-threshold cells **fully collapse** to 100 % FAR, repeating the v5 / v6 short-epoch unselected-cell pattern. Champion ensemble E22 (0.9956 / 0 %) and single-model iter116J (0.9927 / 0 %) **frozen**. _Source: `outputs/iter116J_nopair_validation/20260522_135641_T7_iter116J_nopair_10ep_s1/eval_n2000_{best,final}/eval_*/preds_chip.parquet` (74 560 rows / ckpt; cron #685)._
+
+## iter116J_exact_repro 01 — `iter116J_exact_repro_s1_ep8_best` (SOTA pair repro, single-cell I10)
+
+```
+| Tag                                  | Ckpt | Variant | bit_F1 | NI-FAR | OOD-FAR | Total FAR | Delta vs E22 (bit/FAR) | Delta vs iter116J past best (bit/FAR) | Note                  |
+|--------------------------------------|------|---------|--------|--------|---------|-----------|------------------------|---------------------------------------|-----------------------|
+| iter116J_exact_repro_s1_ep8          | best | I10     | 0.9691 |   0.00 |    3.75 |      0.91 |   -0.0265 / +0.91      |             -0.0236 / +0.91           | SOTA pair single-cell |
+| iter116J_nopair_10ep_s1 (cron #685)  | best | I10     | 0.9237 |   0.50 |    8.44 |      2.42 |   -0.0719 / +2.42      |             -0.0690 / +2.42           | PM nopair ref         |
+| E22 ensemble (frozen)                | -    | -       | 0.9956 |   0.00 |    0.00 |      0.00 |             -          |             +0.0029 /  0.00           | champion              |
+| iter116J past best single (frozen)   | -    | -       | 0.9927 |   0.00 |    0.00 |      0.00 |   -0.0029 /  0.00      |                       -               | single ref            |
+```
+
+Exact-recipe (T7 BCE+LS=0.30, pair-mask + complement CutMix p=0.25, no-Normal, 10ep) **single-cell SOTA selector** repro of iter116J past best, evaluated only at `T0__I10` on n_eval=18 640. Best ckpt = ep8 (per `train_summary.json`). Result **0.9691 / 0.91 % Total FAR** — does **not** challenge iter116J past best (0.9927 / 0 %), short by **-0.0236 bit_F1 and +0.91 pp Total FAR**. NI-FAR is perfect (0 / 2000); the entire FAR gap is from 4-class OOD strict (Starburst 5.00 %, CenterDonut 3.75 %, CrossScratch 3.75 %, DiagonalSmear 2.50 %). Per-bit drag is `scratch` at **0.8951** while the other 3 bits all land > 0.98 (bank_boundary 0.9974, fork 0.9840, scratch_rot 0.9999). vs the PM-nopair short-epoch ref (`iter116J_nopair_10ep_s1` / I10 / best), pair-mask delivers **+0.0454 bit_F1** and a **2.7× FAR reduction** at the same 10ep budget — replicating the §5.51 / §5.55 pair-mask FAR advantage. Champions **frozen**. _Source: `outputs/iter116J_exact_repro/20260522_142643_T7_iter116J_exact/eval_sota_i10/eval_260522_151400/preds_chip.parquet` (n_eval = 18 640, ep8 best ckpt, SOTA single-cell selector; cron #687)._

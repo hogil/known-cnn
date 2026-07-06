@@ -255,6 +255,11 @@ CUM_BASELINE_TIERS = {k: np.cumsum(v) for k, v in BASELINE_TIERS.items()}
 INTENSITY_ALPHA_SCALE = {'strong': 1.0, 'mid': 0.96, 'weak': 0.93}
 INTENSITY_GRADE_SHIFT = {'strong': 0,   'mid': 0,    'weak': 0}
 
+# 260527: chip-by-chip bg-noise amplitude (per-die offset added to wafer-level p_bg_field).
+# Each chip's background density jitters +-CHIP_NOISE_DELTA independently → adjacent chips
+# vary (real fab per-die noise), on top of the smooth wafer-by-wafer drift.
+CHIP_NOISE_DELTA = 0.10
+
 def pick_baseline_tier(rng):
     return str(rng.choice(['clean', 'normal', 'hazy'], p=[0.30, 0.50, 0.20]))
 
@@ -992,6 +997,17 @@ def render(class_name, object_name, seed):
     t_wafer = float(rng.uniform(0.0, 1.0))                                           # uniform per-wafer
     p_bg_field = (P_FLOOR + (P_CAP - P_FLOOR) *
                   np.clip(t_wafer + 0.3 * (wafer_pink - 0.5), 0.0, 1.0)).astype(np.float32)
+    # 260527: chip-by-chip noise on top of wafer-by-wafer field.
+    #   wafer-by-wafer = t_wafer (global) + wafer_pink (smooth drift) — already above.
+    #   chip-by-chip   = independent per-die bg-density offset (one constant per 32×32
+    #                    cell, block-expanded), so neighboring chips actually vary like
+    #                    real fab per-die sensor/process noise (the smooth wafer field
+    #                    alone left adjacent chips near-identical). Propagates to both the
+    #                    canvas background (step 4) and each defect chip's baseline slice.
+    chip_jit = rng.uniform(-CHIP_NOISE_DELTA, CHIP_NOISE_DELTA, (GRID, GRID)).astype(np.float32)
+    chip_jit_pix = np.repeat(np.repeat(chip_jit, CHIP, axis=0), CHIP, axis=1)         # 6400x6400
+    p_bg_field = np.clip(p_bg_field + chip_jit_pix, 0.0, 1.0)
+    del chip_jit, chip_jit_pix
     u_bg = rng.random((SIZE, SIZE))
     is_bg = u_bg < p_bg_field
     u_bg2 = rng.random((SIZE, SIZE))

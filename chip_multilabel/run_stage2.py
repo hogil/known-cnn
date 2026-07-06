@@ -16,6 +16,7 @@ except Exception:
 
 import argparse
 import json
+import os
 import subprocess
 import time
 from datetime import datetime
@@ -24,6 +25,9 @@ from typing import Dict, List
 
 import numpy as np
 import torch
+
+# Windows: hide child console (no popup cmd window per subprocess.run call)
+_NOWIN = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 from .constants import INFERENCE_VARIANTS
 from .eval_dataset import (ChipEvalDataset, discover_records,
@@ -47,7 +51,7 @@ def train_variant(variant: str, epochs: int, batch: int, accum: int) -> Path:
     ]
     print(f"[stage2] TRAIN {variant} - {' '.join(cmd[2:])}")
     t0 = time.time()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, creationflags=_NOWIN)
     if proc.returncode != 0:
         print(proc.stdout)
         print(proc.stderr)

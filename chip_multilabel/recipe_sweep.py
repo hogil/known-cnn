@@ -2105,6 +2105,133 @@ def recipes() -> list[Recipe]:
 
 def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
     """Move proven gap-first basins to the front on transfer datasets."""
+    if os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "p0575_proof":
+        p_values = (
+            "0.5750",
+            "0.5625",
+            "0.5875",
+            "0.5500",
+            "0.6000",
+            "0.5375",
+            "0.6250",
+            "0.5000",
+            "0.6500",
+            "0.6750",
+        )
+        seeds = ("7", "13", "42", "99")
+
+        def p_axis_label(value: str) -> str:
+            x = float(value)
+            pct = x * 100
+            if abs(pct - round(pct)) < 1e-9:
+                return f"{int(round(pct)):03d}"
+            return f"{int(round(x * 1000)):04d}"
+
+        def p_value_label(value: str) -> str:
+            return f"{int(round(float(value) * 10000)):05d}"
+
+        common_extra = (
+            "--sweep-eval-variants",
+            "I10",
+            "--sweep-save-every-epoch",
+            "--cutmix-pair-bias",
+            "fork,scratch:2",
+            "--cutmix-mask-pos-target",
+            "0.65",
+            "--cutmix-grid-dim",
+            "9",
+            "--cutmix-ab-labels",
+            "1.00,1.00",
+            "--cutmix-other-label",
+            "0.0",
+            "--max-per-class-defect",
+            "200",
+            "--max-per-class-defect-select",
+            "random",
+            "--sweep-eval-n-per-class",
+            "2000",
+            "--sweep-train-eval-n-per-class",
+            "200",
+            "--sweep-train-diag-cap",
+            "200",
+            "--sweep-eval-diag-cap",
+            "2000",
+        )
+
+        ordered: list[Recipe] = []
+        for cutmix_p in p_values:
+            for seed in seeds:
+                tag = (
+                    f"proof_cutmix_p_p{p_axis_label(cutmix_p)}_"
+                    f"T7_LS029500_g3_grid9_cmp10000_p{p_value_label(cutmix_p)}_"
+                    f"mpos065_s{seed}_ep10_tr200_ev02000"
+                )
+                ordered.append(Recipe(tag, "T7", "0.29500", "3", "1.0000", cutmix_p, seed, common_extra))
+        return ordered
+
+    if os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "p_dataset_matrix":
+        p_values = (
+            "0.5500",
+            "0.6000",
+            "0.6500",
+            "0.5750",
+            "0.6250",
+            "0.5000",
+            "0.7000",
+            "0.8000",
+            "1.0000",
+            "0.9000",
+            "0.4000",
+        )
+
+        def p_axis_label(value: str) -> str:
+            x = float(value)
+            pct = x * 100
+            if abs(pct - round(pct)) < 1e-9:
+                return f"{int(round(pct)):03d}"
+            return f"{int(round(x * 1000)):04d}"
+
+        def p_value_label(value: str) -> str:
+            return f"{int(round(float(value) * 10000)):05d}"
+
+        common_extra = (
+            "--sweep-eval-variants",
+            "I10",
+            "--sweep-save-every-epoch",
+            "--cutmix-pair-bias",
+            "fork,scratch:2",
+            "--cutmix-mask-pos-target",
+            "0.65",
+            "--cutmix-grid-dim",
+            "9",
+            "--cutmix-ab-labels",
+            "1.00,1.00",
+            "--cutmix-other-label",
+            "0.0",
+            "--max-per-class-defect",
+            "200",
+            "--max-per-class-defect-select",
+            "random",
+            "--sweep-eval-n-per-class",
+            "2000",
+            "--sweep-train-eval-n-per-class",
+            "200",
+            "--sweep-train-diag-cap",
+            "200",
+            "--sweep-eval-diag-cap",
+            "2000",
+        )
+
+        ordered: list[Recipe] = []
+        for cutmix_p in p_values:
+            tag = (
+                f"oneaxis_cutmix_p_p{p_axis_label(cutmix_p)}_"
+                f"T7_LS029500_g3_grid9_cmp10000_p{p_value_label(cutmix_p)}_"
+                "mpos065_s7_ep10_tr200_ev02000"
+            )
+            ordered.append(Recipe(tag, "T7", "0.29500", "3", "1.0000", cutmix_p, "7", common_extra))
+        return ordered
+
     priority_by_dataset = {
         "frozen_iter116J_orig814_v15direct_n2000": [
             "adapt_T7_LS02975_g3_cmp06975_p02475_pair_pbfork_scratchx2_s7_ep10",
@@ -3031,19 +3158,23 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
         # one-axis suite on every dataset; the broad seed-repeat queue remains
         # behind this subset.
         p_transfer_values = (
-            "0.4000",
-            "0.5000",
+            # 260606: prioritize the currently observed optimum basin first.
+            # p=0.40 is retained as a low-exposure control, not as a primary
+            # candidate for multi-dataset proof.
             "0.5500",
-            "0.5750",
             "0.6000",
-            "0.6250",
             "0.6500",
+            "0.5750",
+            "0.6250",
+            "0.5000",
             "0.7000",
             "0.8000",
-            "0.9000",
             "1.0000",
+            "0.9000",
+            "0.4000",
         )
         one_axis_transfer_priority_tags: list[str] = []
+        p_dataset_matrix_tags: list[str] = []
 
         def add_transfer_priority_tag(axis: str, value_tag: str) -> None:
             prefix = f"oneaxis_{axis}_{value_tag}_"
@@ -3053,7 +3184,12 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
 
         # First pass: dataset mean with seed=7 and only one changed variable.
         for cutmix_p in p_transfer_values:
-            add_transfer_priority_tag("cutmix_p", f"p{label_pct_tag(cutmix_p)}")
+            p_tag = f"p{label_pct_tag(cutmix_p)}"
+            add_transfer_priority_tag("cutmix_p", p_tag)
+            p_prefix = f"oneaxis_cutmix_p_{p_tag}_"
+            p_dataset_matrix_tags.extend(
+                tag for tag in one_axis_ablation_tags if tag.startswith(p_prefix)
+            )
         for neg_target in ("0.02", "0.05"):
             add_transfer_priority_tag("neg_target", f"neg{label_pct_tag(neg_target)}")
         add_transfer_priority_tag("grid_g3", "grid12")
@@ -3504,6 +3640,8 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
                 + two_factor_ablation_tags
                 + three_factor_ablation_tags
             )
+        elif os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "p_dataset_matrix":
+            priority = p_dataset_matrix_tags
         else:
             priority = (
                 target_label_matrix_tags
@@ -3526,6 +3664,8 @@ def prioritized_plan(ds: DatasetSpec, plan: list[Recipe]) -> list[Recipe]:
     if os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "target_label_matrix":
         return front
     if os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "one_axis_ablation":
+        return front
+    if os.environ.get("CHIP_SWEEP_QUEUE_MODE") == "p_dataset_matrix":
         return front
     front_tags = {r.tag for r in front}
     return front + [r for r in plan if r.tag not in front_tags]
@@ -4309,9 +4449,11 @@ def _extra_value(extra: tuple[str, ...] | str, flag: str) -> str:
 
 
 def _invalid_group_grid(groups: str, extra: tuple[str, ...] | str) -> str:
-    grid_dim = _extra_value(extra, "--cutmix-grid-dim") or "8"
+    grid_dim = _extra_value(extra, "--cutmix-grid-dim")
     try:
         g = int(float(groups))
+        if not grid_dim:
+            grid_dim = "8" if 8 % max(g, 1) == 0 else str(g * 3)
         grid = int(float(grid_dim))
     except ValueError:
         return f"g={groups}, grid={grid_dim}"
@@ -5110,7 +5252,18 @@ def run_one(ds: DatasetSpec, recipe: Recipe, args: argparse.Namespace, env: dict
             cmd += ["--save-every-epoch"]
         if not has_pair:
             cmd += ["--cutmix-pair", "masked"]
-        grid_dim_args = [] if "--cutmix-grid-dim" in train_extra else ["--cutmix-grid-dim", "8"]
+        if "--cutmix-grid-dim" in train_extra:
+            grid_dim_args = []
+        else:
+            # Keep the default grid compatible with the complement group count.
+            # The old default grid=8 is valid for g=2/4 but invalid for g=3,
+            # which caused adaptive runs to be skipped before training.
+            try:
+                groups_int = int(float(recipe.groups))
+            except ValueError:
+                groups_int = 3
+            default_grid = "8" if 8 % max(groups_int, 1) == 0 else str(groups_int * 3)
+            grid_dim_args = ["--cutmix-grid-dim", default_grid]
         cmd += [
             "--cutmix-p",
             recipe.cutmix_p,
@@ -5415,7 +5568,24 @@ def main() -> None:
     ap.add_argument("--forever", action="store_true", help="continue adaptive batches until killed")
     ap.add_argument("--adaptive-batch-size", type=int, default=12)
     ap.add_argument("--idle-seconds", type=int, default=60)
+    ap.add_argument(
+        "--queue-mode",
+        default=os.environ.get("CHIP_SWEEP_QUEUE_MODE", ""),
+        choices=("", "target_label_matrix", "one_axis_ablation", "p_dataset_matrix", "p0575_proof"),
+        help="override CHIP_SWEEP_QUEUE_MODE",
+    )
+    ap.add_argument(
+        "--interleave-datasets",
+        action="store_true",
+        default=os.environ.get("CHIP_SWEEP_INTERLEAVE_DATASETS") == "1",
+        help="run fixed queue by recipe index across datasets",
+    )
     args = ap.parse_args()
+
+    if args.queue_mode:
+        os.environ["CHIP_SWEEP_QUEUE_MODE"] = args.queue_mode
+    if args.interleave_datasets:
+        os.environ["CHIP_SWEEP_INTERLEAVE_DATASETS"] = "1"
 
     env = os.environ.copy()
     env.update(
@@ -5438,9 +5608,21 @@ def main() -> None:
         plan = plan[: args.max_recipes]
 
     datasets = list(selected_datasets(args.datasets))
-    for ds in datasets:
-        for recipe in prioritized_plan(ds, plan):
-            run_one(ds, recipe, args, env)
+    if args.interleave_datasets:
+        fixed_by_dataset = [(ds, prioritized_plan(ds, plan)) for ds in datasets]
+        max_len = max((len(ds_plan) for _, ds_plan in fixed_by_dataset), default=0)
+        print(
+            f"[sweep] FIXED QUEUE dataset-interleaved n_datasets={len(fixed_by_dataset)} max_len={max_len}",
+            flush=True,
+        )
+        for i in range(max_len):
+            for ds, ds_plan in fixed_by_dataset:
+                if i < len(ds_plan):
+                    run_one(ds, ds_plan[i], args, env)
+    else:
+        for ds in datasets:
+            for recipe in prioritized_plan(ds, plan):
+                run_one(ds, recipe, args, env)
 
     if not args.forever:
         print("[sweep] ALL REQUESTED DATASETS/RECIPES DONE", flush=True)

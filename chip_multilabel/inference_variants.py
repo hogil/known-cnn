@@ -173,19 +173,32 @@ class CellResult:
     error_rows: List[Dict] = field(default_factory=list)
 
 
-def _compute_invalid_masks(records: List[EvalRecord]) -> Tuple[np.ndarray, np.ndarray]:
+def _compute_invalid_masks(
+    records: List[EvalRecord],
+    progress_label: str | None = None,
+    progress_every: int = 5000,
+) -> Tuple[np.ndarray, np.ndarray]:
     """Run invalid heuristic on all records.
 
     Returns (is_invalid_pred (N,) bool, invalid_score (N,) float).
     """
     is_inv = np.zeros(len(records), dtype=bool)
     score = np.zeros(len(records), dtype=np.float32)
+    t0 = time.time()
+    if progress_label:
+        print(f"{progress_label} start N={len(records)}", flush=True)
     for i, r in enumerate(records):
         with Image.open(r.chip_path) as im:
             arr = np.array(im.convert("RGB"))
         flag, s = detect_invalid(arr)
         is_inv[i] = flag
         score[i] = s
+        n_done = i + 1
+        if progress_label and (n_done == 1 or n_done % progress_every == 0 or n_done == len(records)):
+            dt = max(time.time() - t0, 1e-6)
+            rate = n_done / dt
+            eta = int((len(records) - n_done) / max(rate, 1e-6))
+            print(f"{progress_label} {n_done}/{len(records)} chips {rate:.1f} chip/s eta={eta}s", flush=True)
     return is_inv, score
 
 

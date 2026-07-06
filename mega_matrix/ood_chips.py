@@ -143,7 +143,7 @@ def generate_direct_class(cls: str, per_class: int, rng: random.Random,
     """OOD chip synth — 260527 delegated to the current-version synth
     (sota_h100.synth.iter_ood_chips: wafer-pattern chip-crop puzzle, no full wafer).
     One pattern realization yields many chips; loop seeds until per_class."""
-    from sota_h100 import synth
+    import chip_synth as synth
     dr = dst_root if dst_root is not None else DST_ROOT
     dst_dir = dr / cls
     dst_dir.mkdir(parents=True, exist_ok=True)

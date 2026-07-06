@@ -68,3 +68,6 @@ data/images/sota_h100/
 _sota_h100_sample/
 _sota_h100_gen.log
 sota_h100/__pycache__/
+
+# local synthetic data (images/positions) — never commit (CLAUDE.md: images live on E:/D: local)
+data/

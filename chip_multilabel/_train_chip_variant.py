@@ -115,6 +115,7 @@ VARIANT_TO_LOSS = {
     "T7": "bce_ls",  # CutMix-friendly BCE + label smoothing
     "T8": "ce_soft_ls",  # CE + LS + CutMix via soft KL target
     "T9": "sigmoid_focal",  # iter 12 (260506) — RetinaNet sigmoid focal for multi-label
+    "T10": "asl_ls",  # 260527 — BCE+LS+ASL combined (ASL focal weighting on LS-smoothed target)
 }
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -194,6 +195,7 @@ def collect_samples(root: Path, include_normal: bool = True,
                     multi_combo_root: Path | None = None,
                     multi_combo_n_per_class: int | None = None,
                     max_per_class_defect: int | None = None,
+                    max_per_class_defect_select: str = "random",
                     rng_seed: int = 42) -> List[Tuple[Path, int, np.ndarray]]:
     """Collect train samples.
 
@@ -203,6 +205,8 @@ def collect_samples(root: Path, include_normal: bool = True,
     - multi-combo (NEW): y = MULTI_COMBO_SENTINEL (-2), multihot = parsed from folder name
 
     260512: max_per_class_defect — limit defect class chip count (low-data ablation).
+    260529: max_per_class_defect_select — isolate historical 200/class cohorts
+    after classification_chips grew to 400/class.
     """
     out: List[Tuple[Path, int, np.ndarray]] = []
     rng_def = np.random.default_rng(rng_seed)
@@ -216,8 +220,19 @@ def collect_samples(root: Path, include_normal: bool = True,
         if not files:
             raise FileNotFoundError(f"no PNG chips for required class '{cname}' under {d}")
         if max_per_class_defect is not None and len(files) > max_per_class_defect:
-            idx = rng_def.choice(len(files), size=max_per_class_defect, replace=False)
-            files = [files[i] for i in sorted(idx)]
+            if max_per_class_defect_select == "random":
+                idx = rng_def.choice(len(files), size=max_per_class_defect, replace=False)
+                files = [files[i] for i in sorted(idx)]
+            elif max_per_class_defect_select == "name_first":
+                files = files[:max_per_class_defect]
+            elif max_per_class_defect_select == "name_last":
+                files = files[-max_per_class_defect:]
+            elif max_per_class_defect_select == "oldest":
+                files = sorted(files, key=lambda p: (p.stat().st_mtime, p.name))[:max_per_class_defect]
+            elif max_per_class_defect_select == "newest":
+                files = sorted(files, key=lambda p: (p.stat().st_mtime, p.name), reverse=True)[:max_per_class_defect]
+            else:
+                raise ValueError(f"unknown max_per_class_defect_select={max_per_class_defect_select}")
         for png in files:
             out.append((png, ci, mh.copy()))
     if include_normal:
@@ -549,6 +564,8 @@ def main():
     ap.add_argument("--accum", type=int, default=4)
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--deterministic", action="store_true",
+                    help="full cuDNN deterministic mode (slower, byte-reproducible across runs)")
     ap.add_argument("--num-workers", type=int, default=0)
     ap.add_argument("--device", default=None)
     ap.add_argument("--gpu-mem-fraction", type=float, default=None,
@@ -578,6 +595,14 @@ def main():
     ap.add_argument("--no-normal", action="store_true",
                     help="Skip classification_chips/Normal/ folder. 4-class defect only "
                          "(traditional baseline / ablation). Default: include Normal as y=-1 sentinel.")
+    ap.add_argument("--max-per-class-defect", type=int, default=None,
+                    help="Limit defect chips loaded per TRAIN_CLASSES folder. Use 200 to "
+                         "reproduce older frozen-original runs whose train_summary was "
+                         "about 651/163 train/val split instead of the current 400/class pool.")
+    ap.add_argument("--max-per-class-defect-select", type=str, default="random",
+                    choices=["random", "name_first", "name_last", "oldest", "newest"],
+                    help="Selection policy used with --max-per-class-defect. "
+                         "oldest/newest isolate the May07/May14 classification_chips cohorts.")
     # 260508 — multi-combo training data (iter 17B)
     ap.add_argument("--multi-combo-root", type=str, default="",
                     help="Path to multi-combo master folder (e.g. "
@@ -768,6 +793,21 @@ def main():
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    if args.deterministic:
+        import random as _r
+        _r.seed(args.seed)
+        try:
+            torch.cuda.manual_seed_all(args.seed)
+        except Exception:
+            pass
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        try:
+            torch.use_deterministic_algorithms(True, warn_only=True)
+        except Exception as e:
+            print(f"[init] WARN deterministic algos: {e}")
+        print(f"[init] DETERMINISTIC mode ENABLED (seed={args.seed})")
 
     # 260509 — load teacher probs for KD (iter32). Empty dict if --kd-teacher-probs not set.
     teacher_prob_map: dict = {}
@@ -793,6 +833,8 @@ def main():
     samples = collect_samples(Path(args.data_root), include_normal=not args.no_normal,
                               multi_combo_root=multi_combo_root,
                               multi_combo_n_per_class=args.multi_combo_n_per_class,
+                              max_per_class_defect=args.max_per_class_defect,
+                              max_per_class_defect_select=args.max_per_class_defect_select,
                               rng_seed=args.seed)
     train_samples, val_samples = stratified_split(samples, val_ratio=0.2, seed=args.seed)
     print(f"[train] data: train={len(train_samples)} val={len(val_samples)} classes={TRAIN_CLASSES}")
@@ -882,7 +924,7 @@ def main():
     # 260513 training-time temperature (logit / T before BCE)
     if args.bce_temperature != 1.0:
         build_kw["bce_temperature"] = float(args.bce_temperature)
-    if args.variant in ("T4", "T6"):
+    if args.variant in ("T4", "T6", "T10"):
         build_kw["gamma_pos"] = float(args.asl_gpos)
         build_kw["gamma_neg"] = float(args.asl_gneg)
         build_kw["clip"] = float(args.asl_clip)
@@ -1032,6 +1074,8 @@ def main():
     history = []
     best_val_acc = float("-inf")
     best_epoch = -1
+    best_val_f1 = float("-inf")   # 260602 — track val_f1-max for best_f1_model.pth (selection-criterion compare)
+    best_f1_epoch = -1
     t_total = time.time()
     for ep in range(1, args.epochs + 1):
         if train_sampler is not None:
@@ -1299,12 +1343,21 @@ def main():
                                                 x1 = (gj + 1) * cell_w if gj < GRID - 1 else W
                                                 mask[:, y0:y1, x0:x1] = cor_a
                                         new_x.append(mask.unsqueeze(0))
-                                        mask_t = torch.zeros(len(TRAIN_CLASSES), device=device)
+                                        mask_neg = (
+                                            float(args.cutmix_mask_neg_target)
+                                            if args.cutmix_mask_neg_target is not None
+                                            else 0.0
+                                        )
+                                        mask_t = torch.full((len(TRAIN_CLASSES),), mask_neg, device=device)
                                         if args.cutmix_ab_labels:
                                             a_lbl, _ = [float(v) for v in args.cutmix_ab_labels.split(',')]
                                             mask_t[a_cls] = a_lbl
                                         else:
-                                            mask_t[a_cls] = label_scale
+                                            mask_t[a_cls] = (
+                                                float(args.cutmix_mask_pos_target)
+                                                if args.cutmix_mask_pos_target is not None
+                                                else label_scale
+                                            )
                                         new_tgt.append(mask_t.unsqueeze(0))
                             # rebuild x and tgt from collected samples
                             x = torch.cat(new_x, dim=0)
@@ -1670,6 +1723,27 @@ def main():
                 # 260521 - explicit visibility: which epoch was selected, by which criterion
                 print(f"[train] UPDATE best_model.pth: ep{ep:02d} "
                       f"val_{c}={val_for_best:.4f} (prev=ep{prev_best_ep:02d})", flush=True)
+        # 260602 — also save val_f1-max checkpoint (best_f1_model.pth) for the
+        # val_f1 vs val_margin selection-criterion comparison. Mirrors best_model.pth
+        # save logic but driven by val_f1 instead of args.val_criterion.
+        if _safe(val_f1, -1.0) > best_val_f1 and ep >= args.best_from_epoch:
+            best_val_f1 = _safe(val_f1, -1.0)
+            best_f1_epoch = ep
+            if _is_main_rank():
+                f1_state = (ema.module.state_dict() if ema is not None
+                            else (model.module.state_dict() if hasattr(model, "module") else model.state_dict()))
+                _atomic_torch_save({
+                    "model": f1_state,
+                    "classes": list(TRAIN_CLASSES),
+                    "img_size": img_size,
+                    "backbone": backbone,
+                    "val_acc": float(val_acc),
+                    "val_f1": float(_safe(val_f1, -1.0)),
+                    "epoch": ep,
+                    "variant": args.variant,
+                    "loss_name": loss_name,
+                }, out_dir / "best_f1_model.pth")
+                print(f"[train] UPDATE best_f1_model.pth: ep{ep:02d} val_f1={best_val_f1:.4f}", flush=True)
         # 260512 — --save-every-epoch: per-epoch ckpt for multi-label selection bug fix
         if args.save_every_epoch and _is_main_rank():
             if save_state_dict is None:
@@ -1730,6 +1804,8 @@ def main():
                 "ts": ts,
                 "out_dir": str(out_dir),
                 "no_normal": bool(args.no_normal),
+                "max_per_class_defect": args.max_per_class_defect,
+                "max_per_class_defect_select": str(args.max_per_class_defect_select),
                 "ls": (None if args.ls is None else float(args.ls)),
                 "cutmix_p": float(args.cutmix_p),
                 "cutmix_mode": str(args.cutmix_mode),

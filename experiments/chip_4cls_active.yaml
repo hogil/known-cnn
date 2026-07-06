@@ -1,0 +1,7 @@
+# Chip 4-class single-label active set — exclude invalid_main.
+# Use with: python chip_train/cnn_train_chip.py --active-classes-yaml experiments/chip_4cls_active.yaml ...
+classes:
+  - bank_boundary
+  - fork
+  - scratch
+  - scratch_rot

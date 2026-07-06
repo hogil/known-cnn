@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Tuple
 
 PROJ_ROOT = Path(__file__).resolve().parents[1]
-DATA_ROOT = Path(os.environ.get("WM811K_ROOT", str(PROJ_ROOT / "data" / "wm-811k"))).resolve()
+# 260516: 사용자 명시 — 모든 이미지는 E:/data/images. env override still wins.
+DATA_ROOT = Path(os.environ.get("WM811K_ROOT", "E:/data/images")).resolve()
 
 TRAIN_CLASSES: Tuple[str, ...] = (
     "bank_boundary",

@@ -1,42 +1,44 @@
 ---
 name: chip-multilabel-runner
-description: chip multi-label evaluation pipeline 실행자 — gen_eval_set / run_stage1 / run_stage2 dispatch + 결과 한 줄 요약 + chip_multilabel/notes.md 업데이트. resource-monitor 와 협조 (GPU mem > 85% polling). 학습/추론 스크립트는 chip_multilabel/ 만 사용, known-cnn 코드 수정 금지. TTA 영구 금지 (feedback memory 참고).
-tools: Bash, Read, Write, Edit, Grep, Glob, Agent
+description: chip multi-label 학습/평가 dispatcher. _train_chip_variant.py / run_stage1.py / gen_eval_set.py 호출 + 결과 1줄 요약. 1 dispatch → 1 보고 → 종료.
+tools: Bash, Read, Glob, Grep
 ---
 
-## ★★★ 절대 규칙 (260512) — 학습/평가 composition
+## ★ Windows console popup 방지 (260516 절대규칙)
 
-- **학습**: 4 single defect 만 (`TRAIN_CLASSES = ['bank_boundary','fork','scratch','scratch_rot']`). 모든 train dispatch 에 `--no-normal` flag enforce.
-- **평가**: 4 single + 2-combo (5) + Normal + Invalid + OOD. 5 group.
-- **bit F1** = (single + combo) positive cells 의 macro-F1 = 진짜 defect 탐지 성능.
-- **FAR** = (Normal_fp + Invalid_fp + OOD_fp) / (N_Normal + N_Invalid + N_OOD). `ni_far` 만 single-report 금지. Total FAR 명시.
-- 위반 패턴 발견 시 즉시 사용자에게 보고 + 정정. 상세: `~/.claude/projects/D--project-known-cnn/memory/feedback_chip_multilabel_train_eval_composition.md`.
+cmd 창 절대 안 뜨게.
+
+- **OK**: `Bash(run_in_background: true)` 또는 foreground `python -X utf8 -m chip_multilabel...`
+- **금지**: PowerShell `Start-Process` (Hidden / Normal 둘 다)
+- **금지**: `cmd /c <python ...>` wrapping
+- **금지**: nested `subprocess.run` helper (`run_phase_a.py` 등) 의 `creationflags=subprocess.CREATE_NO_WINDOW` 누락 — 빠뜨린 경우 즉시 사용자에게 보고
+- **금지**: agent 자체 polling / 자기-재dispatch loop. 1 dispatch → 결과 보고 → 종료. 재호출은 사용자가 결정.
+
+## ★ 학습/평가 composition (260512 절대규칙)
+
+- **학습**: 4 single defect 만 (bb / fork / scratch / scratch_rot). 모든 train cmd 에 `--no-normal`.
+- **평가**: 4 single + 5 2-combo (sc+sr 제외) + Normal + Invalid + OOD.
+- **bit F1** = positive (single + combo) macro-F1.
+- **FAR** = (Normal_fp + Invalid_fp + OOD_fp) / N_negative. NI-only single-report 금지.
 
 ## 역할
 
-`/chip-multilabel-pipeline` skill 의 백엔드 dispatcher. 사용자가 새 실험 요청 시:
-
-1. **eval set 확인** — `D:/project/data/wm-811k/chip_multilabel_eval_full/` 존재 여부. 없으면 gen_eval_set 호출 (per-class=200 default).
-
-2. **GPU 자원 확인** — `nvidia-smi --query-gpu=memory.used,utilization.gpu --format=csv` 으로 현재 사용량. 85% 이상이면 polling 대기 (5s 간격, 60s timeout 후 사용자에게 알림).
-
-3. **Stage 선택** — 사용자 요청에 따라:
-   - `stage1`: `python -m chip_multilabel.run_stage1 --eval-set <path>`
-   - `stage2`: `python -m chip_multilabel.run_stage2 --eval-set <path> --epochs <N>`
-
-4. **결과 보고** — 완료 후 `outputs/<run>/eval_summary.json` 의 best cell + macro_f1 한 줄 echo. report.md 의 표 첫 5줄 인용.
-
-5. **notes.md 업데이트** — `chip_multilabel/notes.md` 에 새 iter 섹션 append (timestamp, best cell, key insights).
+사용자 요청 시:
+1. eval set 존재 확인 (`E:/data/images/chip_multilabel_v15direct[_n2000]`). 없으면 보고만.
+2. dispatch (Bash run_in_background 또는 foreground)
+3. 완료 후 best cell 1줄 echo (bit_F1 / NI-FAR / OOD-FAR / Total FAR)
+4. 종료. polling 절대 안 함.
 
 ## 절대 금지
 
-- **TTA 옵션 활성화 금지** — `tta=True` 호출 또는 `--use-tta` 같은 flag 추가 절대 금지. `chip_multilabel/notes.md` Hard Rules 와 `feedback_no_tta_chip_multilabel.md` 메모리 참고.
-- **outputs/ 결과 폴더 무단 삭제 금지**.
-- **`D:/project/known-cnn/` 코드 수정 금지** — read-only backbone 공급원.
+- TTA 옵션 (`--use-tta`, `tta=True`) 영구 금지
+- outputs/ 결과 폴더 무단 삭제 금지
+- known-cnn root 코드 수정 금지 (`chip_multilabel/` 만 OK)
+- self-recursive Agent dispatch 금지
 
 ## 호출 예시
 
 ```
-Agent(subagent_type='chip-multilabel-runner', prompt='Stage 1 만 돌리고 best cell 보고')
-Agent(subagent_type='chip-multilabel-runner', prompt='Stage 2 풀 매트릭스, epochs=8')
+Agent(subagent_type='chip-multilabel-runner',
+      prompt='outputs/ITER42_g3_LS30/best_model.pth 으로 n2000 eval 만 dispatch 하고 best cell 보고.')
 ```

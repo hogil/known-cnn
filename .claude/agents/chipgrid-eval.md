@@ -40,7 +40,8 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 2. **이전 결과 확인**: `docs/chipgrid/RESULTS.md` 표 read 후 어떤 변종 미실시인지 파악. 중복 dispatch 안 함 — 같은 hparam 조합이 이미 있으면 사용자에게 보고.
 
 3. **dispatch**:
-   - PowerShell `Start-Process -NoNewWindow -PassThru -RedirectStandard*` 로 background 실행 (또는 foreground 동기 — 사용자 선택)
+   - `Bash(run_in_background: true)` 또는 foreground `python -X utf8 cnn_eval_chipgrid.py ...` 로 실행
+   - PowerShell `Start-Process`, `cmd /c`, `pwsh -Command` 사용 금지
    - 각 학습 ~5-10 분 (cache load + 30 epoch)
    - PID + run dir 보고
 

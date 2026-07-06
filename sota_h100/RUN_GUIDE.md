@@ -82,7 +82,7 @@ with `_proto_threshold_reject.py` to pick the FAR=0 / max-bit_F1 point.
 ## Files
 | file | role |
 |---|---|
-| `synth.py` | independent chip synthesis (4 single / 6 combo / 4 OOD / Normal / Invalid) |
+| `../chip_synth.py` (repo root) | canonical chip synthesis (sota_h100 + legacy generators all import this) (4 single / 6 combo / 4 OOD / Normal / Invalid) |
 | `gen_data.py` | `--mode train|eval` palette-PNG generator |
 | `run_seed_sweep_1gpu.sh` / `run_seed_sweep_ddp.sh` | seed-sweep train+eval (iter116J recipe) |
 | `make_report.py` | aggregate seeds → RESULTS.md |

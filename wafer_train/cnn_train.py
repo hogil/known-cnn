@@ -198,7 +198,13 @@ def set_active_classes(classes_list, allow_missing: bool = False):
 
 
 class FilteredImageFolder(ImageFolder):
-    """ImageFolder + EXCLUDE_CLASSES + (optional) ACTIVE_CLASSES."""
+    """ImageFolder + EXCLUDE_CLASSES + (optional) ACTIVE_CLASSES.
+
+    260527 patch: corrupted PNG skip — known issue
+    Full_invalid_main/CCH016_00C_08_..._PT_ENGINEER.png 등 unidentifiable PNG
+    가 학습 중 PIL.UnidentifiedImageError 로 chain crash 발생. dummy black
+    image 으로 fallback (label 은 보존, batch 진행 보장).
+    """
     def find_classes(self, directory):
         classes, _ = super().find_classes(directory)
         kept = [c for c in classes if c not in EXCLUDE_CLASSES]
@@ -210,6 +216,20 @@ class FilteredImageFolder(ImageFolder):
             kept = [c for c in kept if c in _ACTIVE_CLASSES]
         new_class_to_idx = {c: i for i, c in enumerate(kept)}
         return kept, new_class_to_idx
+
+    def __getitem__(self, index):
+        path, target = self.samples[index]
+        try:
+            sample = self.loader(path)
+        except Exception as e:
+            from PIL import Image as _PILImage
+            print(f"[CORRUPT-PNG-SKIP] {path}: {type(e).__name__}: {e}", flush=True)
+            sample = _PILImage.new("RGB", (384, 384), color=(0, 0, 0))
+        if self.transform is not None:
+            sample = self.transform(sample)
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+        return sample, target
 
 def _add_gaussian_noise(t):
     """transforms.Lambda에 박는 module-level callable (Windows DataLoader spawn picklable)."""
@@ -367,7 +387,9 @@ def train_one_epoch(model, loader, opt, scaler, scheduler, device, lg, ep, total
     model.train()
     losses = []; n_correct = 0; n_total = 0
     t0 = time.time(); tick = max(1, len(loader)//10)
-    use_amp = (device.type == "cuda")
+    # AMP off via env (260527 사용자 명시 — anomaly-detection default 는 ON 이지만 OFF 요청)
+    _amp_env = os.environ.get("USE_AMP", "true").lower() == "true"
+    use_amp = (device.type == "cuda") and _amp_env
     amp_dtype = (torch.bfloat16 if use_amp and torch.cuda.is_bf16_supported() else torch.float16)
     for it, (imgs, lbls) in enumerate(loader, 1):
         imgs = imgs.to(device, non_blocking=True); lbls = lbls.to(device, non_blocking=True)
@@ -840,6 +862,7 @@ def main(default_data_dir: Optional[str] = None,
     p.add_argument("--stochastic-depth", type=float, default=CFG["stochastic_depth"])
     p.add_argument("--grad-clip", type=float, default=CFG["grad_clip"])
     p.add_argument("--warmup-epochs", type=int, default=CFG["warmup_epochs"])
+    p.add_argument("--weight-decay", type=float, default=CFG["weight_decay"])  # 260527 added — anomaly-detection 정책 (0.01)
     p.add_argument("--weighted-sampler", action="store_true", default=CFG["weighted_sampler"])
     p.add_argument("--val-loss-guard", type=float, default=CFG["val_loss_guard"])
     p.add_argument("--val-smooth-window", type=int, default=CFG["val_smooth_window"])
@@ -995,7 +1018,7 @@ def main(default_data_dir: Optional[str] = None,
     opt = torch.optim.AdamW(
         [{"params": backbone_params, "lr": args.lr_backbone},
          {"params": head_params,     "lr": args.lr_head}],
-        weight_decay=CFG["weight_decay"])
+        weight_decay=args.weight_decay)  # 260527 patched — args 사용 (was hard CFG)
 
     # ===== DDP wrap (after optimizer is built on raw params) =====
     model = wrap_ddp(model, ddp)

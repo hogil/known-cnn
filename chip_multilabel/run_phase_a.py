@@ -26,6 +26,7 @@ except Exception:
 import argparse
 import csv
 import json
+import os
 import re
 import subprocess
 import time
@@ -36,6 +37,9 @@ from typing import Dict, List, Optional, Tuple
 
 SCRIPT_TRAIN = "chip_multilabel._train_chip_variant"
 SCRIPT_INFER = "chip_multilabel.run_stage1"
+
+# Windows: hide child console (no popup cmd window per subprocess.run call)
+_NOWIN = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 DEFAULT_LS_GRID = [0.05, 0.10, 0.15, 0.20]
 DEFAULT_LR_GRID = [5e-5, 1e-4, 3e-4]
@@ -54,6 +58,7 @@ def gpu_gate(mem_pct_threshold: float = 90.0, poll_seconds: int = 30,
                 ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu",
                  "--format=csv,noheader,nounits"],
                 capture_output=True, text=True, timeout=10,
+                creationflags=_NOWIN,
             )
             line = (res.stdout or "").strip().splitlines()[0]
             used, total, util = [float(x.strip()) for x in line.split(",")]
@@ -86,7 +91,7 @@ def run_train(variant: str, ls: float, lr: float, epochs: int, batch: int, accum
     ]
     print(f"\n[run_train] {' '.join(cmd[2:])}")
     t0 = time.time()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, creationflags=_NOWIN)
     elapsed = time.time() - t0
     if proc.returncode != 0:
         print(proc.stdout)
@@ -114,7 +119,7 @@ def run_inference(model_ckpt: Path, eval_set: Path, out_root: Path,
     ]
     print(f"\n[run_inference] {' '.join(cmd[2:])}")
     t0 = time.time()
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True, text=True, creationflags=_NOWIN)
     elapsed = time.time() - t0
     if proc.returncode != 0:
         print(proc.stdout)
