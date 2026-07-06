@@ -13,7 +13,8 @@ def _grid_mask(canvas, grid):
 
 
 def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
-                   canvas=40, n_classes=10, grid=4):
+                   canvas=40, n_classes=10, grid=4, fcm_mode="checker",
+                   cutmix_frac=0.5, mixup_alpha=1.0):
     if arm == "oracle":
         return synthesize_multi(imgs, labels, n, seed, allowed_pairs, canvas, n_classes)
 
@@ -37,7 +38,7 @@ def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
         cb = _place(imgs[int(rng.choice(by[b]))], canvas, rng).astype(np.float32)
 
         if arm == "mixup":
-            lam = float(rng.beta(1.0, 1.0))
+            lam = float(rng.beta(mixup_alpha, mixup_alpha))
             img = lam * ca + (1.0 - lam) * cb
             t[a] = lam; t[b] = 1.0 - lam
         elif arm == "copy_paste":
@@ -48,14 +49,26 @@ def synthesize_arm(arm, imgs, labels, n, seed, allowed_pairs,
             t[a] = 1.0; t[b] = 1.0
         elif arm == "cutmix":
             img = ca.copy()
-            ch = cw = canvas // 2
-            y = int(rng.integers(0, canvas - ch))
-            x = int(rng.integers(0, canvas - cw))
-            img[y:y + ch, x:x + cw] = cb[y:y + ch, x:x + cw]
+            side = max(1, min(canvas, int(round(canvas * (cutmix_frac ** 0.5)))))
+            y = int(rng.integers(0, canvas - side + 1))
+            x = int(rng.integers(0, canvas - side + 1))
+            img[y:y + side, x:x + side] = cb[y:y + side, x:x + side]
             t[a] = 1.0; t[b] = 1.0
         elif arm == "fcm_pm":
-            mask = _grid_mask(canvas, grid)
-            img = np.where(mask, ca, cb)
+            if fcm_mode == "fill":
+                # filling-complement: keep a whole, fill b into a's empty background
+                img = ca.copy()
+                bg = ca == 0
+                img[bg] = cb[bg]
+            elif fcm_mode == "strip":
+                img = np.zeros((canvas, canvas), dtype=np.float32)
+                cell = canvas // grid
+                for r in range(grid):
+                    src = ca if r % 2 == 0 else cb
+                    img[r * cell:(r + 1) * cell, :] = src[r * cell:(r + 1) * cell, :]
+            else:  # "checker"
+                mask = _grid_mask(canvas, grid)
+                img = np.where(mask, ca, cb)
             t[a] = 1.0; t[b] = 1.0
         else:
             raise ValueError(f"unknown arm: {arm}")
