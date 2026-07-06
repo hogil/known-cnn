@@ -223,3 +223,51 @@ Proper fix = Copy-Paste (paste object crops onto scene backgrounds): coverage
 (crops) + scale/context (background). Also: overfitting is severe (train bitF1
 ~1.0, eval ~0.23-0.36 vs literature ~0.8) — credible absolute numbers need
 GPU + full data.
+
+## MixedWM38 — first run (real singles train -> REAL mixed eval, seed 0, 15ep)
+
+Public wafer benchmark: 7,015 real singles (train source), 3,000 real mixed
+eval (of 30,000; 29 combos, 6 held out from oracle), 1,000 real normals (FAR).
+
+```
+| arm         | TRAIN bitF1 | EVAL bitF1 | ev_FAR | exact | HOLDOUT bitF1 | NORMAL FAR |
+|-------------|-------------|------------|--------|-------|---------------|------------|
+| oracle      |       0.945 |      0.817 |  0.015 | 0.768 |         0.796 |      0.578 |
+| overlay     |       0.930 |      0.609 |  0.009 | 0.199 |         0.588 |      0.562 |
+| cutmix      |       0.799 |      0.551 |  0.029 | 0.281 |         0.487 |      1.000 |
+| fcm_pm      |       0.847 |      0.502 |  0.031 | 0.226 |         0.445 |      0.852 |
+| mixup       |       0.873 |      0.450 |  0.007 | 0.072 |         0.412 |      0.005 |
+| single_only |       0.930 |      0.227 |  0.019 | 0.002 |         0.224 |      0.636 |
+```
+
+Findings: (1) synthesis >> single_only on REAL mixed (0.609 vs 0.227, +0.38) —
+thesis direction confirmed on a genuine multi-label benchmark. (2) overlay
+(max union = chip min-blend analog) is the best synthesis, consistent with the
+wafer encoding (defect beats normal die). (3) oracle gap remains (0.817 vs
+0.609) — real mixed has interactions beyond independent-union. (4) NORMAL FAR
+explodes for all hard arms (0.56-1.00) — no all-negative signal in training;
+exactly the chip lesson (Normal absent -> FAR explosion). Next: port chip
+fixes — pair-mask + neg-target.
+
+## MNIST — faithful complement (grid 3N random scatter) sweep, 3 seeds
+
+```
+| config              | full mAP        | holdout mAP     | exact | pos   | neg   |
+|---------------------|-----------------|-----------------|-------|-------|-------|
+| overlay(blind)      | 0.7730 +-0.0030 | 0.7755 +-0.0059 | 0.270 | 0.604 | 0.092 |
+| oracle(ref)         | 0.7591 +-0.0049 | 0.6328 +-0.0068 | 0.253 | 0.593 | 0.091 |
+| chk_g20(old)        | 0.6737 +-0.0087 | 0.6821 +-0.0040 | 0.061 | 0.352 | 0.065 |
+| cmpl_g6n3           | 0.6724 +-0.0082 | 0.6755 +-0.0228 | 0.104 | 0.453 | 0.100 |
+| cmpl_g9n2           | 0.6675 +-0.0074 | 0.6721 +-0.0147 | 0.099 | 0.429 | 0.087 |
+| cmpl_g18n3          | 0.6561 +-0.0072 | 0.6487 +-0.0095 | 0.083 | 0.392 | 0.063 |
+| cmpl_g9n3 (recipeA) | 0.6558 +-0.0067 | 0.6603 +-0.0220 | 0.111 | 0.444 | 0.092 |
+| cmpl_g9n4           | 0.6431 +-0.0038 | 0.6284 +-0.0054 | 0.090 | 0.431 | 0.089 |
+| single_only         | 0.5990 +-0.0098 | 0.5994 +-0.0039 | 0.043 | 0.320 | 0.060 |
+```
+
+Faithful complement lands in the fragment band (0.64-0.67) on compact digits;
+overlay stays best. Larger A share helps (n2>n3>n4). ALL complement variants
+beat the oracle on held-out combos. Together with WM38 (overlay 0.609 >
+complement 0.502): raw complement geometry is not universally superior —
+the chip SOTA's complement value is coupled to pair-mask FAR control, which is
+the next port.
