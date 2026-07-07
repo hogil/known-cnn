@@ -31,7 +31,9 @@ while producing a 42x lower false-alarm rate on real normal wafers (0.013 vs
 0.548) — the oracle, trained on real multi-label data, cannot control false
 alarms, whereas two synthesis components (pair masking and defect-erased
 synthetic normals) solve this by design, using no normal labels and no
-defect-location annotation. We
+defect-location annotation. Adding confidence-based rejection at inference
+drives false alarms on 1,000 real normal wafers to zero at 98% coverage with
+no accuracy loss on accepted samples (reproduced three times). We
 characterize when the approach transfers to natural images (PASCAL VOC) and
 release the full harness.
 
@@ -251,6 +253,34 @@ camera-ready). No method ranking is claimed at this scale.
 - Training-size scaling (WM38, seed 0, SmallCNN): n_train 1000/3000/6000 ->
   bitF1 0.589/0.660/0.683, NORMAL FAR 0.109/0.065/0.055 — monotone, not
   saturated at 6000; synthetic data is free.
+
+### 5.6 Inference-side rejection and checkpoint selection (WM38)
+
+Margin rejection: refuse samples whose max bit probability < tau (flagged for
+human review). Three independent reproductions (15/30/60-epoch models):
+
+| model      | tau | coverage | bitF1(accepted) | NORMAL FAR       |
+|------------|-----|----------|-----------------|------------------|
+| 30ep       | 0.9 |    91.7% | 0.709 (up)      | 0.151 -> 0.000   |
+| 30ep(easy) | 0.9 |    94.4% | 0.699 (kept)    | 0.041 -> 0.000   |
+| 60ep       | 0.9 |    98.1% | 0.747 (kept)    | 0.062 -> 0.000   |
+
+Zero false alarms on 1,000 real normals at 2-8% review cost; accepted-set
+accuracy never drops; longer training makes rejection cheaper.
+
+Checkpoint selection (honest scope): on the chip domain, val-F1 saturates at
+epoch 1 (pretrained 88M backbone + easy in-distribution val) and selecting by
+the pos-neg margin instead rescues bit-F1 0.755 -> 0.918 at tr50. This
+pathology did NOT transfer to WM38 (two attempts: hard synthetic-combo val
+and easy in-dist val; scratch-trained SmallCNN keeps val-F1 informative
+through 30+ epochs; both criteria pick adjacent checkpoints). Margin-based
+selection is presented as a chip-regime finding, not a general law.
+
+Synthetic-real overfitting boundary: real-mixed bit-F1 peaks near epoch 30
+(0.779) and declines with further training on synthetic combos (ep52: 0.748)
+while the synthetic val keeps improving — no synthetic-val criterion can see
+the real peak. A small real validation set, when available, is worth more
+than any selection criterion on synthetic data.
 
 ## 6 Discussion & Limitations
 
