@@ -77,16 +77,30 @@ release the full harness.
   location/mask annotation; our industrial setting has none (content-blind
   constraint). Our contribution is not a new pasting op but the label-fidelity
   criterion + the single-to-multi bootstrap setting + FAR control.
-- **Single-positive multi-label (SPML).** Cole et al. (2021) and successors
-  assume multi-label images with one observed positive. Our setting differs:
-  the images themselves are single-category (industrially natural), and we
-  evaluate against real multi-label test data. (Add 2024-26 SPML follow-ups
-  after a literature pass — TODO verify recent work.)
-- **Mixed-type wafer map classification.** MixedWM38 (Wang et al., 2020) and
-  followers train on the full labeled mixed dataset; published accuracies
-  assume full multi-label supervision. We use the dataset in a strictly
-  harder protocol (singles-only training) — numbers are not directly
-  comparable, and we report the fully-supervised oracle as the ceiling.
+- **Single-positive multi-label (SPML).** Cole et al. (2021) and an active
+  2024-25 line (VLM/prompt pseudo-labeling with RAM; hyperbolic structured
+  classification; class-prior methods). SPML assumes multi-label IMAGES with
+  one observed positive; our setting is stricter and industrially natural —
+  the training images themselves contain a single category, and we evaluate
+  on real multi-label test data. SPML methods recover missing labels of
+  existing images; we synthesize combination images that never existed.
+- **Mixed-type wafer map classification.** MixedWM38 (Wang et al., 2020);
+  fully-supervised methods reach 98-99% accuracy (density-aware fusion 2025;
+  MLR-WM-ViT). **Single-to-mixed prior art exists and must be engaged
+  head-on**: (i) ESWA 2023 "Learning from single-defect wafer maps to
+  classify mixed-defect wafer maps" — synthesizes mixed maps via mixup +
+  rotation + noise filtering from normal+single maps; (ii) CAIE 2025
+  "Mixed-defect wafer map separation and detection based on single-defect
+  wafer map"; (iii) SSRN 2025 diffusion+attention synthesis. Our
+  differentiation: (a) label-fidelity mechanism — we measure WHY operators
+  differ and show mixup-style blending is the weakest operator (bitF1 0.435
+  vs 0.717 overlay on WM38); (b) the false-alarm axis these works do not
+  study — the real-mixed-trained oracle itself false-alarms on 55% of real
+  normals, while pair-mask + synthetic normals cut this 42x with zero normal
+  labels; (c) held-out-combination compositional protocol; (d) cross-domain
+  scope (chip palette maps, MultiMNIST, VOC boundary); (e) training-free
+  operators vs generative (diffusion) synthesis. TODO: obtain ESWA-2023
+  protocol details/numbers for a direct-comparison paragraph.
 - **Open-set / false-alarm control.** Relation to OOD rejection; our pair-mask
   and synthetic-normal are training-side mechanisms (inference-side selection
   and rejection are a separate paper).
