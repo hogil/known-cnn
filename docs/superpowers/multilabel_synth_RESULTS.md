@@ -311,3 +311,20 @@ bitF1 0.717 +-0.079 (83% of oracle 0.863), exact 0.399, NORMAL FAR
 0.013 +-0.003 (42x below oracle 0.548). Scaling (SmallCNN, seed 0):
 n_train 1000/3000/6000 -> bitF1 0.589/0.660/0.683 (monotone, unsaturated).
 Backbone criticism answered; gap to oracle narrows with capacity + data.
+
+## MixedWM38 — stage-2/3 validation (selection + rejection), seed 0, 30ep
+
+Stage 3 (margin reject, winner recipe, SmallCNN 30ep): rejecting samples with
+max prob < tau: tau=0.9 -> coverage 91.7%, accepted bitF1 0.709 (up from
+0.700), NORMAL FAR 0.151 -> 0.000 on 1000 real normals. Zero false alarms at
+8.3% review cost; accepted-set accuracy does not drop. Also: 30ep lifts
+SmallCNN bitF1 to 0.719 (15ep: 0.641) at the cost of FAR 0.031 -> 0.146 —
+which rejection then eliminates.
+
+Stage 2 (val-F1 vs val-margin checkpoint selection): NOT reproduced on WM38 —
+with a synthetic-combo val set, val_f1 keeps rising to ep27 and both pickers
+choose adjacent epochs (bitF1 0.719 vs 0.700, FAR ~0.15 both). The chip
+val-F1-saturation pathology stems from an easy in-dist val; a well-built
+synthetic val keeps F1 informative. Boundary finding: margin selection
+matters when the val set saturates (chip); synthesis-based val removes the
+need. Honest scope: stage-2 evidence remains chip-domain.
