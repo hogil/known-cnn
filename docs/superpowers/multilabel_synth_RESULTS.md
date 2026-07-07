@@ -303,3 +303,11 @@ oracle 0.146 / cutmix 0.087 / mixup 0.062 / single_only 0.053 / copypaste
 0.052 eval bitF1 with train ~1.0 — everything collapses, no ranking signal.
 80-way multi-label needs GPU-scale training; recorded as a measured scale
 boundary, not a method result.
+
+## MixedWM38 — backbone + scaling hardening
+
+ResNet-18 (small-input stem) on the winner config overlay+sn+neg003, 3 seeds:
+bitF1 0.717 +-0.079 (83% of oracle 0.863), exact 0.399, NORMAL FAR
+0.013 +-0.003 (42x below oracle 0.548). Scaling (SmallCNN, seed 0):
+n_train 1000/3000/6000 -> bitF1 0.589/0.660/0.683 (monotone, unsaturated).
+Backbone criticism answered; gap to oracle narrows with capacity + data.
