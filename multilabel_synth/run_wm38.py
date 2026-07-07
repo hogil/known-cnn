@@ -26,9 +26,13 @@ def _loader(X, Y, bs, shuffle):
                       batch_size=bs, shuffle=shuffle)
 
 
-def train_model(trX, trY, epochs, bs, lr, device, seed):
+def train_model(trX, trY, epochs, bs, lr, device, seed, backbone="small"):
     torch.manual_seed(seed)
-    model = SmallCNN(num_classes=trY.shape[1], in_ch=1).to(device)
+    if backbone == "resnet18":
+        from .models.resnet import build_resnet18_small
+        model = build_resnet18_small(num_classes=trY.shape[1], in_ch=1).to(device)
+    else:
+        model = SmallCNN(num_classes=trY.shape[1], in_ch=1).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     lf = nn.BCEWithLogitsLoss()
     for _ in range(epochs):
@@ -72,6 +76,7 @@ def main():
                          "via min(x,0.5)) as all-negative training samples")
     ap.add_argument("--mpos", type=float, default=0.65,
                     help="pair-mask positive target (fcm_pm_pm)")
+    ap.add_argument("--backbone", choices=["small", "resnet18"], default="small")
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/wm38_matrix.csv")
     args = ap.parse_args()
 
@@ -138,7 +143,7 @@ def main():
                 trY = trY + (1.0 - trY) * args.neg_target
 
             model = train_model(trX, trY, args.epochs, args.bs, args.lr,
-                                args.device, seed)
+                                args.device, seed, backbone=args.backbone)
             sub = r2.choice(len(trX), size=min(400, len(trX)), replace=False)
             trP = predict(model, trX[sub], trY[sub], args.bs, args.device)
             trYb = (trY[sub] >= 0.5).astype(np.float32)
