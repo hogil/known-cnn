@@ -187,12 +187,10 @@ fragmentation, in survival-order.
 | overlay+sn          | 0.581 +-0.022   | 0.178 |         0.554 | 0.001 +-0.001   |
 | fcm_pm_pm+sn+neg003 | 0.540 +-0.035   | 0.254 |         0.487 | 0.058 +-0.031   |
 | overlay (no sn)     | 0.609 (1 seed)  | 0.199 |         0.588 | 0.562           |
-| fcm_pm (no PM)      | 0.502 (1 seed)  | 0.226 |         0.445 | 0.852           |
-| cutmix              | 0.551 (1 seed)  | 0.281 |         0.487 | 1.000           |
-| mixup               | 0.450 (1 seed)  | 0.072 |         0.412 | 0.005           |
-| single_only         | 0.227 (1 seed)  | 0.002 |         0.224 | 0.636           |
-
-(1-seed rows to be replaced by tonight's 3-seed hardening batch.)
+| cutmix              | 0.563 +-0.020   | 0.291 |         0.487 | 0.810 +-0.218   |
+| fcm_pm (no PM)      | 0.495 +-0.009   | 0.230 |         0.435 | 0.839 +-0.125   |
+| mixup               | 0.435 +-0.013   | 0.070 |         0.400 | 0.087 +-0.109   |
+| single_only         | 0.232 +-0.035   | 0.014 |         0.204 | 0.778 +-0.126   |
 
 Claims: (i) synthesis recovers 74% of the oracle's bit-F1 with zero multi
 labels; (ii) the oracle cannot control false alarms (0.55 +-0.18 on real
