@@ -271,3 +271,25 @@ beat the oracle on held-out combos. Together with WM38 (overlay 0.609 >
 complement 0.502): raw complement geometry is not universally superior —
 the chip SOTA's complement value is coupled to pair-mask FAR control, which is
 the next port.
+
+## MixedWM38 — final 3-seed results with synthetic-normal (blind FAR fix)
+
+synthetic-normal = defect dies erased from real singles via min(x, 0.5): a
+blind all-negative training signal (no normal labels, no location knowledge).
+
+```
+| config (3 seeds)      | TRAIN bitF1 | EVAL bitF1      | exact | HOLDOUT bitF1 | NORMAL FAR      |
+|-----------------------|-------------|-----------------|-------|---------------|-----------------|
+| oracle                |       0.942 | 0.863 +-0.064   | 0.770 |         0.836 | 0.548 +-0.175   |
+| overlay+sn+neg003     |       0.924 | 0.641 +-0.019   | 0.248 |         0.614 | 0.031 +-0.026   |
+| overlay+sn            |       0.906 | 0.581 +-0.022   | 0.178 |         0.554 | 0.001 +-0.001   |
+| fcm_pm_pm+sn+neg003   |       0.835 | 0.540 +-0.035   | 0.254 |         0.487 | 0.058 +-0.031   |
+```
+
+Findings: (1) synthetic-normal completely fixes NORMAL FAR (overlay 0.562 ->
+0.001) at ~0.03 bitF1 cost; with neg003 the winner reaches bitF1 0.641 +-0.019
+(74% of oracle) at NORMAL FAR 0.031 — 18x lower than the oracle trained on
+real mixed data (0.548 +-0.175, unstable). (2) The oracle cannot control false
+alarms without a normal concept; the synthesis pipeline solves it by design.
+Headline: zero multi labels, zero normal labels, zero location knowledge ->
+74% of oracle bitF1 with 18x lower false-alarm rate.
