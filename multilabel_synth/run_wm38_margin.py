@@ -48,6 +48,9 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--n-test", type=int, default=3000)
+    ap.add_argument("--val-mode", choices=["combo", "easy"], default="combo",
+                    help="combo: synthetic combos in val (hard). easy: singles+"
+                         "normals only (in-dist, saturates like the chip val)")
     args = ap.parse_args()
 
     X, Y = load_wm38()
@@ -69,12 +72,18 @@ def main():
     trY = np.concatenate([bY, sY[aug], np.zeros((len(nX), 8), np.float32)])
     trY = trY + (1.0 - trY) * args.neg_target
 
-    # synthetic val (same recipe, disjoint seed): 600 combos + 300 singles + 300 normals
-    vX1, vY1 = synth_wm38("overlay", sX, sY, 600, args.seed + 777)
+    # val set: "combo" = hard synthetic combos (F1 stays informative);
+    # "easy" = singles + normals only (in-dist, saturates like the chip val)
     vs = r2.choice(len(sX), size=300, replace=False)
     vn = r2.choice(len(sX), size=300, replace=False)
-    vaX = np.concatenate([vX1, sX[vs], np.minimum(sX[vn], 0.5)])
-    vaY = np.concatenate([vY1, sY[vs], np.zeros((300, 8), np.float32)])
+    if args.val_mode == "combo":
+        vX1, vY1 = synth_wm38("overlay", sX, sY, 600, args.seed + 777)
+        vaX = np.concatenate([vX1, sX[vs], np.minimum(sX[vn], 0.5)])
+        vaY = np.concatenate([vY1, sY[vs], np.zeros((300, 8), np.float32)])
+    else:
+        vs2 = r2.choice(len(sX), size=600, replace=False)
+        vaX = np.concatenate([sX[vs2], sX[vs], np.minimum(sX[vn], 0.5)])
+        vaY = np.concatenate([sY[vs2], sY[vs], np.zeros((300, 8), np.float32)])
 
     torch.manual_seed(args.seed)
     model = SmallCNN(num_classes=8, in_ch=1).to(args.device)
