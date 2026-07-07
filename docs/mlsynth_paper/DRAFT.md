@@ -160,6 +160,11 @@ Operators with high object-loss probability train on false labels; the
 downstream ranking follows survival (Sec 5). CutMix at common settings drops
 the pasted object most of the time — its labels are lies at synthesis scale.
 
+Cross-dataset validation (MixedWM38, defect-pixel survival, 2000 pairs):
+overlay 1.000 > cutmix 0.579 > complement 0.527 > mixup 0.236 — exactly the
+downstream 3-seed bitF1 ordering (0.58-0.72 / 0.563 / 0.495 / 0.435). Label
+fidelity is a measurable, predictive property on both datasets.
+
 ### 4.3 Why not averaging
 
 Mixup's blend produces ghosted objects (both at half contrast) with soft
