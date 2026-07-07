@@ -293,3 +293,13 @@ real mixed data (0.548 +-0.175, unstable). (2) The oracle cannot control false
 alarms without a normal concept; the synthesis pipeline solves it by design.
 Headline: zero multi labels, zero normal labels, zero location knowledge ->
 74% of oracle bitF1 with 18x lower false-alarm rate.
+
+## MS-COCO — subsampled-scale boundary (honest negative)
+
+Natural split measured: train2017 = 24,186 single-cat (20%) / 93,080 multi-cat
+(79%); all 80 classes have singles but the tail is thin (baseball glove 2).
+At CPU-subsampled scale (cap 30/class singles, 1.5k synth, ResNet-18, 6ep):
+oracle 0.146 / cutmix 0.087 / mixup 0.062 / single_only 0.053 / copypaste
+0.052 eval bitF1 with train ~1.0 — everything collapses, no ranking signal.
+80-way multi-label needs GPU-scale training; recorded as a measured scale
+boundary, not a method result.

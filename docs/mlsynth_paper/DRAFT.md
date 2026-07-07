@@ -209,11 +209,15 @@ Positions the domain condition: overlay-type synthesis requires a
 signal-ordered pixel space (defect > normal), which wafer/palette domains
 have and RGB scenes do not.
 
-### 5.4 MS-COCO (scale) — PENDING
+### 5.4 MS-COCO (scale boundary — honest negative at subsampled scale)
 
-80 classes, natural single/multi split, subsampled protocol; copy-paste vs
-cutmix vs mixup vs single-only vs oracle. (Data downloading; section to be
-filled.)
+80 classes; natural split (train2017: 24,186 single-cat / 93,080 multi-cat).
+At CPU-subsampled scale (cap 30 singles/class, 1.5k synth, ResNet-18, 6 ep)
+ALL arms — including the oracle — collapse (train bitF1 ~1.0, eval 0.05-0.15):
+80-way multi-label with ~3.5 categories/image requires training scale that a
+subsampled protocol cannot provide. We report this as a measured scale
+boundary; credible COCO numbers require GPU-scale training (future work /
+camera-ready). No method ranking is claimed at this scale.
 
 ### 5.5 Ablations
 
