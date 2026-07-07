@@ -343,3 +343,14 @@ NORMAL FAR 0.041 -> 0.000, bitF1 kept). (2) NEW BEST single model: SmallCNN
 30ep f1-pick bitF1 0.7787 / NORMAL FAR 0.028 pre-reject — beats ResNet-18
 15ep 0.717; training is far from converged at 30 ep -> pushing epochs closes
 the oracle gap (0.863).
+
+## MixedWM38 — 60-epoch run: synthetic-real overfitting boundary + stage-3 third reproduction
+
+60ep (combo val, seed 0): real bitF1 PEAKS near ep30 (0.7787) then declines
+(ep52 pick: 0.7482) while synthetic val keeps rising to ep50 (0.954) — beyond
+~ep30 the model overfits the synthetic combo distribution at the expense of
+real mixed. Neither selection criterion (F1 or margin) on a synthetic val can
+see the real peak — an honest limitation of synthetic-val selection and an
+argument for a small real val when available. exact-match keeps rising
+(0.298 -> 0.482). Stage-3 reject third reproduction, cheapest yet: tau 0.9 ->
+coverage 98.1%, NORMAL FAR 0.062 -> 0.000, bitF1 kept (0.7465).
