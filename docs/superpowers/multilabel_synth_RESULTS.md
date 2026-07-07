@@ -328,3 +328,18 @@ val-F1-saturation pathology stems from an easy in-dist val; a well-built
 synthetic val keeps F1 informative. Boundary finding: margin selection
 matters when the val set saturates (chip); synthesis-based val removes the
 need. Honest scope: stage-2 evidence remains chip-domain.
+
+## MixedWM38 — easy-val stage-2 test (prediction failed, honest) + new best
+
+Prediction "easy in-dist val saturates F1 like the chip" FAILED: val_f1 kept
+setting records to ep30 (0.988); f1-pick(ep30) REAL bitF1 0.7787 BEAT
+margin-pick(ep26) 0.6958. The chip val-F1-saturation pathology requires the
+chip regime (pretrained 88M + LS0.295 + trivially easy val); scratch SmallCNN
+on WM38 never enters it within 30 ep. Stage-2 (margin selection) is therefore
+chip-scoped in the paper — two external attempts, both negative, reported.
+
+Silver linings: (1) stage-3 reject reproduced again (tau .9: coverage 94.4%,
+NORMAL FAR 0.041 -> 0.000, bitF1 kept). (2) NEW BEST single model: SmallCNN
+30ep f1-pick bitF1 0.7787 / NORMAL FAR 0.028 pre-reject — beats ResNet-18
+15ep 0.717; training is far from converged at 30 ep -> pushing epochs closes
+the oracle gap (0.863).
