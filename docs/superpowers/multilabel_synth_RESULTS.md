@@ -354,3 +354,11 @@ see the real peak — an honest limitation of synthetic-val selection and an
 argument for a small real val when available. exact-match keeps rising
 (0.298 -> 0.482). Stage-3 reject third reproduction, cheapest yet: tau 0.9 ->
 coverage 98.1%, NORMAL FAR 0.062 -> 0.000, bitF1 kept (0.7465).
+
+## MixedWM38 — label-fidelity survival (mechanism cross-validated)
+
+Weaker-source defect-pixel survival (2000 pairs): overlay 1.000 > cutmix 0.579
+> fcm_pm(complement g9n3) 0.527 > mixup(lam .5) 0.236 (92% of pairs lose >70%
+of the weaker defect to ghosting). Survival ordering exactly matches the
+downstream 3-seed bitF1 ordering (0.58-0.72 / 0.563 / 0.495 / 0.435) — label
+fidelity predicts multi-label performance on a second dataset (after MNIST).
