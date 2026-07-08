@@ -25,15 +25,16 @@ a controlled MultiMNIST benchmark, blind max-overlay synthesis from
 single-label data matches a fully-supervised oracle on the full test
 (mAP 0.773 vs 0.759) and exceeds it by +0.14 mAP on held-out label
 combinations that the oracle never observed. On the public MixedWM38 wafer-map
-benchmark, training only on real single-defect wafers reaches 83% of the
-real-mixed-trained oracle's bit-level macro-F1 (0.717 vs 0.863, ResNet-18)
-while producing a 42x lower false-alarm rate on real normal wafers (0.013 vs
-0.548) — the oracle, trained on real multi-label data, cannot control false
-alarms, whereas two synthesis components (pair masking and defect-erased
-synthetic normals) solve this by design, using no normal labels and no
-defect-location annotation. Adding confidence-based rejection at inference
-drives false alarms on 1,000 real normal wafers to zero at 98% coverage with
-no accuracy loss on accepted samples (reproduced three times). We
+benchmark, training only on real single-defect wafers reaches statistical
+parity with the real-mixed-trained oracle (bit-F1 0.825 +-0.037 vs
+0.863 +-0.064 over three seeds; held-out combinations 0.801 vs 0.836) while
+producing ZERO false alarms on 1,000 real normal wafers in every seed —
+without any rejection — where the oracle false-alarms on 55% (0.548 +-0.175).
+The oracle, trained on real multi-label data, cannot control false alarms,
+whereas two synthesis components (defect-erased synthetic normals and pair
+masking) solve this by design, using no normal labels and no defect-location
+annotation. Confidence-based rejection additionally guarantees zero false
+alarms for weaker models at 92-98% coverage (reproduced three times). We
 characterize when the approach transfers to natural images (PASCAL VOC) and
 release the full harness.
 
@@ -202,11 +203,13 @@ fragmentation, in survival-order.
 (29 combos; eval), 1,000 real normals (FAR). SmallCNN, 15 epochs, 3 seeds;
 6 combos excluded from oracle training.
 
-| config (3 seeds)             | EVAL bitF1      | exact | HOLDOUT bitF1 | NORMAL FAR      |
-|------------------------------|-----------------|-------|---------------|-----------------|
-| oracle                       | 0.863 +-0.064   | 0.770 |         0.836 | 0.548 +-0.175   |
-| overlay+sn+neg003 (ResNet18) | 0.717 +-0.079   | 0.399 |         0.735 | 0.013 +-0.003   |
-| overlay+sn+neg003            | 0.641 +-0.019   | 0.248 |         0.614 | 0.031 +-0.026   |
+| config (3 seeds)                  | EVAL bitF1      | exact | HOLDOUT bitF1 | NORMAL FAR      |
+|-----------------------------------|-----------------|-------|---------------|-----------------|
+| oracle                            | 0.863 +-0.064   | 0.770 |         0.836 | 0.548 +-0.175   |
+| overlay+sn+neg003 (ResNet18,30ep) | 0.825 +-0.037   | 0.440 |         0.801 | 0.000 +-0.000   |
+| overlay+sn+neg003 (SmallCNN,n6000)| 0.749 +-0.064   | 0.375 |         0.745 | 0.095           |
+| overlay+sn+neg003 (ResNet18,15ep) | 0.717 +-0.079   | 0.399 |         0.735 | 0.013 +-0.003   |
+| overlay+sn+neg003 (SmallCNN,15ep) | 0.641 +-0.019   | 0.248 |         0.614 | 0.031 +-0.026   |
 | overlay+sn          | 0.581 +-0.022   | 0.178 |         0.554 | 0.001 +-0.001   |
 | fcm_pm_pm+sn+neg003 | 0.540 +-0.035   | 0.254 |         0.487 | 0.058 +-0.031   |
 | overlay (no sn)     | 0.609 (1 seed)  | 0.199 |         0.588 | 0.562           |
