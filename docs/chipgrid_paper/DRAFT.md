@@ -70,9 +70,22 @@ Key findings:
    representation effect.
 4. **Robust to stage-1 error**: 10% synthetic chip-label noise -> 0.9870
    (the 6ch variant degrades to 0.9707 baseline even without noise).
-5. Encoding ablation (V0-V6): one-hot > integer-id (ordinal artifact) >
-   interpolated variants. TODO: pull full V0-V6 table from
-   docs/chipgrid/RESULTS.md.
+5. Encoding ablation (n=100/class, seed 42; measured):
+
+| Variant | Encoding             | in_ch | val_f1 | test_f1 | Reading                              |
+|---------|----------------------|-------|--------|---------|---------------------------------------|
+| V0      | fail-bit R only      | 1     | 43.59% | 43.85%  | no object info: ~41% structural cap   |
+| V2      | single-object binary | 2     | 65.43% | 64.79%  | one object channel frees one group    |
+| V1      | integer id / 5       | 2     | 95.05% | 97.26%  | integer channel nearly saturates      |
+| V3      | one-hot 5ch          | 6     | 96.89% | 98.79%  | zero information loss — best          |
+
+   V0->V1 +51pp (the object-identity channel carries the task); V1->V3
+   +1.84pp (one-hot separation beats ordinal integer compression — integer
+   ids impose a false order on categories). V2 sub-variants (any single
+   object: 51-66%) confirm the gain is the full identity map, not any one
+   object. Seed stability: V3 across seeds {1,7,42,100,234} = 96.9-99.4% val.
+   At n=220/class V3 reaches 99.45% val / 98.66% test; with 10% chip-label
+   noise 99.17%.
 
 ## 4 Discussion
 
