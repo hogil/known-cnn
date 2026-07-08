@@ -116,10 +116,70 @@ wafer prior art (ESWA 2023, CAIE 2025, diffusion 2025) with head-on
 differentiation; open-set/FAR}
 
 \section{Problem Setting}\label{sec:setting}
-\todo{port DRAFT.md Sec 3; content-blind constraint; metrics incl.\ NORMAL-FAR}
+
+Let the label space contain $K$ defect types; a sample's target is a
+$K$-bit multi-hot vector. The training pool contains only samples with
+exactly one positive bit (real singles). No multi-label sample, no normal
+(all-negative) label, and no location or mask annotation is available at
+training time --- we call this the \emph{content-blind} constraint,
+motivated by the fab: a defect's location is precisely what inspection is
+trying to find, so assuming it at training time is circular. Evaluation
+uses genuine multi-label samples ($\geq 2$ positive bits) and real
+all-negative normals. Metrics: bit-F1 (macro-F1 over the $K$ bits at
+threshold $0.5$), NORMAL-FAR (fraction of real normal samples raising any
+alarm), exact-match, and mAP for literature comparability; mean positive
+and negative predicted probabilities serve as calibration diagnostics.
 
 \section{Label-Faithful Synthesis}\label{sec:method}
-\todo{port DRAFT.md Sec 4; operators; Def.~fidelity; survival measurement}
+
+\subsection{Synthesis operators}
+
+Given two singles $(x_a, a)$ and $(x_b, b)$, an operator produces a
+labeled pair sample $(\tilde{x}, \{a,b\})$:
+\begin{itemize}
+\item \textbf{overlay}: per-pixel $\max$ --- in signal-ordered spaces
+  (defect intensity dominates background) both objects survive whole; hard
+  label. The domain analog of the chip min-blend.
+\item \textbf{complement (FCM)}: a $G{\times}G$ grid ($G{=}3N$, e.g.\ 9) is
+  randomly partitioned into $n$ groups; mix$_i$ = $x_b$ as base with
+  $x_a$'s group-$i$ cells overwritten. The $n$ mixes jointly cover $x_a$
+  exactly once (full cover); hard labels.
+\item \textbf{pair mask}: for each complement mix, an additional sample
+  keeps $x_a$'s cells and erases $x_b$'s defects; target: bit $a$ at a
+  soft $0.65$, all else negative --- teaching ``near-normal map with weak
+  fragments $\Rightarrow$ low confidence''.
+\item \textbf{synthetic normals}: defect pixels erased from real singles
+  ($\min(x, v_{\text{normal}})$), yielding all-negative samples without
+  any normal label.
+\item Baselines: CutMix~\cite{yun2019cutmix} (rectangle patch),
+  Mixup~\cite{zhang2018mixup} (convex blend, soft labels), copy-paste
+  (crops onto backgrounds, cf.~\cite{ghiasi2021copypaste}), single-only
+  (no synthesis), and the oracle (real multi-label training --- a ceiling,
+  not a rival).
+\end{itemize}
+
+\subsection{Label fidelity}
+
+For operator $T$, the survival $S_i$ of source $i$ is the fraction of its
+class evidence preserved in $\tilde{x}$; the fidelity is
+$\phi(T) = \mathbb{E}[\min(S_a, S_b)]$ and the catastrophe rate
+$\rho(T) = P(\min(S_a,S_b) < s_0)$ at detectability threshold $s_0$.
+Fidelity is measured \emph{before any training} (Table~\ref{tab:fidelity})
+and predicts the downstream operator ranking in every family we test.
+Operators with high $\rho$ train on false labels: at common settings CutMix
+loses the pasted object in most samples --- its synthesized labels are
+lies at scale.
+
+\subsection{Max, not average}
+
+Averaging (Mixup) and joining (overlay) are both ``combinations,'' with
+opposite outcomes in shared-coordinate spaces: averaging ghosts both
+objects (uniform margin shrinkage; measured under-confidence), while the
+per-pixel max keeps the stronger signal intact with hard labels. In
+disjoint-coordinate spaces (text vocabularies) averaging preserves
+per-coordinate evidence and becomes the correct operator --- the invariant
+is preserved evidence, not any fixed operation
+(Sec.~\ref{sec:experiments}).
 
 \begin{table}[t]
 \centering
