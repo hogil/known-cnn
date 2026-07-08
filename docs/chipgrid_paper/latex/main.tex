@@ -1,0 +1,102 @@
+% Paper C: object-grid wafer classification / categorical-resize rule
+% Skeleton (article style; retarget to IEEE T-Semi (IEEEtran) at submission).
+% Prose source: ../DRAFT.md
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\title{A 1.16M-Parameter Object-Grid Network Beats an 88M Pixel CNN for
+Wafer Map Classification:\\ Categorical Signals Must Not Be Interpolated}
+\author{\todo{authors}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Wafer-map defect classification is dominated by large pixel CNNs applied
+to high-resolution fail-bit images. We show that a two-stage object-aware
+pipeline --- a chip-level classifier that labels each die region with an
+object type, followed by a 1.16M-parameter CNN over the native
+$32{\times}32$ chip-grid of one-hot object labels --- reaches val macro-F1
+$0.9946$ on a 33-class wafer benchmark, beating an 88M ImageNet-pretrained
+ConvNeXtV2 on raw pixels ($0.9851$) with a $76\times$ smaller model and
+${\sim}750\times$ faster training, and exceeding the $0.9919$ oracle
+ensemble ceiling of the constituent models. The enabling factor is
+representational: object-identity maps are \emph{categorical}, and any
+interpolating resize corrupts them --- the same information presented as
+an interpolated 384\,px compound image caps at $0.9784$, and bicubic
+resizing manufactures fractional object identities on $6.5\%$ of pixels of
+a typical map. Block-integer expansion or native-resolution processing
+removes this ceiling. The pipeline is robust to $10\%$ chip-classifier
+error ($0.9917$ at full data) and, counter-intuitively, drops the raw
+pixel channel: re-presenting pixels after stage 1 hurts ($0.9707$ vs
+$0.9946$). A 10-seed experiment on real public WM-811K maps supports the
+categorical principle ($+0.060$ macro-F1 over interpolated-grayscale
+input).
+\end{abstract}
+
+\section{Introduction}\label{sec:intro}
+\todo{port DRAFT.md Sec 1 prose}
+
+\section{Method}\label{sec:method}
+\todo{port DRAFT.md Sec 2: stage-1 inline-crop chip CNN; 6-conv ChipGridCNN;
+block\_expand rule}
+
+\section{Experiments}\label{sec:experiments}
+
+\begin{table}[t]
+\centering
+\caption{Fair-evaluation comparison (same split/protocol; measured).}
+\label{tab:main}
+\begin{tabular}{lllcc}
+\toprule
+Model & Input & Params & val\_f1 & test\_f1 \\
+\midrule
+R-only ConvNeXtV2 (pretrained) & 1024\,px pixels & 88M & 0.9851 & --- \\
+Compound 3ch BICUBIC 384       & interpolated    & 88M & 0.9784 & 0.9736 \\
+Obj-only small CNN             & $32^2$ one-hot  & 0.4M & 0.9844 & --- \\
+V3 + pixels (6ch)              & grid + pixels   & 1.16M & 0.9707 & --- \\
+\textbf{V3 obj-only (ours)}    & $32^2{\times}5$ one-hot & \textbf{1.16M} & \textbf{0.9946} & \textbf{0.9872} \\
+Oracle ceiling (either-correct)& ---             & ---  & 0.9919 & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Encoding ablation ($n{=}100$/class, seed 42; measured).}
+\label{tab:encoding}
+\begin{tabular}{llccc}
+\toprule
+Variant & Encoding & in\_ch & val\_f1 & test\_f1 \\
+\midrule
+V0 & fail-bit pixels only  & 1 & 43.59\% & 43.85\% \\
+V2 & single-object binary  & 2 & 65.43\% & 64.79\% \\
+V1 & integer id $/5$       & 2 & 95.05\% & 97.26\% \\
+V3 & one-hot 5ch           & 6 & \textbf{96.89\%} & \textbf{98.79\%} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\todo{port DRAFT.md Sec 3 incl. 3.1 WM-811K real anchor (10 seeds:
+nearest+one-hot 0.7633 $>$ nearest-gray 0.7248 $>$ bicubic-gray 0.7036)}
+
+\section{Discussion}\label{sec:discussion}
+\todo{port DRAFT.md Sec 4 prose (sufficiency, pixels-as-noise, operations,
+composition with companion work)}
+
+\section{Conclusion}\label{sec:conclusion}
+\todo{write from DRAFT.md headline claims}
+
+\bibliographystyle{IEEEtran}
+% \bibliography{refs}
+\todo{refs.bib per DRAFT.md Sec 5 (verify WM-811K Wu2015, MixedWM38
+Wang2020, ConvNeXtV2 Woo2023, R-CNN)}
+
+\end{document}
