@@ -444,3 +444,13 @@ real normals is >=0.99 for 80% of them, so even tau=0.99 leaves NORMAL FAR
 The reliability advantage is created by the TRAINING design (synthetic
 normals + pair-mask + neg-target shaping the confidence geometry), not by
 the rejection stage; the oracle cannot buy it with more real data.
+
+## MixedWM38 — combo-support hypothesis rejected (delta term finalized)
+
+Synthesizing only the 29 REAL combos (support knowledge, no images/labels)
+does not recover joint accuracy: 4-mix exact stays 0.000, 3-mix 0.117->0.158
+marginal, 2-mix drops (budget split). The oracle's privilege is therefore not
+knowledge of WHICH combos occur but the APPEARANCE INTERACTIONS of real
+higher-order mixes — an image-distribution gap no label-side knowledge can
+close under independent-union synthesis. This finalizes the delta term of
+Prop 1: bit-level evidence composes; joint appearance does not.
