@@ -26,12 +26,44 @@ adds noise (obj-only 0.9946 vs obj+pixels 0.9707).
 
 ## 1 Introduction
 
-- Wafer maps are grids of dies, not natural images; pixel CNNs ignore this.
-- Two-stage: (1) per-chip object classifier (5 classes) on 200x200 crops;
-  (2) wafer classifier on the 32x32 grid of chip-object labels (one-hot).
-- Headline: 76x smaller, 750x faster, +0.95pp over the 88M pixel baseline,
-  exceeding the two-model oracle ceiling — the grid representation is the
-  contribution, not model scale.
+A wafer map is not a natural image. It is a lattice of dies, each of which
+either carries a defect object of some type or does not; the wafer-level
+defect class is defined by WHICH object types occupy WHICH regions of that
+lattice. The dominant approach nevertheless treats the rendered map as a
+photograph: a large ImageNet-pretrained CNN consumes a high-resolution
+fail-bit image and is asked to rediscover, through tens of millions of
+parameters, structure that the manufacturing process already made explicit.
+
+We propose to make the structure explicit instead. A two-stage pipeline
+first classifies each die-region crop with a small chip-level object
+classifier, producing a 32x32 grid of categorical object labels; a
+1.16M-parameter CNN then classifies the wafer directly from the one-hot
+encoding of that native grid. On a 33-class benchmark under a fixed
+fair-evaluation protocol, this reaches val macro-F1 0.9946 — beating the
+88M pixel baseline (0.9851) with a 76x smaller model and ~750x faster
+training (<1 minute), and exceeding the 0.9919 oracle ceiling of the
+constituent pixel and grid models, which rules out an ensemble explanation:
+the REPRESENTATION is the contribution, not model capacity.
+
+Two findings explain why. First, object-identity maps are categorical, and
+any interpolating resize corrupts them — the same information presented as
+a bicubic-resized 384px compound image caps at 0.9784, and we show
+interpolation manufactures fractional object identities on 6.5% of pixels
+in a typical map. We formulate a simple rule (block-integer expansion or
+native-resolution processing; never interpolation) that removes this
+ceiling. Second, once stage 1 has consumed the pixel evidence, feeding
+pixels to stage 2 again is harmful (0.9707 with pixels vs 0.9946 without):
+the grid is a sufficient statistic and the raw channel is noise. A
+10-seed experiment on real public WM-811K maps supports the categorical
+principle (+0.060 macro-F1 for categorical treatment over standard
+interpolated-grayscale input).
+
+Contributions: (1) a two-stage object-grid representation with which a
+1.16M model surpasses an 88M pixel CNN and the two-model oracle ceiling;
+(2) the categorical-resize rule and its measured violation costs, on both
+synthetic and real public data; (3) robustness and encoding ablations
+showing the effect is representational (one-hot > integer-id > single-object
+> pixels-only; robust to 10% stage-1 error).
 
 ## 2 Method
 
@@ -89,13 +121,38 @@ Key findings:
 
 ## 4 Discussion
 
-- Why native categorical grids win: wafer classes are defined by WHICH
-  object occupies WHICH region of the die lattice; the 32x32 one-hot tensor
-  is the sufficient statistic, and interpolation manufactures classes that
-  do not exist (fractional object identities).
-- Practical: 1.16M model trains in <1 min — enables per-line retraining.
-- Relation to paper A: stage-1 chip labels come from single-defect
-  supervision; the two papers compose into an annotation-light wafer stack.
+**Why the native categorical grid wins.** The wafer class is a function of
+the object-occupancy pattern on the die lattice — nothing else. The 32x32
+one-hot tensor is therefore a sufficient statistic for the label, at a
+thousandth of the pixel input's dimensionality; everything a pixel CNN must
+learn to extract is already present, losslessly, in 5,120 binary values.
+Interpolation breaks exactly this sufficiency: a bicubic kernel averages
+adjacent identities into fractional values that correspond to no physical
+object, and the downstream network must then spend capacity separating
+manufactured ambiguity from real signal. Nearest-neighbor resampling at
+non-integer scale is not safe either — it duplicates and drops cells
+unevenly. Block-integer expansion is the only resize that preserves the
+statistic, and processing at native resolution makes the question moot.
+
+**Why pixels become noise.** Stage 1 already converted pixel evidence into
+object identity; re-presenting the raw channel to stage 2 offers no new
+information but adds palette variation, sensor noise, and rendering detail
+that the small network must learn to ignore — measured as a 2.4pp penalty
+(0.9707 vs 0.9946). Information should cross the stage boundary exactly
+once.
+
+**Operational consequence.** A 1.16M model that trains in under a minute on
+CPU-class hardware turns wafer-classifier maintenance from a scheduled
+retraining event into an interactive operation: per-line, per-product, even
+per-recipe models become affordable, and stage-1/stage-2 can be retrained
+independently (stage 2 tolerates 10% stage-1 error).
+
+**Composition with annotation-free multi-label training.** Stage 1 is
+trained from single-defect chip crops — the same single-label supervision
+studied in our companion work on multi-label synthesis. Together they form
+an annotation-light stack: single-defect crops are the only labeled input,
+from which chip-object labels, wafer-grid representations, and multi-defect
+recognition are all manufactured.
 
 ### 3.1 Real-data anchor: WM-811K (public)
 
