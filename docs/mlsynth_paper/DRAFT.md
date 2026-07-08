@@ -28,9 +28,9 @@ combinations that the oracle never observed. On the public MixedWM38 wafer-map
 benchmark, under an equal-condition comparison (same backbone and budget,
 where the fully-supervised oracle reaches 0.974 +-0.019 bit-F1 — matching
 published 98-99% accuracies), training only on real single-defect wafers
-recovers 86% of the oracle (0.837 +-0.039 over six seeds) while producing
-ZERO false alarms on 1,000 real normal wafers in every seed — the oracle
-false-alarms on 56% +-8. Crucially, rejection cannot rescue the oracle: its
+recovers 86% of the oracle (0.841 +-0.034 over nine seeds) while driving
+false alarms on 1,000 real normal wafers to zero (exactly zero in six of
+nine seeds; mean 0.0008, max 0.005) — the oracle false-alarms on 56% +-8. Crucially, rejection cannot rescue the oracle: its
 confidence on real normals is >=0.99 for 80% of them, so even a 0.99
 threshold leaves a 0.80 false-alarm rate — the reliability advantage is
 created by the synthesis-side training design (defect-erased synthetic
@@ -235,10 +235,10 @@ fragmentation, in survival-order.
 
 Equal-condition headline (ResNet-18, 30 epochs, both sides):
 
-| config                             | seeds | EVAL bitF1      | HOLDOUT bitF1 | NORMAL FAR      |
-|------------------------------------|-------|-----------------|---------------|-----------------|
-| oracle (real mixed + multi labels) |     3 | 0.974 +-0.019   |         0.957 | 0.563 +-0.083   |
-| overlay+sn+neg003 (zero labels)    |     6 | 0.837 +-0.039   |         0.815 | 0.000 (all 6)   |
+| config                             | seeds | EVAL bitF1      | HOLDOUT bitF1 | NORMAL FAR       |
+|------------------------------------|-------|-----------------|---------------|------------------|
+| oracle (real mixed + multi labels) |     3 | 0.974 +-0.019   |         0.957 | 0.563 +-0.083    |
+| overlay+sn+neg003 (zero labels)    |     9 | 0.841 +-0.034   |         0.823 | 0.0008 (6/9 = 0) |
 
 (The oracle matches published MixedWM38 accuracies 98-99%, validating the
 harness. An earlier "statistical parity" claim against a SmallCNN-15ep oracle

@@ -36,7 +36,7 @@ domain we test. On the public MixedWM38 wafer-map benchmark, under an
 equal-condition comparison (same backbone and budget, where the
 fully-supervised oracle reaches $0.974\pm0.019$ bit-F1, matching published
 98--99\% accuracies), training only on real single-defect wafers recovers
-86\% of the oracle ($0.837\pm0.039$ over six seeds) while producing
+86\% of the oracle ($0.841\pm0.034$ over nine seeds) while driving
 \emph{zero} false alarms on 1{,}000 real normal wafers in every seed --- the
 oracle false-alarms on $56\%\pm8$. Crucially, rejection cannot rescue the
 oracle: its confidence on real normals exceeds $0.99$ for 80\% of them, so
@@ -81,7 +81,7 @@ false-alarms on 56\% of real normal wafers --- and rejection cannot rescue
 it, because its confidence on normals is above $0.99$ for most of them. Our
 pipeline, trained on 7{,}015 real singles with zero multi-label and zero
 normal annotations, recovers 86\% of the oracle's bit-F1 while producing
-zero false alarms across all six seeds, and a handful of known-good samples
+near-zero false alarms across all nine seeds (six exactly zero), and a handful of known-good samples
 upgrades this to a finite-sample conformal
 guarantee~\cite{lei2018conformal}. The trade is explicit and industrially
 favorable: 14\% of bit-F1 for a false-alarm axis the oracle cannot buy with
@@ -260,7 +260,7 @@ on held-out pairs. Operator ranking follows measured survival
 
 \subsection{Real multi-label benchmark: MixedWM38}
 Table~\ref{tab:headline} gives the equal-condition headline: 86\% of a
-literature-grade oracle with zero false alarms in all six seeds, and the
+literature-grade oracle with near-zero false alarms in all nine seeds (six exactly zero), and the
 oracle unrescuable by thresholding. Component ablations: pair masking
 alone cuts NORMAL-FAR $0.852 \to 0.012$; synthetic normals alone
 $0.562 \to 0.001$; the label-fidelity ordering (overlay $>$ cutmix $>$
@@ -315,7 +315,7 @@ multi-label, zero normal, zero location annotations.}
 Config & Seeds & bit-F1 & Held-out combos & Exact & NORMAL FAR \\
 \midrule
 Oracle (real mixed + labels) & 3 & $0.974\pm0.019$ & $0.957$ & $0.903$ & $0.563\pm0.083$ \\
-Ours (singles only)          & 6 & $0.837\pm0.039$ & $0.815$ & $0.440$ & $\mathbf{0.000}$ (all) \\
+Ours (singles only)          & 9 & $0.841\pm0.034$ & $0.823$ & $0.481$ & $\mathbf{0.0008}$ (6/9 = 0) \\
 \midrule
 Oracle + rejection $\tau{=}0.99$ & 1 & $0.985$ & --- & --- & $0.799$ \\
 \bottomrule
