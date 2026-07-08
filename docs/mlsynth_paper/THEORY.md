@@ -118,8 +118,14 @@ guaranteed FAR controller, at measured coverage cost 2-8% of mixed samples.
 3. Operator ranking follows measured fidelity (P2) — confirmed 3/3 families.
 4. Outside superposition domains (natural RGB), blind joins fail and
    content-aware placement (masks) is required — observed (VOC/COCO).
-5. Conformal tau bounds FAR at alpha given exchangeability (P3) — real-normal
-   FAR 0.000 observed at tau=0.9.
+5. Conformal tau bounds FAR at alpha given exchangeability (P3) — VERDICT:
+   verified in the real-calibration regime (n=500 known-good samples:
+   alpha=0.05 -> realized 0.040; alpha=0.01 -> 0.006; coverage >= 99.5%).
+   Synthetic-normal calibration fails (realized FAR 0.97 at tau 0.045):
+   training on those synthetic normals collapses their scores, so the
+   score-space shift to real normals is large — exchangeability is the
+   binding assumption. Practically benign: known-good normals require no
+   defect annotation, so the guarantee costs zero labeling expertise.
 
 ## TODO for submission-grade rigor
 
