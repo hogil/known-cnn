@@ -84,11 +84,22 @@ Key findings:
 - Relation to paper A: stage-1 chip labels come from single-defect
   supervision; the two papers compose into an annotation-light wafer stack.
 
+### 3.1 Real-data anchor: WM-811K (public)
+
+On 1,779 real WM-811K maps (cca 8-class, categorical pixel values), the same
+small CNN over 10 seeds: nearest+one-hot 0.7633 +-0.052 > nearest-gray
+0.7248 +-0.049 > bicubic-gray 0.7036 +-0.055. Treating the map as
+CATEGORICAL (one-hot after category-preserving resize) beats the standard
+interpolated-grayscale input by +0.060 macro-F1 (7/10 paired seeds), with
+the gain driven primarily by categorical encoding (+0.039, 8/10). Honest
+scoping: the pure nearest-vs-bicubic component is within noise on these
+already-nearest-rendered 224px images; the dramatic interpolation ceiling is
+the synthetic 33-class result (0.9784 -> 0.9946). Real public data supports
+the thesis's core: categorical signals must be treated categorically.
+
 ## 5 Limitations / TODO before submission
 
-- [ ] WM-811K real-data anchor: reproduce the pipeline (or its grid-native
-      principle) on the public real benchmark — REQUIRED, currently all
-      benchmark numbers are synthetic-data internal.
+- [x] WM-811K real-data anchor — done (Sec 3.1), honest scoping noted.
 - [ ] V0-V6 full encoding table + per-class breakdown port.
 - [ ] Formal block_expand statement + corruption figure (BICUBIC on one-hot).
 - [ ] Baseline citations: wafer-map CNN literature (WM-811K lines), 2-stage
