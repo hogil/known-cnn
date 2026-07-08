@@ -125,11 +125,12 @@ Contributions:
   "Mixed-defect wafer map separation and detection based on single-defect
   wafer map"; (iii) SSRN 2025 diffusion+attention synthesis. Our
   differentiation: (a) label-fidelity mechanism — we measure WHY operators
-  differ and show mixup-style blending is the weakest operator (bitF1 0.435
-  vs 0.717 overlay on WM38); (b) the false-alarm axis these works do not
-  study — the real-mixed-trained oracle itself false-alarms on 55% of real
-  normals, while pair-mask + synthetic normals cut this 42x with zero normal
-  labels; (c) held-out-combination compositional protocol; (d) cross-domain
+  differ and show mixup-style blending is the weakest image operator (bitF1
+  0.435 vs 0.837 overlay stack on WM38); (b) the false-alarm axis these works
+  do not study — the real-mixed-trained oracle false-alarms on 56% +-8 of
+  real normals and cannot be rescued by thresholding, while synthetic normals
+  + pair masking drive this to zero with no normal labels; (c)
+  held-out-combination compositional protocol; (d) cross-domain
   scope (chip palette maps, MultiMNIST, VOC boundary); (e) training-free
   operators vs generative (diffusion) synthesis. TODO: obtain ESWA-2023
   protocol details/numbers for a direct-comparison paragraph.
@@ -260,11 +261,13 @@ Secondary configs:
 | mixup               | 0.435 +-0.013   | 0.070 |         0.400 | 0.087 +-0.109   |
 | single_only         | 0.232 +-0.035   | 0.014 |         0.204 | 0.778 +-0.126   |
 
-Claims: (i) synthesis recovers 74% of the oracle's bit-F1 with zero multi
-labels; (ii) the oracle cannot control false alarms (0.55 +-0.18 on real
-normals) — pair masking (0.852 -> 0.012 alone) and synthetic normals
-(0.562 -> 0.001) fix it by construction, 18-48x below the oracle; (iii)
-label-fidelity ordering reproduces (overlay > cutmix > mixup for bitF1).
+Claims: (i) synthesis recovers 86% of the equal-condition oracle's bit-F1
+with zero multi labels (headline table above); (ii) the oracle cannot
+control false alarms (0.563 +-0.083 on real normals, unrescuable by
+thresholding) — pair masking (0.852 -> 0.012 in isolation) and synthetic
+normals (0.562 -> 0.001) fix it by construction, to zero at the headline
+configuration; (iii) label-fidelity ordering reproduces (overlay > cutmix >
+fcm_pm > mixup for bitF1, matching measured survival).
 
 ### 5.3 PASCAL VOC 2007 (natural-scene boundary analysis)
 
