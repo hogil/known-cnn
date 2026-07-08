@@ -49,8 +49,66 @@ $\alpha{=}0.05$, $0.006$ at $\alpha{=}0.01$).
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
-% Ported from DRAFT.md Section 1 (v1.0 prose)
-\todo{port final intro prose from DRAFT.md --- content frozen, formatting pass only}
+
+Industrial visual inspection must recognize images containing several defect
+types at once, yet multi-label annotation of such images is rarely
+available: co-occurrences grow combinatorially, many combinations are rare
+or absent from any labeled archive, and overlapping patterns are genuinely
+ambiguous to annotate. What production lines do yield, cheaply and
+unambiguously, are single-defect examples. This inverts the usual
+weak-supervision setting: rather than multi-label images with missing labels
+(single-positive multi-label, SPML~\cite{cole2021spml,kim2022largeloss}),
+the training images themselves contain one category --- and the question is
+whether multi-label competence can be manufactured from them.
+
+We answer by synthesizing combination examples from single-label sources
+and show that the choice of synthesis operator is governed by one
+measurable quantity: \emph{label fidelity} --- the probability that every
+labeled object actually survives in the synthesized image. Operators that
+preserve object evidence (per-pixel max in signal-ordered spaces; vector
+averaging in disjoint-vocabulary text) rank above operators that destroy it
+(rectangle patching~\cite{yun2019cutmix}, pixel
+averaging~\cite{zhang2018mixup}), and the measured survival ordering
+predicts the downstream performance ordering in every domain we test (9/9
+pairwise orderings across three image families; a fourth, text, explains an
+apparent exception: the fidelity-maximizing operator is
+modality-dependent).
+
+The reliability result is the practical core. On the public MixedWM38
+benchmark~\cite{wang2020mixedwm38}, an equal-condition fully-supervised
+oracle reaches $0.974$ bit-F1 (matching published 98--99\% accuracies) but
+false-alarms on 56\% of real normal wafers --- and rejection cannot rescue
+it, because its confidence on normals is above $0.99$ for most of them. Our
+pipeline, trained on 7{,}015 real singles with zero multi-label and zero
+normal annotations, recovers 86\% of the oracle's bit-F1 while producing
+zero false alarms across all six seeds, and a handful of known-good samples
+upgrades this to a finite-sample conformal
+guarantee~\cite{lei2018conformal}. The trade is explicit and industrially
+favorable: 14\% of bit-F1 for a false-alarm axis the oracle cannot buy with
+more data.
+
+Our contributions are:
+\begin{enumerate}
+\item A stricter-than-SPML problem setting --- multi-label recognition from
+  genuinely single-label training images, evaluated on real multi-label
+  data and real normals, with no location annotation --- plus an
+  equal-condition oracle protocol validated against published benchmark
+  numbers.
+\item Label fidelity as a measurable, predictive property of synthesis
+  operators, with a superposition-domain theory that predicts where blind
+  synthesis matches the real-mix distribution, where it fails (natural
+  RGB), and which operator is correct per modality.
+\item False-alarm control by construction: defect-erased synthetic normals
+  and pair masking shape a confidence geometry that yields zero false
+  alarms at full coverage; conformal rejection adds a distribution-free
+  guarantee. The fully-supervised oracle, by contrast, is unrescuable by
+  thresholding.
+\item An anatomy of the remaining gap: bit-level evidence composes across
+  combination orders while joint appearance does not --- the oracle's true
+  advantage is the appearance interaction of real high-order mixes, not
+  knowledge of the combination support (both alternatives tested and
+  rejected).
+\end{enumerate}
 
 \section{Related Work}\label{sec:related}
 \todo{port from DRAFT.md Sec 2: mixing augmentations; SPML; single-to-mixed
