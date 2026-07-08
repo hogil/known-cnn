@@ -67,14 +67,30 @@ showing the effect is representational (one-hot > integer-id > single-object
 
 ## 2 Method
 
-- Stage 1: chip object CNN (bank_boundary / particle-type / scratch types /
-  invalid), trained on inline crops with true per-chip labels.
-- Stage 2: ChipGridCNN over 32x32xK one-hot object maps at NATIVE grid
-  resolution — zero interpolation anywhere.
-- **Categorical-resize rule**: any spatial resize of categorical maps uses
-  block-integer expansion (block_expand: integer px/cell, remainder spread),
-  never bicubic/nearest interpolation. TODO: formal statement + failure
-  example figure.
+**Stage 1 — chip object classifier.** A CNN classifies each 200x200 die
+crop into 5 object classes (bank_boundary, fork, scratch, scratch_rot,
+invalid_main). Crops are saved inline during wafer generation with true
+per-chip object labels (75% primary + 25% mixed environments), avoiding
+post-hoc folder labeling errors. Stage-1 inference over a wafer yields a
+32x32 object-identity map (one id per die region).
+
+**Stage 2 — ChipGridCNN over the native grid.** The wafer classifier
+consumes the 32x32xK one-hot encoding of the object map at NATIVE grid
+resolution — zero interpolation anywhere in the pipeline. Architecture
+(measured 1.16M params): six 3x3 conv layers (64-64-128/s2-128-256/s2-256,
+BatchNorm+GELU), global average pooling, dropout 0.1, linear head. No
+pretraining; trains in under a minute.
+
+**Categorical-resize rule (block_expand).** When a categorical map must be
+spatially resized (e.g., for a pixel-CNN consumer), the only
+category-preserving operation is block-integer expansion: each source cell
+maps to an integer block of output pixels (target_size // grid px/cell),
+with the remainder rows/columns distributed evenly among cells — never
+bicubic (creates fractional identities; measured 6.5% fractional pixels on
+a typical map) and never naive nearest at non-integer scale (duplicates/
+drops cells unevenly). Reference implementation: `block_expand_2d(map,
+H, W)` — integer division for the base block, remainder spread by even
+striding; output contains exactly the input's value set (0% fractional).
 
 ## 3 Experiments (all measured)
 
