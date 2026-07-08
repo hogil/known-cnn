@@ -71,3 +71,9 @@ sota_h100/__pycache__/
 
 # local synthetic data (images/positions) — never commit (CLAUDE.md: images live on E:/D: local)
 data/
+.env
+*.token
+*token*.json
+hf_token*
+.hf_token
+*_secret*
