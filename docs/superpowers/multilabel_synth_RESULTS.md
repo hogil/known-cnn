@@ -454,3 +454,16 @@ knowledge of WHICH combos occur but the APPEARANCE INTERACTIONS of real
 higher-order mixes — an image-distribution gap no label-side knowledge can
 close under independent-union synthesis. This finalizes the delta term of
 Prop 1: bit-level evidence composes; joint appearance does not.
+
+## WM-811K (real, public) — categorical-treatment anchor for paper C
+
+cca 8-class real maps (1,779; values {0,128,255}), SmallCNN, 10 seeds:
+A nearest+one-hot 0.7633 +-0.0524 > C nearest-gray 0.7248 +-0.0485 >
+B bicubic-gray 0.7036 +-0.0552. Categorical treatment beats standard
+interpolated-grayscale input by +0.060 macro-F1 (7/10 paired seeds); the
+gain is driven primarily by one-hot categorical ENCODING (A-C +0.039, 8/10),
+while the pure nearest-vs-bicubic resize effect is within noise here (C-B
++0.021, 5/10) — the cca renders are already nearest-upscaled 224px, limiting
+interpolation damage. Honest scoping: real-data support for "treat
+categorical signals categorically"; the dramatic interpolation ceiling
+remains the synthetic 33-class result (0.9784 -> 0.9946).
