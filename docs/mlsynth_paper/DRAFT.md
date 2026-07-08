@@ -43,32 +43,58 @@ release the full harness.
 
 ## 1 Introduction
 
-- Para 1 (problem): multi-label defect recognition; annotation infeasibility
-  in fabs (combinatorial co-occurrence, rare combos, ambiguity). Single-label
-  data is what production actually yields.
-- Para 2 (setting): train on singles only; evaluate on genuine multi-label
-  data. This resembles single-positive multi-label (SPML) but is stricter and
-  cleaner: instead of masking labels of multi-label images, the training
-  images themselves contain a single category (natural in industry).
-- Para 3 (approach + mechanism): synthesize combinations from singles. The
-  governing variable is label fidelity: synthesis that drops a labeled object
-  trains the model on false labels. We measure per-operator survival rates and
-  show they predict downstream ranking.
-- Para 4 (results): MultiMNIST — blind overlay beats the oracle on held-out
-  combos (+0.14, ~18 sigma); MixedWM38 — 74% of oracle bit-F1 with 18x lower
-  false alarms using zero multi/normal labels; VOC — boundary analysis for
-  natural scenes.
-- Para 5 (contributions):
-  1. Problem framing: multi-label from single-label supervision, evaluated on
-     real multi-label data (public benchmark), no location annotation.
-  2. Label-fidelity analysis: a measurable property of synthesis operators
-     that predicts multi-label performance; whole-object hard-label synthesis
-     dominates blending.
-  3. Compositional generalization: synthesis covers combinations absent from
-     any real training set; the fully-supervised oracle collapses there.
-  4. False-alarm control by construction: pair masking + defect-erased
-     synthetic normals cut real-normal false alarms 18-48x below real-data
-     training, without normal labels.
+Industrial visual inspection must recognize images containing several defect
+types at once, yet multi-label annotation of such images is rarely available:
+co-occurrences grow combinatorially, many combinations are rare or absent
+from any labeled archive, and overlapping patterns are genuinely ambiguous to
+annotate. What production lines do yield, cheaply and unambiguously, are
+single-defect examples. This inverts the usual weak-supervision setting:
+rather than multi-label images with missing labels (single-positive
+multi-label, SPML), the training images themselves contain one category —
+and the question is whether multi-label competence can be manufactured from
+them.
+
+We answer by synthesizing combination examples from single-label sources and
+show that the choice of synthesis operator is governed by one measurable
+quantity: label fidelity — the probability that every labeled object
+actually survives in the synthesized image. Operators that preserve object
+evidence (per-pixel max in signal-ordered spaces; vector averaging in
+disjoint-vocabulary text) rank above operators that destroy it (rectangle
+patching, pixel averaging), and the measured survival ordering predicts the
+downstream performance ordering in every domain we test (9/9 pairwise
+orderings across three image families; a fourth, text, explains an apparent
+exception: the fidelity-maximizing operator is modality-dependent).
+
+The reliability result is the practical core. On the public MixedWM38
+benchmark, an equal-condition fully-supervised oracle reaches 0.974 bit-F1
+(matching published 98-99% accuracies) but false-alarms on 56% of real
+normal wafers — and rejection cannot rescue it, because its confidence on
+normals is above 0.99 for most of them. Our pipeline, trained on 7,015 real
+singles with zero multi-label and zero normal annotations, recovers 86% of
+the oracle's bit-F1 while producing zero false alarms across all six seeds,
+and a handful of known-good samples upgrades this to a finite-sample
+conformal guarantee. The trade is explicit and industrially favorable:
+14% of bit-F1 for a false-alarm axis the oracle cannot buy with more data.
+
+Contributions:
+1. A stricter-than-SPML problem setting — multi-label recognition from
+   genuinely single-label training images, evaluated on real multi-label
+   data and real normals, with no location annotation — plus an
+   equal-condition oracle protocol that we validate against published
+   benchmark numbers.
+2. Label fidelity as a measurable, predictive property of synthesis
+   operators, with a superposition-domain theory that predicts where blind
+   synthesis matches the real-mix distribution, where it fails (natural RGB),
+   and which operator is correct per modality.
+3. False-alarm control by construction: defect-erased synthetic normals and
+   pair masking shape a confidence geometry that yields zero false alarms at
+   full coverage; conformal rejection adds a distribution-free guarantee.
+   The fully-supervised oracle, by contrast, is unrescuable by thresholding.
+4. An anatomy of the remaining gap: bit-level evidence composes across
+   combination orders while joint appearance does not — the oracle's true
+   advantage is the appearance interaction of real high-order mixes, not
+   knowledge of the combination support (both alternatives tested and
+   rejected).
 
 ## 2 Related Work
 
