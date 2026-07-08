@@ -75,8 +75,36 @@ attainable bit-F1 is monotone decreasing in rho and increasing in phi.
 Prediction: downstream ranking follows fidelity ranking. Verified on three
 dataset families (MNIST, WM38, VOC): survival ordering = bit-F1 ordering in
 all three (9/9 pairwise orderings correct).
-TODO: exact constants; extend from noise-rate argument to partial-evidence
-(S in (s0,1)) via a signal-strength-dependent margin argument.
+**Partial survival (S in (s0,1)): margin-shrinkage argument.** Survival does
+not merely gate detectability; it scales the evidence margin. If a clean
+single of class k induces logit margin m_k at the Bayes-optimal predictor,
+a synthesized sample whose class-k evidence survives at rate S contributes
+class-k evidence with margin ~ S * m_k (evidence is sub-additive in the
+preserved fraction; exactly proportional when evidence is a sum of
+independent per-pixel/per-term contributions). Consequences:
+(i) the BCE risk minimizer's confidence on bit k is monotone increasing in
+S — training on partially-surviving positives teaches calibrated but LOWER
+confidence; (ii) any thresholded metric (bit-F1 at 0.5, exact-match) fails
+exactly when S * m_k falls below the threshold margin, while ranking metrics
+(mAP) degrade more slowly — matching the observed pattern that mAP washes
+out operator differences that bit-F1 exposes.
+
+This separates the two failure modes qualitatively:
+- **Mixup = uniform margin shrinkage.** Every sample survives at S ~ 1/2 in
+  shared-coordinate spaces (pixel ghosting): no label is false, but ALL
+  positive margins are halved -> systematically under-confident positives
+  (measured: WM38 mixup pos_prob 0.37 vs overlay 0.60) with low FAR — a
+  calibration failure, not a label failure.
+- **CutMix = bimodal catastrophe.** Survival is near 1 for some samples and
+  near 0 for others (rectangle either misses or covers the object): margins
+  are intact for survivors but a rho-fraction of labels are FALSE positives
+  -> confident wrong supervision -> inflated false alarms (measured: WM38
+  cutmix NORMAL FAR up to 1.000) at moderate F1 — a label-noise failure.
+- **Text vec-average = no shrinkage.** With (near-)disjoint evidence
+  coordinates, averaging halves magnitudes but TF-IDF-normalized linear
+  models are scale-robust per coordinate; effective S ~ 1 — which is why the
+  mixup-analog WINS in text (0.402 vs concat 0.359). The operator is not the
+  invariant; preserved evidence is.
 
 ## 4 Distribution-free FAR control by conformal rejection
 
