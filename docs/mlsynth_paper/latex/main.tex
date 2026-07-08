@@ -341,15 +341,103 @@ Reuters (bit-F1)   & $0.221$ & $0.402$ (vec-avg) & $0.567$ & 71\% \\
 \end{table}
 
 \section{Theory}\label{sec:theory}
-\todo{port THEORY.md: Def.~superposition domain; Prop.~consistency (verdict:
-bit-level closure holds, joint fails via appearance interactions);
-Prop.~fidelity$\to$risk; Prop.~conformal FAR (real-cal verified)}
+
+\begin{definition}[Max-superposition domain]
+A domain is a max-superposition domain if the observation of co-occurring
+sources equals the pixelwise maximum of their solo observations,
+$x_{a,b} = x_a \vee x_b$ (up to noise): class evidence is joined, never
+replaced. Wafer maps (defect intensity $>$ normal die $>$ background) and
+inked digits qualify; natural RGB scenes do not --- opaque objects occlude.
+\end{definition}
+
+\begin{proposition}[Consistency and order closure]
+In a max-superposition domain with independently placed sources, overlay
+synthesis samples exactly the real 2-mix distribution, and since $\vee$ is
+associative, the synthesis family is closed under combination order.
+\end{proposition}
+
+\emph{Empirical verdict.} Bit-level closure holds (2/3/4-mix bit-F1
+$0.784/0.671/0.628$ from pair-only training); joint prediction does not
+(exact $0.699/0.143/0.000$), and the deviation is not label-side: neither
+combination-support knowledge nor higher-order synthesis recovers it. The
+residual $\delta$ is the appearance interaction of real high-order mixes.
+
+\begin{definition}[Label fidelity]
+For operator $T$, source survivals $S_a, S_b$ are the fractions of class
+evidence preserved in $\tilde{x}$; the fidelity is
+$\phi(T) = \mathbb{E}[\min(S_a,S_b)]$ and the catastrophe rate
+$\rho(T) = P(\min(S_a,S_b) < s_0)$.
+\end{definition}
+
+\begin{proposition}[Fidelity bounds synthesis label noise]
+Evidence below the detectability threshold makes the synthesized label a
+false positive for that source; the training distribution then carries
+class-conditional positive-label noise at rate $\rho(T)$, degrading
+achievable recall accordingly~\cite{natarajan2013noisy}. Partial survival
+$S \in (s_0, 1)$ scales the evidence margin by $\approx S$: thresholded
+metrics fail when $S\,m_k$ falls below the decision margin.
+\end{proposition}
+
+\emph{Empirical verdict.} Survival ordering equals performance ordering in
+all tested families; the two failure modes separate as predicted --- Mixup
+(uniform $S{\approx}1/2$) yields calibrated under-confidence, CutMix
+(bimodal $S$) yields confident false supervision and inflated false alarms.
+
+\begin{proposition}[Conformal FAR control]
+With $\tau$ set to the $\lceil (n{+}1)(1{-}\alpha)\rceil/n$ quantile of
+max-bit probabilities on $n$ calibration normals exchangeable with
+deployment normals, $P(\text{alarm on a test normal}) \leq \alpha$.
+\end{proposition}
+
+\emph{Empirical verdict.} Verified with 500 known-good samples (realized
+$0.040$ at $\alpha{=}0.05$; $0.006$ at $\alpha{=}0.01$); calibration on
+training-style synthetic normals violates exchangeability and fails.
 
 \section{Discussion and Limitations}\label{sec:discussion}
-\todo{port DRAFT.md Sec 6 (v1.0 prose)}
+
+\textbf{What each side owns.} Under equal conditions the oracle keeps a
+bit-F1 lead ($0.974$ vs $0.837$): real high-order mixes contain appearance
+interactions that independent-union synthesis cannot produce, and this gap
+is not closable from the label side. Conversely the oracle's false-alarm
+behavior is not closable from the inference side --- with confidence above
+$0.99$ on most real normals, no threshold separates its normals from
+defects. Each regime owns one axis; only the synthesis side's axis is
+available without annotation, and in inspection practice the false-alarm
+axis is typically the binding one.
+
+\textbf{Joint prediction lags} ($0.440$ vs $0.903$ exact-match): per-bit
+training composes evidence but not joint cardinality --- the same
+phenomenon behind the order-extrapolation result.
+
+\textbf{Compositional generalization} is decisive when the label space is
+large relative to observed combinations (MNIST) and vanishes when few bits
+cover all combinations (WM38's 8 bits; VOC scenes).
+
+\textbf{Model selection on synthetic data.} Real-mix performance peaks
+before synthetic-val metrics do; no synthetic-val criterion sees the real
+peak. A small real validation set outvalues any selection heuristic on
+synthetic data.
+
+\textbf{Scope.} One public benchmark with real mixed labels carries the
+industrial claim; chip-domain results use internal data; VOC/COCO are
+subsampled-scale boundary analyses, and full-scale SPML-protocol
+comparison remains future work.
 
 \section{Conclusion}\label{sec:conclusion}
-\todo{port DRAFT.md Sec 7 (v1.0 prose)}
+
+From single-label data alone --- no multi-label, no normal, no location
+annotation --- label-faithful synthesis trains multi-label recognizers
+that recover 86\% of an equal-condition fully-supervised oracle on real
+mixed data, exceed it on unseen combinations when the combination space is
+rich, and achieve a false-alarm regime the oracle cannot reach by any
+amount of real data or thresholding: zero false alarms at full coverage,
+with a finite-sample conformal guarantee available for the price of a
+handful of known-good samples. The governing quantity, label fidelity, is
+measurable before training and predicts operator rankings across four
+domain families; the superposition-domain condition predicts where the
+approach matches the real distribution and where it does not. What remains
+with the oracle is the appearance of real high-order interactions --- a
+boundary we quantify and leave open.
 
 \bibliographystyle{plainnat}
 % \bibliography{refs}
