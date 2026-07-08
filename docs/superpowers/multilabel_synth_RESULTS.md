@@ -474,3 +474,20 @@ overlay+sn+neg003 (ResNet-18, 30ep), 9 seeds: bitF1 0.8413 +-0.0339 (86.4%
 of the equal-condition oracle 0.974), holdout 0.8229, exact 0.4806, NORMAL
 FAR mean 0.0008 (exactly zero in six of nine seeds; max 0.005). Individual
 seeds: 0.858/0.773/0.845/0.881/0.799/0.865/0.879/0.835/0.837.
+
+## Plant Pathology 2021 (agriculture, RGB) + resource ceiling note
+
+Condition-type SEMANTICS (diseases co-occur on one leaf) but RGB-PHOTO
+representation. Lean 1-seed (CPU memory-bound; full 8.2k-image 3-seed run
+OOM-killed twice on the shared box): oracle 0.316 / overlay 0.425 / cutmix
+0.372 / mixup 0.347 — all clustered 0.32-0.43, no clean separation, oracle
+not dominant (undertrained at lean scale). This matches the VOC RGB pattern,
+NOT the wafer pattern. Refined thesis: the predictor of synthesis success is
+the REPRESENTATION being signal-ordered (wafer palette grade, X-ray density,
+TF-IDF), NOT the condition-type semantics per se. A condition-type task in a
+non-signal-ordered (RGB photo) space behaves like the natural-image boundary.
+
+Resource ceiling (honest): on the shared CPU box, full-size Plant (3 seeds,
+8.2k imgs RGB 128px) OOM-dies mid-run; ChestX-ray14 full (45GB) download
+failed to write on two attempts. CXR (grayscale = closer to signal-ordered,
+the key test of the refined thesis) and full-scale runs are GPU/'큰-머신'-gated.
