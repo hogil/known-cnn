@@ -401,3 +401,15 @@ Prop 1. Practical recipe stays pairs-only.
 Annotation efficiency (winner recipe, 30ep, seed 0): 500 singles -> bitF1
 0.617 (FAR 0.002); 2000 -> 0.697; 7015 -> 0.779. ~62 singles per class
 already yields 0.62 bitF1 with near-zero false alarms.
+
+## MixedWM38 — conformal FAR calibration (Prop 3 verdict)
+
+Real-normal calibration (n=500, held-out 500 real normals for test): guarantee
+HOLDS — alpha=0.05 -> realized FAR 0.040 (tau 0.527, coverage 99.97%);
+alpha=0.01 -> 0.006 (tau 0.672, coverage 99.47%); accepted bitF1 unchanged.
+Practical: normals are known-good samples requiring NO defect annotation, so
+finite-sample FAR control costs zero labeling expertise.
+Synthetic-normal calibration FAILS (tau 0.045 -> real FAR 0.97-0.99): training
+on the same synthetic normals collapses their scores; the score-space shift to
+real normals is large. Calibration must be exchangeable with deployment
+normals — an honest boundary of the annotation-free regime.
