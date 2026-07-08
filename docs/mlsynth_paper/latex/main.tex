@@ -274,9 +274,13 @@ VOC's natural split (56\% single-category / 44\% multi) supports
 synthesis: copy-paste beats the floor ($0.379\pm0.010$ vs
 $0.303\pm0.019$) and approaches the oracle ($0.410\pm0.076$), but no
 compositional advantage appears --- all methods drop together on
-held-out-pair scenes --- and on COCO-20 synthesis gains vanish. Consistent
-with the superposition-domain condition (Sec.~\ref{sec:theory}): natural
-scenes compose by occlusion, not by join.
+held-out-pair scenes --- and on COCO-20 synthesis gains vanish.
+\emph{Scoping:} the copy-paste arm uses the dataset's bounding boxes and is
+therefore a content-\emph{aware} reference probe, not one of our
+content-blind operators; every headline claim (WM38, MNIST, text) uses
+blind operators only. The natural-scene conclusion is precisely that blind
+synthesis fails outside superposition domains and location supervision
+becomes necessary --- as predicted (Sec.~\ref{sec:theory}).
 
 \subsection{Rejection, selection, and the conformal guarantee}
 Margin rejection reproduces three times: at $\tau{=}0.9$, coverage
