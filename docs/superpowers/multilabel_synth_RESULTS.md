@@ -413,3 +413,17 @@ Synthetic-normal calibration FAILS (tau 0.045 -> real FAR 0.97-0.99): training
 on the same synthetic normals collapses their scores; the score-space shift to
 real normals is large. Calibration must be exchangeable with deployment
 normals — an honest boundary of the annotation-free regime.
+
+## Reuters-21578 — 4th domain family (text), 3 seeds
+
+Natural split (5,995 single-topic train / 300 real multi-topic test, top-20).
+oracle 0.567 +-0.025 > vec_avg 0.402 +-0.023 > concat 0.359 +-0.020 >>
+single_only 0.221 +-0.007. Synthesis recovers 71% of the oracle from singles
+only — 4th family confirmed. OPERATOR FLIP: the averaging (mixup-analog)
+operator BEATS the join (concat) in text, the reverse of images. Explanation
+completes the theory: topic evidence lives on (nearly) disjoint feature
+coordinates (distinct vocabularies), so averaging preserves evidence; image
+classes share pixel coordinates, so averaging ghosts. The invariant law is
+evidence preservation (label fidelity), not any fixed operator — the
+fidelity-maximizing operator is determined by the modality's evidence
+geometry.
