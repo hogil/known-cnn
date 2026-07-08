@@ -290,6 +290,20 @@ while the synthetic val keeps improving — no synthetic-val criterion can see
 the real peak. A small real validation set, when available, is worth more
 than any selection criterion on synthetic data.
 
+### 5.7 Order extrapolation and annotation efficiency (WM38)
+
+Order extrapolation (pairs-only training, real mixes split by order): bit-F1
+extrapolates gracefully to orders never synthesized (2/3/4-mix:
+0.784/0.671/0.628) while exact-match collapses (0.699/0.143/0.000). Naive
+higher-order synthesis (+triples/+quads) hurts every metric: only 12 of 56
+possible 3-combos and 4 of 70 4-combos exist in WM38 — arbitrary-combo
+synthesis spends capacity on combinations that never occur. This isolates
+what the oracle really owns: knowledge of the combination SUPPORT, the one
+thing single-label data cannot supply (Sec Theory, P1 delta).
+
+Annotation efficiency (winner recipe): 500 real singles (~62/class) already
+reach bit-F1 0.617 with 0.002 NORMAL FAR; 2000 -> 0.697; 7015 -> 0.779.
+
 ## 6 Discussion & Limitations
 
 - The oracle remains ahead on full-test bit-F1 on WM38 (0.86 vs 0.64): real
