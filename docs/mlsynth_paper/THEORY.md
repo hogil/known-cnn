@@ -105,7 +105,16 @@ guaranteed FAR controller, at measured coverage cost 2-8% of mixed samples.
 1. In superposition domains, overlay-synthesis models approach the oracle on
    real mixes (P1) — observed: WM38 0.858/0.773 vs oracle 0.863.
 2. Pair-trained models extrapolate to higher-order mixes (P1 closure) —
-   order-extrapolation experiment running; falsifiable now.
+   VERDICT: partial. Bit-level detection extrapolates (2/3/4-mix bitF1
+   0.784/0.671/0.628); joint prediction does not (exact 0.699/0.143/0.000),
+   and naive higher-order synthesis hurts. Refinement: real higher-order
+   mixes are drawn from a SPARSE combination support (12/56 3-combos, 4/70
+   4-combos exist), violating the independence assumption. The delta term of
+   P1 is precisely the oracle's knowledge of the combination support — the
+   one thing single-label data cannot supply. This sharpens, not breaks, the
+   theory: closure holds at the evidence (bit) level where v is genuinely
+   associative; it fails at the joint level where co-occurrence is
+   structured.
 3. Operator ranking follows measured fidelity (P2) — confirmed 3/3 families.
 4. Outside superposition domains (natural RGB), blind joins fail and
    content-aware placement (masks) is required — observed (VOC/COCO).
