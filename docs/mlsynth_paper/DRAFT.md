@@ -382,26 +382,61 @@ axis, and only ours is available without annotation.
 
 ## 6 Discussion & Limitations
 
-- The oracle remains ahead on full-test bit-F1 on WM38 (0.86 vs 0.64): real
-  mixed wafers contain interactions beyond independent-union synthesis. The
-  industrial trade is explicit: -26% bit-F1 for 18x lower false alarms and
-  zero multi-label annotation.
-- Exact-match lags (joint calibration), consistent with per-bit training.
-- Compositional advantage is decisive when label space is large relative to
-  observed combos (MNIST 45 pairs); with 8 bits / 29 combos (WM38) the oracle
-  generalizes across combos and the holdout gap narrows.
-- Natural RGB scenes lack a signal ordering; blind overlay does not port —
-  content-aware pasting (with masks) or scene-aligned copy-paste is required.
-- Single real-world benchmark with public mixed labels (MixedWM38); chip-domain
-  results use internal data.
+**What each side owns.** Under equal conditions the oracle keeps a bit-F1
+lead (0.974 vs 0.837): real high-order mixes contain appearance interactions
+that independent-union synthesis cannot produce, and we show this gap is not
+closable from the label side — neither combination-support knowledge nor
+higher-order synthesis recovers it (Sec 5.10). Conversely, the oracle's
+false-alarm behavior is not closable from the inference side — with
+confidence above 0.99 on most real normals, no threshold separates its
+normals from defects (FAR 0.799 even at tau 0.99). Each regime owns one
+axis; only the synthesis side's axis is available without annotation, and in
+inspection practice the false-alarm axis is typically the binding one.
+
+**Joint prediction lags.** Exact-match trails the oracle (0.440 vs 0.903 at
+the headline configuration): per-bit training composes evidence but not
+joint cardinality, the same phenomenon behind the order-extrapolation result
+(bit-F1 extrapolates to unseen orders, exact-match does not).
+
+**When compositional generalization appears.** The synthesis advantage on
+held-out combinations is decisive when the label space is large relative to
+observed combinations (MNIST, 45 pairs: +0.14 over the oracle) and vanishes
+when few bits cover all combinations (WM38's 8 bits; VOC scenes, where all
+methods drop together on held-out-pair images).
+
+**Model selection on synthetic data.** Real-mix performance peaks before
+synthetic-val metrics do (0.818 at epoch 30 vs a monotonically rising val to
+epoch 50); no synthetic-val criterion — F1 or margin — sees the real peak. A
+small real validation set is worth more than any selection heuristic on
+synthetic data. Relatedly, margin-based checkpoint selection helps only in
+the regime where the val metric saturates (observed in the chip domain;
+absent on WM38) and is reported as a domain-scoped finding.
+
+**Guarantee boundary.** The conformal FAR guarantee requires calibration
+normals exchangeable with deployment normals: 500 known-good samples
+(annotation-free to collect) suffice, whereas training-style synthetic
+normals fail (their scores are collapsed by training itself).
+
+**Scope.** One public benchmark with real mixed labels carries the
+industrial claim (MixedWM38); chip-domain results use internal data;
+VOC/COCO results are subsampled-scale boundary analyses and the SPML
+protocol comparison at full scale remains future work (GPU-bound).
 
 ## 7 Conclusion
 
-Single-label supervision plus label-faithful synthesis trains multi-label
-recognizers that approach fully-supervised performance, exceed it on unseen
-label combinations, and — with pair masking and synthetic normals — beat it
-outright on false-alarm control, all without a single multi-label or normal
-annotation.
+From single-label data alone — no multi-label, no normal, no location
+annotation — label-faithful synthesis trains multi-label recognizers that
+recover 86% of an equal-condition fully-supervised oracle on real mixed
+data, exceed it on unseen combinations when the combination space is rich,
+and achieve a false-alarm regime the oracle cannot reach by any amount of
+real data or thresholding: zero false alarms at full coverage, with a
+finite-sample conformal guarantee available for the price of a handful of
+known-good samples. The governing quantity, label fidelity, is measurable
+before training and predicts operator rankings across four domain families;
+the superposition-domain condition predicts where the approach matches the
+real distribution and where it does not. What remains with the oracle is the
+appearance of real high-order interactions — a boundary we quantify and
+leave as the open problem.
 
 ---
 
