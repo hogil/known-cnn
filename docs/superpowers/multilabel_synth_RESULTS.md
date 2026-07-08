@@ -385,3 +385,19 @@ advantage in RGB. COCO-20 (s0): oracle 0.450 (signal restored vs 80-class
 the superposition-domain theory (Def 1): parity/compositional/zero-FAR are
 superposition-domain properties; in RGB synthesis yields modest (VOC) to no
 (COCO) gains and no compositional edge. The theory predicts both regimes.
+
+## MixedWM38 — order extrapolation + annotation efficiency (extrachain final)
+
+Order extrapolation (pairs-only training, real mixes by order): bit-level
+extrapolates gracefully (2/3/4-mix bitF1 0.784/0.671/0.628) but joint
+prediction does not (exact 0.699/0.143/0.000). Adding higher-order synthesis
+(+triples/+quads) HURTS everything: real higher-order mixes are not arbitrary
+joins — only 12 of 56 possible 3-combos and 4 of 70 4-combos exist in WM38.
+Synthesizing arbitrary combos wastes capacity on non-existent combinations.
+Key insight: the oracle's real privilege is knowledge of the COMBINATION
+SUPPORT, not the mixed images themselves — this identifies the delta term in
+Prop 1. Practical recipe stays pairs-only.
+
+Annotation efficiency (winner recipe, 30ep, seed 0): 500 singles -> bitF1
+0.617 (FAR 0.002); 2000 -> 0.697; 7015 -> 0.779. ~62 singles per class
+already yields 0.62 bitF1 with near-zero false alarms.
