@@ -183,11 +183,28 @@ already-nearest-rendered 224px images; the dramatic interpolation ceiling is
 the synthetic 33-class result (0.9784 -> 0.9946). Real public data supports
 the thesis's core: categorical signals must be treated categorically.
 
-## 5 Limitations / TODO before submission
+## 5 References (to compile into bibtex)
 
-- [x] WM-811K real-data anchor — done (Sec 3.1), honest scoping noted.
-- [ ] V0-V6 full encoding table + per-class breakdown port.
-- [ ] Formal block_expand statement + corruption figure (BICUBIC on one-hot).
-- [ ] Baseline citations: wafer-map CNN literature (WM-811K lines), 2-stage
-      detection analogies.
-- [ ] Fair-eval rerun at active-class-27 if class set changed since.
+- WM-811K dataset: Wu, Jang, Chen \& Lee, "Wafer Map Failure Pattern
+  Recognition and Similarity Ranking for Large-Scale Data Sets," IEEE
+  Trans. Semiconductor Manufacturing, 2015. (TODO-verify exact citation)
+- MixedWM38: Wang et al., IEEE TSM 2020 (deformable conv, mixed-type).
+- Representative wafer-map CNN lines on WM-811K (2-3 papers, TODO-verify:
+  recent TSM/JIM CNN classifiers reporting 96-99% on 9-class).
+- ConvNeXtV2: Woo et al., CVPR 2023 (FCMAE pretraining) — pixel baseline.
+- Two-stage detection analogy: R-CNN family (Girshick et al.) — regional
+  object hypotheses feeding a downstream classifier.
+- Companion work: multi-label from single-label synthesis (paper A).
+
+## 6 Status / TODO before submission
+
+- [x] Core experiments (V0-V3, robustness, fair-eval table) — in repo.
+- [x] WM-811K real-data anchor (Sec 3.1, 10 seeds, honest scoping).
+- [x] V0-V3 encoding table ported; V3 seed stability included.
+- [x] Corruption figure (BICUBIC 6.5% fractional vs block_expand 0%).
+- [x] Intro / Method / Discussion full prose.
+- [ ] Bibtex compile + TODO-verify citations against actual papers.
+- [ ] LaTeX port (after venue choice).
+- [ ] USER DECISION: rerun fair-eval at active-class-27 (class set grew
+      since the 33-class experiments) or scope claims to the measured
+      33-class protocol — either is defensible; rerun costs GPU/CPU time.
