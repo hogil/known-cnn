@@ -467,3 +467,10 @@ while the pure nearest-vs-bicubic resize effect is within noise here (C-B
 interpolation damage. Honest scoping: real-data support for "treat
 categorical signals categorically"; the dramatic interpolation ceiling
 remains the synthetic 33-class result (0.9784 -> 0.9946).
+
+## MixedWM38 — headline tightened to 9 seeds
+
+overlay+sn+neg003 (ResNet-18, 30ep), 9 seeds: bitF1 0.8413 +-0.0339 (86.4%
+of the equal-condition oracle 0.974), holdout 0.8229, exact 0.4806, NORMAL
+FAR mean 0.0008 (exactly zero in six of nine seeds; max 0.005). Individual
+seeds: 0.858/0.773/0.845/0.881/0.799/0.865/0.879/0.835/0.837.
