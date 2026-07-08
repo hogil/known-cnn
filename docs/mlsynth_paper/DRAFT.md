@@ -320,6 +320,40 @@ thing single-label data cannot supply (Sec Theory, P1 delta).
 Annotation efficiency (winner recipe): 500 real singles (~62/class) already
 reach bit-F1 0.617 with 0.002 NORMAL FAR; 2000 -> 0.697; 7015 -> 0.779.
 
+### 5.8 Fourth family: text (Reuters-21578) and the operator-flip
+
+Natural split (5,995 single-topic train / 300 real multi-topic test, top-20
+categories; TF-IDF + MLP, 3 seeds): oracle 0.567 +-0.025 > vec-average
+0.402 +-0.023 > concat 0.359 +-0.020 >> single-only 0.221 +-0.007. Synthesis
+recovers 71% of the oracle from singles in a non-vision modality. The
+operator ranking FLIPS versus images: averaging (the mixup analog) wins in
+text because topic evidence occupies (nearly) disjoint feature coordinates —
+averaging preserves per-coordinate evidence, whereas image classes share
+pixel coordinates and averaging ghosts them. The invariant law is evidence
+preservation (label fidelity); which operator maximizes it is determined by
+the modality's evidence geometry.
+
+### 5.9 Conformal FAR guarantee and its boundary
+
+Split-conformal threshold from 500 known-good real normals: realized FAR
+0.040 at alpha=0.05 and 0.006 at alpha=0.01, coverage >= 99.5% (guarantee
+holds; known-good samples require no defect annotation). Calibrating on
+training-style synthetic normals fails (realized FAR 0.97): training
+collapses their scores, so exchangeability with deployment normals is the
+binding assumption.
+
+### 5.10 What the oracle's advantage actually is
+
+Two hypotheses for the residual bit-F1 gap were tested and rejected: (i)
+combination support — synthesizing only the 29 real combos does not recover
+joint accuracy (4-mix exact 0.000 unchanged); (ii) order coverage — adding
+triples/quads hurts. The surviving explanation: real higher-order mixes
+contain appearance interactions (overlapping defects distort one another)
+that independent-union synthesis cannot produce. The oracle's advantage is
+the image distribution of real high-order mixes; conversely, rejection
+cannot buy the oracle our false-alarm control (Sec 5.2). Each side owns one
+axis, and only ours is available without annotation.
+
 ## 6 Discussion & Limitations
 
 - The oracle remains ahead on full-test bit-F1 on WM38 (0.86 vs 0.64): real
