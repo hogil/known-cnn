@@ -140,6 +140,20 @@ Contributions:
 
 ## 3 Problem Setting
 
+**Task family: superimposed-condition multi-label.** Two distinct problems
+share the "multi-label" name. In CONDITION-type multi-label, several states
+co-occupy one entity's shared support — defects interpenetrating one wafer,
+findings on one radiograph, topics interleaved through one document. In
+ENTITY-type multi-label (VOC/COCO-style), separate objects occupy disjoint
+scene regions — effectively detection with the boxes discarded, solvable
+per-object. Our problem, and our method, target the condition type: it is
+exactly where combinations cannot be annotated (states interpenetrate) and
+where join-synthesis is faithful (the superposition condition). The
+entity-type results (Sec 5.3-5.4) mark the task-family boundary: there,
+blind joins have no meaning, and detection-style tools are the natural
+fit. Reuters lands on the condition side (topics superimpose in one
+document) — and synthesis works there.
+
 Label space of K defect types; a sample's target is a K-bit multi-hot vector.
 Training pool: only samples with exactly one positive bit (real singles).
 No multi-label sample, no normal(all-negative) label, no location/mask
