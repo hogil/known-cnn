@@ -427,3 +427,20 @@ classes share pixel coordinates, so averaging ghosts. The invariant law is
 evidence preservation (label fidelity), not any fixed operator — the
 fidelity-maximizing operator is determined by the modality's evidence
 geometry.
+
+## MixedWM38 — fairness batch final (equal-condition comparison + oracle+reject)
+
+Equal condition (ResNet-18, 30ep): oracle 3-seed bitF1 0.974 +-0.019 (matches
+published MixedWM38 accuracy 98-99% — harness validated against literature),
+NORMAL FAR 0.563 +-0.083 (4 trainings: 0.446/0.629/0.613/0.945 — high and
+unstable). Ours 6-seed: 0.837 +-0.039 = 86% of the literature-grade oracle,
+NORMAL FAR 0.000 in ALL SIX seeds without rejection. The earlier "statistical
+parity" (vs SmallCNN-15ep oracle 0.863) is RETRACTED as a weak-oracle
+artifact — caught by our own fairness check.
+
+Oracle + rejection (F3): rejection CANNOT rescue the oracle. Its max-prob on
+real normals is >=0.99 for 80% of them, so even tau=0.99 leaves NORMAL FAR
+0.799 at 100% coverage — no threshold separates its normals from defects.
+The reliability advantage is created by the TRAINING design (synthetic
+normals + pair-mask + neg-target shaping the confidence geometry), not by
+the rejection stage; the oracle cannot buy it with more real data.
