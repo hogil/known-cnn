@@ -362,3 +362,14 @@ Weaker-source defect-pixel survival (2000 pairs): overlay 1.000 > cutmix 0.579
 of the weaker defect to ghosting). Survival ordering exactly matches the
 downstream 3-seed bitF1 ordering (0.58-0.72 / 0.563 / 0.495 / 0.435) — label
 fidelity predicts multi-label performance on a second dataset (after MNIST).
+
+## MixedWM38 — R-batch final (headline): oracle parity + zero FAR, 3 seeds
+
+ResNet-18 + overlay+sn+neg003, 30ep, 3 seeds: bitF1 0.825 +-0.037 vs oracle
+0.863 +-0.064 (within combined seed variance = statistical parity), holdout
+0.801 vs 0.836, and NORMAL FAR 0.000 on ALL THREE SEEDS without rejection
+(oracle: 0.548 +-0.175). SmallCNN n6000 30ep: 0.749 +-0.064 (data helps;
+backbone is the stronger lever). Epoch curve (SmallCNN): real bitF1 peaks
+0.818 @ ep30 while synthetic val rises monotonically to ep50 — figure-grade
+evidence that synthetic val cannot see the real peak. MNIST mixup 3-seed:
+0.666 +-0.010 (overlay 0.773: max-vs-avg gap +0.107 confirmed).
