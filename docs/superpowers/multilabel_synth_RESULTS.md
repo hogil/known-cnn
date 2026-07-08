@@ -373,3 +373,15 @@ backbone is the stronger lever). Epoch curve (SmallCNN): real bitF1 peaks
 0.818 @ ep30 while synthetic val rises monotonically to ep50 — figure-grade
 evidence that synthetic val cannot see the real peak. MNIST mixup 3-seed:
 0.666 +-0.010 (overlay 0.773: max-vs-avg gap +0.107 confirmed).
+
+## VOC 3-seed + held-out pairs / COCO-20 (natural-RGB boundary, final)
+
+VOC (20ep, cap100, 3 seeds): full bitF1 oracle 0.410 +-0.076 > copypaste
+0.379 +-0.010 > single_only 0.303 +-0.019 — synthesis clearly beats the floor
+and approaches the oracle on natural RGB. Held-out pairs: ALL methods collapse
+together (oracle 0.200, copypaste 0.208, floor 0.186) — no compositional
+advantage in RGB. COCO-20 (s0): oracle 0.450 (signal restored vs 80-class
+0.146), but synthesis ~= floor (cutmix 0.304 vs single 0.293). Consistent with
+the superposition-domain theory (Def 1): parity/compositional/zero-FAR are
+superposition-domain properties; in RGB synthesis yields modest (VOC) to no
+(COCO) gains and no compositional edge. The theory predicts both regimes.
