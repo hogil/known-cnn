@@ -25,16 +25,19 @@ a controlled MultiMNIST benchmark, blind max-overlay synthesis from
 single-label data matches a fully-supervised oracle on the full test
 (mAP 0.773 vs 0.759) and exceeds it by +0.14 mAP on held-out label
 combinations that the oracle never observed. On the public MixedWM38 wafer-map
-benchmark, training only on real single-defect wafers reaches statistical
-parity with the real-mixed-trained oracle (bit-F1 0.825 +-0.037 vs
-0.863 +-0.064 over three seeds; held-out combinations 0.801 vs 0.836) while
-producing ZERO false alarms on 1,000 real normal wafers in every seed —
-without any rejection — where the oracle false-alarms on 55% (0.548 +-0.175).
-The oracle, trained on real multi-label data, cannot control false alarms,
-whereas two synthesis components (defect-erased synthetic normals and pair
-masking) solve this by design, using no normal labels and no defect-location
-annotation. Confidence-based rejection additionally guarantees zero false
-alarms for weaker models at 92-98% coverage (reproduced three times). We
+benchmark, under an equal-condition comparison (same backbone and budget,
+where the fully-supervised oracle reaches 0.974 +-0.019 bit-F1 — matching
+published 98-99% accuracies), training only on real single-defect wafers
+recovers 86% of the oracle (0.837 +-0.039 over six seeds) while producing
+ZERO false alarms on 1,000 real normal wafers in every seed — the oracle
+false-alarms on 56% +-8. Crucially, rejection cannot rescue the oracle: its
+confidence on real normals is >=0.99 for 80% of them, so even a 0.99
+threshold leaves a 0.80 false-alarm rate — the reliability advantage is
+created by the synthesis-side training design (defect-erased synthetic
+normals and pair masking shaping the confidence geometry), not by any
+inference trick, and cannot be bought with more real data. A small set of
+known-good samples further yields a finite-sample conformal FAR guarantee
+(realized 0.040 at alpha=0.05, 0.006 at alpha=0.01). We
 characterize when the approach transfers to natural images (PASCAL VOC) and
 release the full harness.
 
@@ -203,10 +206,23 @@ fragmentation, in survival-order.
 (29 combos; eval), 1,000 real normals (FAR). SmallCNN, 15 epochs, 3 seeds;
 6 combos excluded from oracle training.
 
+Equal-condition headline (ResNet-18, 30 epochs, both sides):
+
+| config                             | seeds | EVAL bitF1      | HOLDOUT bitF1 | NORMAL FAR      |
+|------------------------------------|-------|-----------------|---------------|-----------------|
+| oracle (real mixed + multi labels) |     3 | 0.974 +-0.019   |         0.957 | 0.563 +-0.083   |
+| overlay+sn+neg003 (zero labels)    |     6 | 0.837 +-0.039   |         0.815 | 0.000 (all 6)   |
+
+(The oracle matches published MixedWM38 accuracies 98-99%, validating the
+harness. An earlier "statistical parity" claim against a SmallCNN-15ep oracle
+(0.863) is retracted as a weak-oracle artifact — caught by this fairness
+check. Oracle+rejection: max-prob on real normals >=0.99 for 80% of normals,
+so even tau=0.99 leaves FAR 0.799 — rejection cannot rescue the oracle.)
+
+Secondary configs:
+
 | config (3 seeds)                  | EVAL bitF1      | exact | HOLDOUT bitF1 | NORMAL FAR      |
 |-----------------------------------|-----------------|-------|---------------|-----------------|
-| oracle                            | 0.863 +-0.064   | 0.770 |         0.836 | 0.548 +-0.175   |
-| overlay+sn+neg003 (ResNet18,30ep) | 0.825 +-0.037   | 0.440 |         0.801 | 0.000 +-0.000   |
 | overlay+sn+neg003 (SmallCNN,n6000)| 0.749 +-0.064   | 0.375 |         0.745 | 0.095           |
 | overlay+sn+neg003 (ResNet18,15ep) | 0.717 +-0.079   | 0.399 |         0.735 | 0.013 +-0.003   |
 | overlay+sn+neg003 (SmallCNN,15ep) | 0.641 +-0.019   | 0.248 |         0.614 | 0.031 +-0.026   |
