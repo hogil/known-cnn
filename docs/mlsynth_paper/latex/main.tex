@@ -111,9 +111,46 @@ Our contributions are:
 \end{enumerate}
 
 \section{Related Work}\label{sec:related}
-\todo{port from DRAFT.md Sec 2: mixing augmentations; SPML; single-to-mixed
-wafer prior art (ESWA 2023, CAIE 2025, diffusion 2025) with head-on
-differentiation; open-set/FAR}
+
+\textbf{Mixing augmentations.} Mixup~\cite{zhang2018mixup} blends images
+and labels convexly --- designed as a regularizer for single-label
+training, not as a combination synthesizer; we show averaging ghosts both
+objects in shared-coordinate spaces (MNIST full mAP $0.666$ vs overlay
+$0.773$; WM38 bit-F1 $0.435$ vs $0.837$).
+CutMix~\cite{yun2019cutmix} replaces a rectangle with area-proportional
+soft labels --- as a synthesizer its label is frequently false (measured:
+at patch fraction $0.5$ the pasted object is $>70\%$ lost in $71\%$ of
+samples). Copy-Paste~\cite{ghiasi2021copypaste} pastes mask-cropped
+objects for instance segmentation --- it requires location/mask
+annotation, which our content-blind setting excludes. Our contribution is
+not a new pasting operation but the label-fidelity criterion, the
+single-to-multi bootstrap setting, and false-alarm control.
+
+\textbf{Single-positive multi-label.} SPML~\cite{cole2021spml} and its
+successors~\cite{kim2022largeloss} assume multi-label \emph{images} with
+one observed positive and recover the missing labels of existing images.
+Our setting is stricter and industrially natural: the training images
+themselves contain a single category, and we synthesize combination
+images that never existed, evaluating on real multi-label test data.
+
+\textbf{Mixed-type wafer maps.} On
+MixedWM38~\cite{wang2020mixedwm38}, fully-supervised methods reach
+98--99\% accuracy. Single-to-mixed prior art
+exists~\cite{eswa2023singletomixed} (mixup-based synthesis with rotation
+and noise filtering) and successors (separation-based and
+diffusion-based synthesis, 2025). We engage head-on: (a) we measure
+\emph{why} operators differ and show mixup-style blending is the weakest
+image operator; (b) none of these works study the false-alarm axis, where
+the real-mixed-trained oracle itself false-alarms on $56\%\pm8$ of real
+normals and cannot be rescued by thresholding, while our synthesis-side
+design drives it to zero with no normal labels; (c) we contribute the
+held-out-combination protocol, (d) cross-domain scope, and (e)
+training-free operators versus generative synthesis.
+
+\textbf{Selective prediction and noisy labels.} Our rejection stage uses
+split-conformal calibration~\cite{lei2018conformal}; the fidelity-to-risk
+argument connects to learning with class-conditional label
+noise~\cite{natarajan2013noisy}.
 
 \section{Problem Setting}\label{sec:setting}
 
@@ -211,7 +248,61 @@ Reuters (text)   & vec-average    & high (disjoint dims) & 1 \\
 \end{table}
 
 \section{Experiments}\label{sec:experiments}
-\todo{port DRAFT.md Sec 5.1--5.10}
+
+\subsection{Controlled mechanism study: MultiMNIST}
+Ten digit classes, 45 unordered pairs, 9 held out from the oracle;
+synthesis arms may generate all pairs from singles (3 seeds). Blind
+max-overlay matches the oracle on the full test (mAP $0.773$ vs $0.759$)
+and \emph{exceeds it by $+0.14$} on held-out combinations, where the
+oracle collapses ($0.759 \to 0.633$); every synthesis arm beats the oracle
+on held-out pairs. Operator ranking follows measured survival
+(Table~\ref{tab:fidelity}); mixup trails at $0.666\pm0.010$.
+
+\subsection{Real multi-label benchmark: MixedWM38}
+Table~\ref{tab:headline} gives the equal-condition headline: 86\% of a
+literature-grade oracle with zero false alarms in all six seeds, and the
+oracle unrescuable by thresholding. Component ablations: pair masking
+alone cuts NORMAL-FAR $0.852 \to 0.012$; synthetic normals alone
+$0.562 \to 0.001$; the label-fidelity ordering (overlay $>$ cutmix $>$
+complement $>$ mixup) reproduces the measured survival ordering.
+Annotation efficiency: 500 real singles ($\sim$62/class) already yield
+bit-F1 $0.617$ at NORMAL-FAR $0.002$.
+
+\subsection{Natural-RGB boundary: VOC 2007 and COCO}
+VOC's natural split (56\% single-category / 44\% multi) supports
+synthesis: copy-paste beats the floor ($0.379\pm0.010$ vs
+$0.303\pm0.019$) and approaches the oracle ($0.410\pm0.076$), but no
+compositional advantage appears --- all methods drop together on
+held-out-pair scenes --- and on COCO-20 synthesis gains vanish. Consistent
+with the superposition-domain condition (Sec.~\ref{sec:theory}): natural
+scenes compose by occlusion, not by join.
+
+\subsection{Rejection, selection, and the conformal guarantee}
+Margin rejection reproduces three times: at $\tau{=}0.9$, coverage
+$91.7$--$98.1\%$ with NORMAL-FAR driven to $0.000$ and accepted-set
+accuracy preserved; longer training makes rejection cheaper. Split-conformal
+calibration on 500 known-good normals realizes FAR $0.040$ at
+$\alpha{=}0.05$ and $0.006$ at $\alpha{=}0.01$; calibrating on
+training-style synthetic normals fails (score-space shift) ---
+exchangeability is the binding assumption. Checkpoint selection by margin
+versus val-F1 matters only when the validation metric saturates (observed
+in our chip domain; absent on WM38 with a synthetic-combo val set), and
+no synthetic-val criterion sees the real-performance peak (real bit-F1
+peaks at epoch 30, $0.818$, while synthetic val rises monotonically).
+
+\subsection{Order extrapolation and the oracle's advantage}
+Trained on pairs only, bit-F1 extrapolates gracefully to real 3- and
+4-mixes ($0.784/0.671/0.628$) while exact-match collapses
+($0.699/0.143/0.000$). Neither combination-support knowledge (synthesizing
+only the 29 real combos) nor higher-order synthesis recovers it --- the
+oracle's advantage is the \emph{appearance interaction} of real
+high-order mixes, unreachable by independent-union synthesis.
+
+\subsection{Fourth family: text}
+Reuters-21578 natural split (Table~\ref{tab:families}): synthesis recovers
+71\% of the oracle, and the operator ranking flips --- vector averaging
+beats concatenation because topic evidence occupies (nearly) disjoint
+coordinates. The invariant is evidence preservation, not the operator.
 
 \begin{table}[t]
 \centering
