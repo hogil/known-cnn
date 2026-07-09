@@ -514,3 +514,10 @@ Plant/WM38, ChestX-ray14 (all collapse or OOM at CPU-SmallCNN scale — capacity
 walls, not refutations). Refined thesis (signal-ordered representation, not
 condition-type semantics, predicts success) stands on WM38+Reuters(yes) vs
 Plant-RGB(no); CXR would test grayscale but needs GPU.
+
+## FULL-DATA confirmation runs (3-seed)
+
+Reuters FULL (all top-20 singles 5995 / test-multi 300 / oracle-multi 889):
+oracle 0.603 / vec_avg 0.433 (72% of oracle) / concat 0.398 / single_only
+0.254. Same ordering as subsample (vec_avg>concat>>single, operator flip
+intact), numbers slightly higher — subsample conclusion confirmed at full data.
