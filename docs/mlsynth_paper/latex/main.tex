@@ -332,6 +332,16 @@ Oracle + rejection $\tau{=}0.99$ & 1 & $0.985$ & --- & --- & $0.799$ \\
 \end{tabular}
 \end{table}
 
+\paragraph{Full-scale confirmation.} With all 7{,}015 singles as sources and
+the full 14{,}000-mix test (ResNet-18, 30 epochs, 3 seeds), and synthetic
+normals applied identically to every arm, only overlay attains near-zero false
+alarms: NORMAL FAR $0.0003$ (bit-F1 $0.795\pm0.073$, within seed variance of
+the headline) versus cutmix $0.855$ bit-F1 at an unusable $0.618$ FAR and
+mixup $0.581$ at $0.758$. The bit-F1-only lens crowns cutmix; the FAR lens
+shows overlay is the sole viable operator --- a direct confirmation of the
+fidelity-to-FAR mechanism (Theorem~\ref{thm:excess}, independence term) at
+scale, and overlay remains $\approx\!2\times$ the single-only floor ($0.409$).
+
 \paragraph{Loss-engineering control.} A better loss on singles cannot
 substitute for synthesis. In an atomic comparison (SmallCNN, identical
 recipe, varying only arm and loss; Table~\ref{tab:losscontrol}), the

@@ -298,6 +298,31 @@ normals (0.562 -> 0.001) fix it by construction, to zero at the headline
 configuration; (iii) label-fidelity ordering reproduces (overlay > cutmix >
 fcm_pm > mixup for bitF1, matching measured survival).
 
+**Full-scale confirmation (ResNet-18, all 7,015 singles as sources, 14,000-mix
+test, 30 epochs, 3 seeds).** synthetic-normal (4,000) and neg-target (0.03)
+applied IDENTICALLY to every non-oracle arm, so the FAR column isolates the
+operator:
+
+| arm (full scale)  | EVAL bitF1      | HOLDOUT | NORMAL FAR | recovery |
+|-------------------|-----------------|---------|------------|----------|
+| oracle            | 0.9844 +-0.0065 |   0.980 |      0.186 |     100% |
+| overlay (ours)    | 0.7947 +-0.0734 |   0.797 |     0.0003 |      81% |
+| cutmix            | 0.8548 +-0.0487 |   0.897 |      0.618 |      87% |
+| mixup             | 0.5809 +-0.0891 |   0.506 |      0.758 |      59% |
+| single_only       | 0.4086 +-0.0098 |   0.375 |      0.390 |      42% |
+
+Two things sharpen at scale. (1) Under an IDENTICAL synthetic-normal control,
+only overlay reaches zero false alarms (0.0003); cutmix and mixup inject
+destroyed-source false-positive labels that defeat the control and fire on
+normals (FAR 0.62 / 0.76) — a direct empirical confirmation of the
+fidelity->FAR mechanism (the independence term of Theorem 1). (2) cutmix's
+HIGHER raw bit-F1 (0.855) is operationally unusable at 62% false alarm: the
+bit-F1-only lens crowns cutmix, the FAR lens shows overlay is the only viable
+operator. overlay's bit-F1 (0.795 +-0.073) is within seed variance of the
+9-seed n=6000 headline (0.841); the oracle rises to 0.984 with full data, so
+recovery reads 81% here. The zero-FAR property and overlay >> single-only
+(2x) ordering hold at full scale.
+
 #### 5.2.1 Loss-engineering control: can a better loss on singles substitute?
 
 A natural objection: perhaps the single-only floor is low only because BCE is

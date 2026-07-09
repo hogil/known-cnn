@@ -547,3 +547,25 @@ synthesis adds +0.364 (5x the loss gain) with LOWER FAR. Conclusion: the
 bottleneck is missing co-occurrence structure, unrecoverable by any loss on
 singles; synthesis supplies it. Direct ICLR rebuttal to "just use a better
 loss." (CSVs: aslbase_{bce,asl,focal}.csv)
+
+## MixedWM38 FULL (ResNet18, 17015 train / 14000 test, 30ep, 3 seeds)
+All singles as sources (n_single_aug 7015), full 14k mixed test. synth-normal
+(4000) + neg-target 0.03 applied IDENTICALLY to every non-oracle arm.
+- oracle      : ev_bitF1 0.9844+-0.0065  ho 0.980  NORMAL_FAR 0.186  (100%)
+- overlay(ours): ev_bitF1 0.7947+-0.0734  ho 0.797  NORMAL_FAR 0.0003 ( 81%)
+- cutmix      : ev_bitF1 0.8548+-0.0487  ho 0.897  NORMAL_FAR 0.618  ( 87%)
+- mixup       : ev_bitF1 0.5809+-0.0891  ho 0.506  NORMAL_FAR 0.758  ( 59%)
+- single_only : ev_bitF1 0.4086+-0.0098  ho 0.375  NORMAL_FAR 0.390  ( 42%)
+
+Honest reading (KEY):
+1. Under IDENTICAL synth-normal FAR control, only overlay reaches zero FAR
+   (0.0003). cutmix/mixup label-noise (destroyed-source false positives)
+   defeats the control -> fires on normals (FAR 0.62/0.76). Clean empirical
+   proof of the fidelity->FAR theory (Prop 2 / Thm 1 independence term).
+2. cutmix's HIGHER raw bit_F1 (0.855 vs overlay 0.795) is UNUSABLE: 62% false
+   alarm. The bit_F1-only lens crowns cutmix; the FAR lens shows overlay is
+   the only viable operator. Reinforces mandatory bit_F1 + FAR reporting.
+3. overlay ~2x single_only (0.795 vs 0.409) at full scale.
+4. overlay bit_F1 0.795+-0.073 is within seed variance of the 9-seed n6000
+   headline (0.841+-0.034); oracle rose with full data (0.974->0.984) so
+   recovery reads 81% here vs 86%. NOT a regression — 3-seed noise (s0=0.898).
