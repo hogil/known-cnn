@@ -569,3 +569,19 @@ Honest reading (KEY):
 4. overlay bit_F1 0.795+-0.073 is within seed variance of the 9-seed n6000
    headline (0.841+-0.034); oracle rose with full data (0.974->0.984) so
    recovery reads 81% here vs 86%. NOT a regression — 3-seed noise (s0=0.898).
+
+## ChestX-ray14 feasibility probe (ResNet18, 128px, 20ep, 1 seed) — INCONCLUSIVE
+Cached HF split (single 3943 / multi 2500 / normal 3500). lr 3e-4.
+- oracle      : bitF1 0.148  mAP 0.312  NORMAL_FAR 0.276
+- overlay     : bitF1 0.140  mAP 0.272  NORMAL_FAR 0.455
+- single_only : bitF1 0.075  mAP 0.280  NORMAL_FAR 0.204
+Read: the ORACLE itself is weak (mAP 0.31) -> 128px/20ep/subsampled is
+badly undertrained (still ~3x chance, so learning but far from converged).
+overlay's bitF1 ~2x single_only (synthesis signal present) but mAP is a tie
+and its NORMAL_FAR is WORSE (0.46 vs 0.20) -- synth-normal control does NOT
+transfer here as it does on WM38. NOT a clean medical win at this scale.
+Decision: CXR as a 2nd real benchmark needs a real investment (224px, 50ep+,
+full 100k data, more GPU) = a separate project, not a quick tier-add. Held
+for user direction; paper does NOT claim CXR. The paper stands on the clean
+superposition domains (WM38 / MNIST / Reuters) + the theory (Thm 1/2, Cor 1/2)
+which already explains where the method applies without needing CXR.
