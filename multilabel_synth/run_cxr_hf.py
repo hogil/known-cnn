@@ -78,13 +78,18 @@ def main():
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--arms", nargs="+",
                     default=["oracle", "overlay", "cutmix", "mixup", "single_only"])
+    ap.add_argument("--backbone", choices=["small", "resnet18"], default="small")
+    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--lr", type=float, default=1e-3)
     args = ap.parse_args()
     split = build()
     from .run_condition import run
     print(f"CXR-HF: single {split['single'][0].shape[0]} / multi "
-          f"{split['multi'][0].shape[0]} / normal {split['normal'][0].shape[0]}", flush=True)
+          f"{split['multi'][0].shape[0]} / normal {split['normal'][0].shape[0]} "
+          f"| backbone={args.backbone} device={args.device}", flush=True)
     run(split, args.arms, args.seeds, in_ch=1, K=14, n_train=2500,
-        n_syn_normal=2000, neg_target=0.03, epochs=args.epochs, tag="CXR")
+        n_syn_normal=2000, neg_target=0.03, epochs=args.epochs, tag="CXR",
+        backbone=args.backbone, device=args.device, lr=args.lr)
     print("DONE", flush=True)
 
 

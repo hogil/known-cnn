@@ -63,7 +63,8 @@ def _pred(m, X, bs, dev):
 
 
 def run(split, arms, seeds, in_ch, K, n_train=3000, n_syn_normal=2000,
-        neg_target=0.03, epochs=20, bs=64, lr=1e-3, device="cpu", tag=""):
+        neg_target=0.03, epochs=20, bs=64, lr=1e-3, device="cpu", tag="",
+        backbone="small"):
     spX, spY = split["single"]
     mX, mY = split["multi"]
     nX, nY = split["normal"]
@@ -93,7 +94,12 @@ def run(split, arms, seeds, in_ch, K, n_train=3000, n_syn_normal=2000,
             if neg_target > 0 and arm != "oracle":
                 trY = trY + (1 - trY) * neg_target
             torch.manual_seed(seed)
-            m = SmallCNN(num_classes=K, in_ch=in_ch).to(device)
+            if backbone == "resnet18":
+                from .models.resnet import build_resnet18_gray
+                m = build_resnet18_gray(num_classes=K, in_ch=in_ch,
+                                        pretrained=True).to(device)
+            else:
+                m = SmallCNN(num_classes=K, in_ch=in_ch).to(device)
             opt = torch.optim.Adam(m.parameters(), lr=lr); lf = nn.BCEWithLogitsLoss()
             for _ in range(epochs):
                 m.train()
