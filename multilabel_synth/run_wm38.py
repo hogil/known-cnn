@@ -26,7 +26,24 @@ def _loader(X, Y, bs, shuffle):
                       batch_size=bs, shuffle=shuffle)
 
 
-def train_model(trX, trY, epochs, bs, lr, device, seed, backbone="small"):
+def _asl_loss(logits, y, gp=1.0, gn=4.0, clip=0.05):
+    """Asymmetric Loss (Ben-Baruch 2021) — strong multi-label loss baseline."""
+    x = torch.sigmoid(logits)
+    xp = x
+    xn = torch.where(x > clip, x - clip, torch.zeros_like(x))  # neg prob shift
+    los_pos = y * torch.log(xp.clamp(min=1e-8)) * ((1 - xp) ** gp)
+    los_neg = (1 - y) * torch.log((1 - xn).clamp(min=1e-8)) * (xn ** gn)
+    return -(los_pos + los_neg).mean()
+
+
+def _focal_loss(logits, y, gamma=2.0):
+    p = torch.sigmoid(logits)
+    ce = nn.functional.binary_cross_entropy_with_logits(logits, y, reduction="none")
+    pt = y * p + (1 - y) * (1 - p)
+    return ((1 - pt) ** gamma * ce).mean()
+
+
+def train_model(trX, trY, epochs, bs, lr, device, seed, backbone="small", loss="bce"):
     torch.manual_seed(seed)
     if backbone == "resnet18":
         from .models.resnet import build_resnet18_small
@@ -34,13 +51,20 @@ def train_model(trX, trY, epochs, bs, lr, device, seed, backbone="small"):
     else:
         model = SmallCNN(num_classes=trY.shape[1], in_ch=1).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
-    lf = nn.BCEWithLogitsLoss()
+    bce = nn.BCEWithLogitsLoss()
     for _ in range(epochs):
         model.train()
         for xb, yb in _loader(trX, trY, bs, True):
             xb, yb = xb.to(device), yb.to(device)
             opt.zero_grad()
-            lf(model(xb), yb).backward()
+            out = model(xb)
+            if loss == "asl":
+                L = _asl_loss(out, yb)
+            elif loss == "focal":
+                L = _focal_loss(out, yb)
+            else:
+                L = bce(out, yb)
+            L.backward()
             opt.step()
     return model
 
@@ -77,6 +101,7 @@ def main():
     ap.add_argument("--mpos", type=float, default=0.65,
                     help="pair-mask positive target (fcm_pm_pm)")
     ap.add_argument("--backbone", choices=["small", "resnet18"], default="small")
+    ap.add_argument("--loss", choices=["bce", "asl", "focal"], default="bce")
     ap.add_argument("--out-csv", default="outputs/multilabel_synth/wm38_matrix.csv")
     args = ap.parse_args()
 
@@ -143,7 +168,7 @@ def main():
                 trY = trY + (1.0 - trY) * args.neg_target
 
             model = train_model(trX, trY, args.epochs, args.bs, args.lr,
-                                args.device, seed, backbone=args.backbone)
+                                args.device, seed, backbone=args.backbone, loss=args.loss)
             sub = r2.choice(len(trX), size=min(400, len(trX)), replace=False)
             trP = predict(model, trX[sub], trY[sub], args.bs, args.device)
             trYb = (trY[sub] >= 0.5).astype(np.float32)

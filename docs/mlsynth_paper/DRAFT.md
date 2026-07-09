@@ -374,10 +374,11 @@ reach bit-F1 0.617 with 0.002 NORMAL FAR; 2000 -> 0.697; 7015 -> 0.779.
 
 ### 5.8 Fourth family: text (Reuters-21578) and the operator-flip
 
-Natural split (5,995 single-topic train / 300 real multi-topic test, top-20
-categories; TF-IDF + MLP, 3 seeds): oracle 0.567 +-0.025 > vec-average
-0.402 +-0.023 > concat 0.359 +-0.020 >> single-only 0.221 +-0.007. Synthesis
-recovers 71% of the oracle from singles in a non-vision modality. The
+Natural split, full top-20 categories (5,995 single-topic train / 889
+real multi-topic oracle pool / 300 real multi-topic test; TF-IDF + MLP,
+3 seeds): oracle 0.603 > vec-average 0.433 > concat 0.398 >> single-only
+0.254. Synthesis recovers 72% of the oracle from singles in a non-vision
+modality (subsample gave the same ordering at 71%). The
 operator ranking FLIPS versus images: averaging (the mixup analog) wins in
 text because topic evidence occupies (nearly) disjoint feature coordinates —
 averaging preserves per-coordinate evidence, whereas image classes share

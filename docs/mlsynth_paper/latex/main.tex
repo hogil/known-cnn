@@ -304,8 +304,10 @@ oracle's advantage is the \emph{appearance interaction} of real
 high-order mixes, unreachable by independent-union synthesis.
 
 \subsection{Fourth family: text}
-Reuters-21578 natural split (Table~\ref{tab:families}): synthesis recovers
-71\% of the oracle, and the operator ranking flips --- vector averaging
+Reuters-21578 natural split (Table~\ref{tab:families}, full top-20
+categories, 3 seeds): synthesis recovers 72\% of the oracle
+($0.433$ vs $0.603$ bit-F1; single-only floor $0.254$, concat $0.398$),
+and the operator ranking flips --- vector averaging
 beats concatenation because topic evidence occupies (nearly) disjoint
 coordinates. The invariant is evidence preservation, not the operator.
 
@@ -339,7 +341,7 @@ Family & Floor & Best synthesis & Oracle & Recovery \\
 MNIST (mAP)        & $0.599$ & $0.773$ (overlay) & $0.759$ & $>$100\%$^{\dagger}$ \\
 MixedWM38 (bit-F1) & $0.232$ & $0.837$ (overlay stack) & $0.974$ & 86\% \\
 VOC 2007 (bit-F1)  & $0.303$ & $0.379$ (copy-paste) & $0.410$ & 92\% \\
-Reuters (bit-F1)   & $0.221$ & $0.402$ (vec-avg) & $0.567$ & 71\% \\
+Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \bottomrule
 \multicolumn{5}{l}{\footnotesize $^{\dagger}$exceeds the oracle on held-out combinations ($+0.14$).}
 \end{tabular}
