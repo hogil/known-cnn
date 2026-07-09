@@ -130,11 +130,14 @@ not a new pasting operation but the label-fidelity criterion, the
 single-to-multi bootstrap setting, and false-alarm control.
 
 \textbf{Single-positive multi-label.} SPML~\cite{cole2021spml} and its
-successors~\cite{kim2022largeloss} assume multi-label \emph{images} with
-one observed positive and recover the missing labels of existing images.
-Our setting is stricter and industrially natural: the training images
-themselves contain a single category, and we synthesize combination
-images that never existed, evaluating on real multi-label test data.
+successors~\cite{kim2022largeloss} assume multi-label \emph{images} with one
+observed positive and correct the false negatives among the unobserved
+labels. Our setting is strictly weaker: no multi-label image is observed at
+all --- training images each contain a single category --- so there are no
+false negatives to correct, and our single-only baseline is exactly SPML's
+Assume-Negative baseline made unbiased. The deficit is structural (absent
+co-occurrence), which synthesis addresses and label correction cannot; we
+position against SPML in full in Sec.~\ref{sec:discussion}.
 
 \textbf{Mixed-type wafer maps.} On
 MixedWM38~\cite{wang2020mixedwm38}, fully-supervised methods reach
@@ -508,6 +511,39 @@ defects. Each regime owns one axis; only the synthesis side's axis is
 available without annotation, and in inspection practice the false-alarm
 axis is typically the binding one.
 
+\textbf{Positioning against single-positive multi-label (SPML).} The
+paradigm most easily confused with ours is SPML, and the difference is not
+incremental --- it is a difference in what is \emph{observed}, which makes
+SPML's toolkit inapplicable here. Order multi-label weak supervision by
+observed information: (i)~full supervision --- multi-label images, all
+labels; (ii)~SPML~\cite{cole2021spml,kim2022largeloss} --- multi-label
+images with exactly one positive observed per image, the remaining positives
+unobserved (false negatives); (iii)~ours --- \emph{no multi-label image is
+observed at any level}, each training image containing a single category.
+Ours is strictly weaker than SPML: SPML still sees every co-occurrence (the
+image contains both objects even if only one is labeled), whereas we never
+observe a co-occurrence at all --- yet in a superposition domain we recover
+the oracle (Corollary~\ref{cor:noadv}), because the generative structure lets
+synthesis reconstruct the co-occurrence distribution that observation
+withholds. Crucially, SPML's methods do not transfer, and not for want of
+tuning: SPML exists to combat the false negatives created by assuming the
+unobserved labels negative, and its advances --- label estimation
+\cite{cole2021spml}, large-loss rejection \cite{kim2022largeloss} --- all
+model that false-negative noise. Our data has none: a single-defect exemplar
+genuinely has one class, so the assumed negatives are \emph{true}. Our
+single-only baseline is precisely the Assume-Negative baseline of SPML applied
+to genuinely single-label images --- an unbiased AN --- and it still fails on
+multi-label test (bit-F1 $0.24$--$0.41$). An oracle SPML method, its
+false-negative correction inert because there is nothing to correct, reduces
+exactly to this failing baseline. The deficit is therefore \emph{structural}
+(absent co-occurrence), not label noise, and the remedy is synthesis, not
+label correction. The two are orthogonal and composable, not competing: given
+both single-label exemplars and a pool of partially-labeled multi-label
+images, SPML operates on the latter and our synthesis on the former. A
+head-to-head benchmark is thus ill-posed --- the methods consume different
+inputs --- so we report the conceptual ordering: our setting subsumes SPML's
+in difficulty by removing the multi-label image entirely.
+
 \textbf{Joint prediction lags} ($0.440$ vs $0.903$ exact-match): per-bit
 training composes evidence but not joint cardinality --- the same
 phenomenon behind the order-extrapolation result.
@@ -523,8 +559,10 @@ synthetic data.
 
 \textbf{Scope.} One public benchmark with real mixed labels carries the
 industrial claim; chip-domain results use internal data; VOC/COCO are
-subsampled-scale boundary analyses, and full-scale SPML-protocol
-comparison remains future work.
+subsampled-scale boundary analyses. We do not run a head-to-head SPML
+benchmark by design --- the settings consume different inputs (SPML requires
+multi-label images; we forbid them), so the comparison is conceptual, not
+empirical (Sec.~\ref{sec:discussion}).
 
 \section{Conclusion}\label{sec:conclusion}
 
@@ -543,9 +581,6 @@ with the oracle is the appearance of real high-order interactions --- a
 boundary we quantify and leave open.
 
 \bibliographystyle{plainnat}
-% \bibliography{refs}
-\todo{refs.bib: Mixup, CutMix, Copy-Paste(Ghiasi21), SPML(Cole21)+2024-25,
-MixedWM38(Wang20), ESWA23 single-to-mixed, CAIE25, diffusion25, Natarajan13
-noisy labels, split-conformal}
+\bibliography{refs}
 
 \end{document}

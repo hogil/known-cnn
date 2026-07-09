@@ -109,13 +109,19 @@ Contributions:
   location/mask annotation; our industrial setting has none (content-blind
   constraint). Our contribution is not a new pasting op but the label-fidelity
   criterion + the single-to-multi bootstrap setting + FAR control.
-- **Single-positive multi-label (SPML).** Cole et al. (2021) and an active
-  2024-25 line (VLM/prompt pseudo-labeling with RAM; hyperbolic structured
-  classification; class-prior methods). SPML assumes multi-label IMAGES with
-  one observed positive; our setting is stricter and industrially natural —
-  the training images themselves contain a single category, and we evaluate
-  on real multi-label test data. SPML methods recover missing labels of
-  existing images; we synthesize combination images that never existed.
+- **Single-positive multi-label (SPML).** Cole et al. (2021) and its
+  successors (Kim et al. 2022 large-loss; an active 2024-25 line of
+  VLM/prompt pseudo-labeling, hyperbolic structured classification,
+  class-prior methods). SPML assumes multi-label IMAGES with one observed
+  positive and corrects the false negatives among the unobserved labels. Our
+  setting is STRICTLY WEAKER: no multi-label image is observed at all — the
+  training images each contain a single category — so there are no false
+  negatives to correct. Our single_only baseline is exactly SPML's
+  Assume-Negative baseline made unbiased, and it still fails on multi-label
+  test (bit-F1 0.24-0.41): the deficit is STRUCTURAL (absent co-occurrence),
+  not label noise, so an oracle SPML method (correction inert) reduces to
+  this failing baseline. Synthesis addresses it; label correction cannot.
+  Full positioning + the information-ordering argument in Sec. 6.
 - **Mixed-type wafer map classification.** MixedWM38 (Wang et al., 2020);
   fully-supervised methods reach 98-99% accuracy (density-aware fusion 2025;
   MLR-WM-ViT). **Single-to-mixed prior art exists and must be engaged
@@ -485,6 +491,43 @@ normals from defects (FAR 0.799 even at tau 0.99). Each regime owns one
 axis; only the synthesis side's axis is available without annotation, and in
 inspection practice the false-alarm axis is typically the binding one.
 
+**Positioning against single-positive multi-label (SPML).** SPML is the
+paradigm most easily confused with ours, and the difference is not
+incremental — it is a difference in what is OBSERVED, which makes SPML's
+toolkit inapplicable here. Order multi-label weak supervision by observed
+information:
+1. full supervision — multi-label images, all labels;
+2. SPML (Cole 2021; Kim 2022) — multi-label images, exactly one positive
+   observed per image, the remaining positives unobserved (false negatives);
+3. ours — NO multi-label image observed at any level; each training image
+   contains a single category.
+
+Ours is strictly weaker than SPML: SPML still sees every co-occurrence (the
+image contains both objects even if only one is labeled), whereas we never
+observe a co-occurrence at all — yet in a superposition domain we recover the
+oracle (Cor. 1), because the generative structure lets synthesis reconstruct
+the co-occurrence distribution that observation withholds.
+
+SPML's methods do not transfer, and not for want of tuning. SPML exists to
+combat the false negatives created by assuming unobserved labels negative;
+its advances — label estimation (Cole 2021), large-loss rejection (Kim 2022)
+— all model that false-negative noise. Our data has none: a single-defect
+exemplar genuinely has one class, so the assumed negatives are TRUE. Our
+single_only baseline is precisely SPML's Assume-Negative baseline applied to
+genuinely single-label images — an unbiased AN — and it still fails on
+multi-label test (bit-F1 0.24-0.41). An oracle SPML method, its
+false-negative correction inert because there is nothing to correct, reduces
+exactly to this failing baseline. The deficit is STRUCTURAL (absent
+co-occurrence), not label noise; the remedy is synthesis, not label
+correction.
+
+The two are orthogonal and composable, not competing: given both
+single-label exemplars AND a pool of partially-labeled multi-label images,
+SPML operates on the latter and our synthesis on the former. A head-to-head
+benchmark is therefore ill-posed — the methods consume different inputs — so
+we report the conceptual ordering: our setting subsumes SPML's in difficulty
+by removing the multi-label image entirely.
+
 **Joint prediction lags.** Exact-match trails the oracle (0.440 vs 0.903 at
 the headline configuration): per-bit training composes evidence but not
 joint cardinality, the same phenomenon behind the order-extrapolation result
@@ -511,8 +554,10 @@ normals fail (their scores are collapsed by training itself).
 
 **Scope.** One public benchmark with real mixed labels carries the
 industrial claim (MixedWM38); chip-domain results use internal data;
-VOC/COCO results are subsampled-scale boundary analyses and the SPML
-protocol comparison at full scale remains future work (GPU-bound).
+VOC/COCO results are subsampled-scale boundary analyses. We do not run a
+head-to-head SPML benchmark by design — the settings consume different
+inputs (SPML requires multi-label images; we forbid them), so the comparison
+is conceptual, not empirical (Sec. 6).
 
 ## 7 Conclusion
 
