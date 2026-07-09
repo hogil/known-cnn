@@ -298,6 +298,31 @@ normals (0.562 -> 0.001) fix it by construction, to zero at the headline
 configuration; (iii) label-fidelity ordering reproduces (overlay > cutmix >
 fcm_pm > mixup for bitF1, matching measured survival).
 
+#### 5.2.1 Loss-engineering control: can a better loss on singles substitute?
+
+A natural objection: perhaps the single-only floor is low only because BCE is
+a weak multi-label loss, and a purpose-built loss (Asymmetric Loss, Focal)
+would close the gap without any synthesis. We test this directly with an
+atomic comparison — SmallCNN, identical recipe (n_single_aug 2000, 20 epochs,
+3 seeds, no synthetic normals, no neg-target), varying only the arm and the
+loss:
+
+| config (SmallCNN, 3 seeds) | train bitF1 | EVAL bitF1 | EVAL pos/neg | NORMAL FAR |
+|----------------------------|-------------|------------|--------------|------------|
+| single_only + BCE          |       0.947 |      0.243 |  0.167/0.032 |      0.591 |
+| single_only + ASL          |       0.923 |      0.316 |  0.231/0.103 |      1.000 |
+| single_only + Focal        |       0.953 |      0.242 |  0.172/0.044 |      0.584 |
+| overlay + BCE (ours)       |       0.936 |      0.607 |  0.555/0.019 |      0.549 |
+
+All four fit the single-label training data equally (train bit-F1 0.92-0.95).
+The strongest multi-label loss (ASL) lifts EVAL bit-F1 by only +0.073 over BCE
+(0.243 -> 0.316) and does so by over-predicting positives, driving real-normal
+FAR to 1.00. Focal gives nothing (+0.00). Synthesis (overlay) adds +0.364 —
+five times the best loss-engineering gain — while keeping FAR lower. The
+bottleneck is not loss calibration but the absence of label co-occurrence
+structure in single-label data, which no loss can recover and which synthesis
+supplies by construction.
+
 ### 5.3 PASCAL VOC 2007 (natural-scene boundary analysis)
 
 IMPORTANT SCOPING: the copy-paste arm here uses the dataset's bounding-box

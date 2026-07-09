@@ -330,6 +330,33 @@ Oracle + rejection $\tau{=}0.99$ & 1 & $0.985$ & --- & --- & $0.799$ \\
 \end{tabular}
 \end{table}
 
+\paragraph{Loss-engineering control.} A better loss on singles cannot
+substitute for synthesis. In an atomic comparison (SmallCNN, identical
+recipe, varying only arm and loss; Table~\ref{tab:losscontrol}), the
+strongest multi-label loss (ASL~\cite{benbaruch2021asl}) lifts single-only
+bit-F1 by only $+0.073$ over BCE --- and only by over-predicting positives,
+which drives real-normal FAR to $1.00$; Focal~\cite{lin2017focal} gives
+nothing. Synthesis adds $+0.364$ (five times the best loss gain) at lower
+FAR. All four fit the training singles equally (train bit-F1 $0.92$--$0.95$);
+the bottleneck is missing co-occurrence structure, not loss calibration.
+
+\begin{table}[t]
+\centering
+\caption{Loss-engineering control on MixedWM38 (SmallCNN, 3 seeds, no
+synthetic normals). Only the arm and the loss vary.}
+\label{tab:losscontrol}
+\begin{tabular}{lcccc}
+\toprule
+Config & Train bit-F1 & EVAL bit-F1 & EVAL pos/neg & NORMAL FAR \\
+\midrule
+single-only + BCE      & $0.947$ & $0.243$ & $0.167/0.032$ & $0.591$ \\
+single-only + ASL      & $0.923$ & $0.316$ & $0.231/0.103$ & $1.000$ \\
+single-only + Focal    & $0.953$ & $0.242$ & $0.172/0.044$ & $0.584$ \\
+overlay + BCE (ours)   & $0.936$ & $\mathbf{0.607}$ & $0.555/0.019$ & $0.549$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \begin{table}[t]
 \centering
 \caption{Generality across four domain families: synthesis vs.\ the

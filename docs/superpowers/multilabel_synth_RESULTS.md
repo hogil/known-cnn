@@ -533,3 +533,17 @@ compositional-generalization gap widens on held-out pairs:
 overlay beats oracle (+0.022 full, +0.198 holdout) AND beats mixup/cutmix
 baselines. Ranking unchanged from ablation scale; margins larger. Paper
 (DRAFT + latex tab:families + MNIST subsec + abstract) updated to these.
+
+## Loss-engineering control (WM38, SmallCNN, atomic arm x loss, 3 seeds)
+Isolates "why synthesize instead of a better loss on singles?" — no
+synth-normal, no neg-target, n_single_aug 2000, 20ep. Only arm and loss vary.
+- single_only + BCE   : ev_bitF1 0.243 (pos 0.167 neg 0.032) nrm_FAR 0.591
+- single_only + ASL   : ev_bitF1 0.316 (pos 0.231 neg 0.103) nrm_FAR 1.000  <- over-predicts
+- single_only + Focal : ev_bitF1 0.242 (pos 0.172 neg 0.044) nrm_FAR 0.584
+- overlay + BCE (ours): ev_bitF1 0.607 (pos 0.555 neg 0.019) nrm_FAR 0.549
+TRAIN bitF1 ~0.92-0.95 for all four (equal single-fit). The strongest
+multi-label loss (ASL) recovers only +0.073 over BCE and blows FAR to 1.00;
+synthesis adds +0.364 (5x the loss gain) with LOWER FAR. Conclusion: the
+bottleneck is missing co-occurrence structure, unrecoverable by any loss on
+singles; synthesis supplies it. Direct ICLR rebuttal to "just use a better
+loss." (CSVs: aslbase_{bce,asl,focal}.csv)
