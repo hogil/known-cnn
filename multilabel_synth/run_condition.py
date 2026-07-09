@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
 from .models.small_cnn import SmallCNN
-from .metrics import bit_f1, far, exact_match, pos_neg_prob
+from .metrics import bit_f1, far, exact_match, pos_neg_prob, compute_map
 
 
 def _pairs(Y, rng, n):
@@ -103,8 +103,9 @@ def run(split, arms, seeds, in_ch, K, n_train=3000, n_syn_normal=2000,
             teP, nP = _pred(m, teX, bs, device), _pred(m, nX, bs, device)
             pos, neg = pos_neg_prob(teP, teY)
             nfar = float((nP >= 0.5).any(1).mean())
+            mp = compute_map(teP, teY)
             print(f"[{tag}] {arm:12s} s{seed} | EVAL bitF1={bit_f1(teP, teY):.4f} "
-                  f"FAR={far(teP, teY):.4f} exact={exact_match(teP, teY):.4f} "
+                  f"mAP={mp:.4f} FAR={far(teP, teY):.4f} exact={exact_match(teP, teY):.4f} "
                   f"pos={pos:.4f} neg={neg:.4f} | NORMAL_FAR={nfar:.4f}", flush=True)
-            rows.append((arm, seed, bit_f1(teP, teY), nfar))
+            rows.append((arm, seed, bit_f1(teP, teY), mp, nfar))
     return rows
