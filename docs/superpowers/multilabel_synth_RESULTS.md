@@ -521,3 +521,15 @@ Reuters FULL (all top-20 singles 5995 / test-multi 300 / oracle-multi 889):
 oracle 0.603 / vec_avg 0.433 (72% of oracle) / concat 0.398 / single_only
 0.254. Same ordering as subsample (vec_avg>concat>>single, operator flip
 intact), numbers slightly higher — subsample conclusion confirmed at full data.
+
+## MultiMNIST FULL (400 singles/class, 8k synth train, 3k test, 25ep, 3 seeds)
+Blind max-overlay EXCEEDS the equal-condition oracle at full scale, and the
+compositional-generalization gap widens on held-out pairs:
+- overlay 0.8676 mAP_full / 0.8832 holdout (pos 0.737 neg 0.057)
+- oracle  0.8457 / 0.6847  (pos 0.720 neg 0.058)  <- collapses on unseen pairs
+- mixup   0.7376 / 0.7343  (pos 0.340 neg 0.046)
+- single  0.6193 / 0.6347  (pos 0.311 neg 0.046)
+- cutmix  0.6055 / 0.6040  (pos 0.464 neg 0.104)
+overlay beats oracle (+0.022 full, +0.198 holdout) AND beats mixup/cutmix
+baselines. Ranking unchanged from ablation scale; margins larger. Paper
+(DRAFT + latex tab:families + MNIST subsec + abstract) updated to these.

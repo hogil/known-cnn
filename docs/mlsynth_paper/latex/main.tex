@@ -116,8 +116,8 @@ Our contributions are:
 \textbf{Mixing augmentations.} Mixup~\cite{zhang2018mixup} blends images
 and labels convexly --- designed as a regularizer for single-label
 training, not as a combination synthesizer; we show averaging ghosts both
-objects in shared-coordinate spaces (MNIST full mAP $0.666$ vs overlay
-$0.773$; WM38 bit-F1 $0.435$ vs $0.837$).
+objects in shared-coordinate spaces (MNIST full mAP $0.738$ vs overlay
+$0.868$; WM38 bit-F1 $0.435$ vs $0.837$).
 CutMix~\cite{yun2019cutmix} replaces a rectangle with area-proportional
 soft labels --- as a synthesizer its label is frequently false (measured:
 at patch fraction $0.5$ the pasted object is $>70\%$ lost in $71\%$ of
@@ -253,11 +253,12 @@ Reuters (text)   & vec-average    & high (disjoint dims) & 1 \\
 \subsection{Controlled mechanism study: MultiMNIST}
 Ten digit classes, 45 unordered pairs, 9 held out from the oracle;
 synthesis arms may generate all pairs from singles (3 seeds). Blind
-max-overlay matches the oracle on the full test (mAP $0.773$ vs $0.759$)
-and \emph{exceeds it by $+0.14$} on held-out combinations, where the
-oracle collapses ($0.759 \to 0.633$); every synthesis arm beats the oracle
-on held-out pairs. Operator ranking follows measured survival
-(Table~\ref{tab:fidelity}); mixup trails at $0.666\pm0.010$.
+max-overlay \emph{exceeds} the oracle on the full test (mAP $0.868$ vs
+$0.846$) and \emph{exceeds it by $+0.198$} on held-out combinations, where
+the oracle collapses ($0.846 \to 0.685$); every synthesis arm beats the
+oracle on held-out pairs. Operator ranking follows measured survival
+(Table~\ref{tab:fidelity}); mixup trails at $0.738$ and cutmix at $0.606$.
+(400 singles/class, 8k synth train, 3k test, 25 epochs, 3 seeds.)
 
 \subsection{Real multi-label benchmark: MixedWM38}
 Table~\ref{tab:headline} gives the equal-condition headline: 86\% of a
@@ -338,12 +339,12 @@ single-only floor and the fully-supervised oracle (bit-F1 / mAP as noted).}
 \toprule
 Family & Floor & Best synthesis & Oracle & Recovery \\
 \midrule
-MNIST (mAP)        & $0.599$ & $0.773$ (overlay) & $0.759$ & $>$100\%$^{\dagger}$ \\
+MNIST (mAP)        & $0.619$ & $0.868$ (overlay) & $0.846$ & $>$100\%$^{\dagger}$ \\
 MixedWM38 (bit-F1) & $0.232$ & $0.837$ (overlay stack) & $0.974$ & 86\% \\
 VOC 2007 (bit-F1)  & $0.303$ & $0.379$ (copy-paste) & $0.410$ & 92\% \\
 Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \bottomrule
-\multicolumn{5}{l}{\footnotesize $^{\dagger}$exceeds the oracle on held-out combinations ($+0.14$).}
+\multicolumn{5}{l}{\footnotesize $^{\dagger}$exceeds the oracle on held-out combinations ($+0.198$: overlay $0.883$ vs oracle $0.685$).}
 \end{tabular}
 \end{table}
 

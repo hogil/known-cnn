@@ -22,8 +22,8 @@ survives in the synthesized image — and that operators preserving whole
 objects with hard labels (per-pixel max/min overlay; full-cover complement
 mixing) dominate averaging (Mixup) and rectangle-patch (CutMix) synthesis. On
 a controlled MultiMNIST benchmark, blind max-overlay synthesis from
-single-label data matches a fully-supervised oracle on the full test
-(mAP 0.773 vs 0.759) and exceeds it by +0.14 mAP on held-out label
+single-label data exceeds a fully-supervised oracle on the full test
+(mAP 0.868 vs 0.846) and exceeds it by +0.198 mAP on held-out label
 combinations that the oracle never observed. On the public MixedWM38 wafer-map
 benchmark, under an equal-condition comparison (same backbone and budget,
 where the fully-supervised oracle reaches 0.974 +-0.019 bit-F1 — matching
@@ -101,7 +101,7 @@ Contributions:
 - **Mixing augmentations.** Mixup (Zhang et al., 2018): convex image/label
   blending — designed as a regularizer for single-label training, not as a
   combination synthesizer; we show averaging ghosts both objects (MNIST mixup
-  full mAP 0.678 vs overlay 0.773; WM38 bitF1 0.450 vs 0.609). CutMix (Yun et
+  full mAP 0.738 vs overlay 0.868; WM38 bitF1 0.450 vs 0.609). CutMix (Yun et
   al., 2019): rectangle replacement with area-proportional soft labels — as a
   synthesizer its label is frequently false (measured: at patch fraction 0.5,
   the pasted object is >70% lost in 71% of samples). Copy-Paste (Ghiasi et
@@ -214,7 +214,7 @@ fidelity is a measurable, predictive property on both datasets.
 
 Mixup's blend produces ghosted objects (both at half contrast) with soft
 labels; overlay keeps the stronger signal per pixel with hard labels. Same
-combination operator family, opposite outcome: MNIST 0.678 vs 0.773; WM38
+combination operator family, opposite outcome: MNIST 0.738 vs 0.868; WM38
 0.450 vs 0.609. Failure of "blending" is specifically averaging, not
 combining.
 
@@ -236,10 +236,25 @@ oracle; synthesis arms may generate all pairs from singles. SmallCNN 0.62M,
 | mixup           | ~0.678 (1 seed) | ~0.700          | 0.028 |
 | single_only     | 0.5990 +-0.0098 | 0.5994 +-0.0039 | 0.043 |
 
-Claims: (i) overlay matches/exceeds the oracle using singles only; (ii) on
-held-out combos every synthesis arm beats the oracle (compositional
-generalization; oracle -0.126 collapse); (iii) whole-object preservation >
-fragmentation, in survival-order.
+Full-scale confirmation (400 singles/class, 8,000 synth train, 3,000 test,
+25 epochs, 3 seeds) strengthens every claim — overlay's oracle-beating margin
+grows and the held-out gap widens:
+
+| config          | full mAP | holdout mAP | exact | pos_prob | neg_prob |
+|-----------------|----------|-------------|-------|----------|----------|
+| overlay (blind) |   0.8676 |      0.8832 | 0.433 |    0.737 |    0.057 |
+| oracle          |   0.8457 |      0.6847 | 0.415 |    0.720 |    0.058 |
+| mixup           |   0.7376 |      0.7343 | 0.051 |    0.340 |    0.046 |
+| single_only     |   0.6193 |      0.6347 | 0.030 |    0.311 |    0.046 |
+| cutmix f0.25    |   0.6055 |      0.6040 | 0.106 |    0.464 |    0.104 |
+
+Claims: (i) overlay matches/exceeds the oracle using singles only (+0.022 at
+full scale); (ii) on held-out combos synthesis beats the oracle by a wide
+margin (overlay 0.883 vs oracle 0.685, +0.198; compositional generalization —
+the oracle cannot classify pair-combinations it never saw); (iii)
+whole-object preservation > fragmentation, in survival-order; (iv) overlay
+also beats the mixup and cutmix augmentation baselines (0.868 vs 0.738 /
+0.606).
 
 ### 5.2 MixedWM38 (public benchmark; real multi-label evaluation)
 
