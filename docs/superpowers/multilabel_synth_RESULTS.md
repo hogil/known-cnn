@@ -491,3 +491,26 @@ Resource ceiling (honest): on the shared CPU box, full-size Plant (3 seeds,
 8.2k imgs RGB 128px) OOM-dies mid-run; ChestX-ray14 full (45GB) download
 failed to write on two attempts. CXR (grayscale = closer to signal-ordered,
 the key test of the refined thesis) and full-scale runs are GPU/'큰-머신'-gated.
+
+## ChestX-ray14 (HF streaming, medical grayscale) — CPU-capacity collapse (inconclusive)
+
+Streamed 3943 single / 2500 multi / 3500 normal (npz cached; no 45GB dl —
+kaggle giant-zip failed, HF parquet-shard streaming worked). SmallCNN 0.62M,
+128px, 20ep: ALL arms collapse to mAP ~0.22-0.24 and bitF1@0.5 ~0
+(oracle 0.233/0.008, single_only 0.228/0.000, synth 0.22-0.24). No arm
+separation — 14 subtle thoracic findings exceed this tiny model's capacity at
+CPU scale (same wall as COCO-20 and full-Plant). Faint pos>neg gap (oracle
+0.19>0.10) shows weak signal below threshold, but the model/metric cannot use
+it. CXR is thus INCONCLUSIVE at CPU scale — a GPU/stronger-backbone (ResNet+,
+AUC metric) experiment, not a method failure. NORMAL FAR stayed near 0 for all
+(the confidence-geometry mechanism still holds trivially since nothing fires).
+
+## Consolidated CPU-reachable evidence (state of the campaign)
+
+Solid (CPU): MixedWM38 (0.841 vs oracle 0.974, FAR 0 x9), MultiMNIST
+(overlay > oracle on held-out), Reuters (71%, operator flip). These + theory
+carry the TMLR/Q1 case. GPU-gated boundary/confirmation: COCO, full-scale
+Plant/WM38, ChestX-ray14 (all collapse or OOM at CPU-SmallCNN scale — capacity
+walls, not refutations). Refined thesis (signal-ordered representation, not
+condition-type semantics, predicts success) stands on WM38+Reuters(yes) vs
+Plant-RGB(no); CXR would test grayscale but needs GPU.
