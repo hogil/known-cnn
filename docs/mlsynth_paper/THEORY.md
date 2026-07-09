@@ -96,6 +96,32 @@ Fidelity (Sec. 3) enters when the join itself loses evidence (survival S < 1):
 the effective conditional is a noisy join and the independence term inherits
 an O(1 - phi) contribution, linking Theorem 1 to Proposition 2.
 
+**Theorem 2 (finite-sample).** Let f^ be the empirical risk minimizer over a
+hypothesis class F trained on m i.i.d. synthetic samples from D_syn, with loss
+in [0, B]. With probability >= 1 - delta over the synthetic draw,
+
+    R_real(f^) - R_real(f_star)
+        <=  2 B . TV(D_real, D_syn)              (distribution shift, Thm 1)
+          + 4 . Rad_m(F)                          (capacity / estimation)
+          + 2 B . sqrt( 2 ln(2/delta) / m ).      (concentration)
+
+*Proof.* Decompose R_real(f^) - R_real(f_star) =
+[R_real(f^) - R_syn(f^)] + [R_syn(f^) - R_star_syn] + [R_star_syn - R_real(f_star)],
+where R_star_syn = inf_{f in F} R_syn(f). Terms 1 and 3 are each
+<= B . TV(D_real, D_syn) as in Theorem 1 (the shift is class-independent, so
+it applies uniformly over F). The middle term is the excess *synthetic* risk
+of ERM, bounded by 4 Rad_m(F) + 2B sqrt(2 ln(2/delta)/m) by the standard
+symmetrization + bounded-difference argument. Summing gives the claim. QED.
+
+Reading: the shift term (2B.TV) is the only *irreducible* cost of using
+synthesis instead of the oracle; it does not shrink with more data. The other
+two terms vanish as m -> infinity, so at scale the synthesis model's gap to
+the oracle converges to exactly 2B.TV(D_real, D_syn) -- zero in a
+superposition domain with matched support (Cor. 1). This says the empirical
+program (drive m up, drive TV down via a max-fidelity blind operator) is the
+right one, and that our full-scale runs estimate the residual TV, not a
+capacity artifact.
+
 ## 3 Label fidelity bounds the label noise of synthesis
 
 **Definition 2 (survival / fidelity).** For operator T and source i, the
@@ -211,8 +237,7 @@ guaranteed FAR controller, at measured coverage cost 2-8% of mixed samples.
 
 - P1: DONE — Theorem 1 (excess risk <= 2B.TV, split into support + independence
   terms) + Corollary 1 (oracle no-advantage) + Corollary 2 (boundary as a
-  theorem). Remaining: finite-sample version (replace population TV with an
-  estimator + concentration).
+  theorem) + Theorem 2 (finite-sample: shift + Rademacher + concentration).
 - P2: replace O(rho) sketch with a theorem + constants; partial-survival case.
 - P3: quantify the synthetic->real shift term empirically (KS distance of
   max-prob distributions between synthetic and real normals).

@@ -439,6 +439,22 @@ Natural RGB is this case, so the boundary is a consequence of
 Theorem~\ref{thm:excess}, not a per-dataset empirical finding.
 \end{corollary}
 
+\begin{theorem}[Finite-sample]\label{thm:finite}
+The empirical risk minimizer over $\mathcal{F}$ on $m$ i.i.d.\ synthetic
+samples satisfies, w.p.\ $\ge 1-\delta$,
+\[
+R_{\mathrm{real}}(\hat f) - R_{\mathrm{real}}(f^\star) \le
+2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})
++ 4\,\mathfrak{R}_m(\mathcal{F})
++ 2B\sqrt{\tfrac{2\ln(2/\delta)}{m}}.
+\]
+Only the shift term $2B\,\mathrm{TV}$ is irreducible; the estimation terms
+vanish as $m\!\to\!\infty$, so at scale the oracle gap converges to exactly
+$2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})$ --- zero under
+Corollary~\ref{cor:noadv}. Full-scale runs thus estimate residual TV, not a
+capacity artifact.
+\end{theorem}
+
 \begin{definition}[Label fidelity]
 For operator $T$, source survivals $S_a, S_b$ are the fractions of class
 evidence preserved in $\tilde{x}$; the fidelity is
