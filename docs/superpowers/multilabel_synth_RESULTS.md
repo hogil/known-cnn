@@ -585,3 +585,37 @@ full 100k data, more GPU) = a separate project, not a quick tier-add. Held
 for user direction; paper does NOT claim CXR. The paper stands on the clean
 superposition domains (WM38 / MNIST / Reuters) + the theory (Thm 1/2, Cor 1/2)
 which already explains where the method applies without needing CXR.
+
+## WM38 margin+reject: does the chip recipe (fcm_pm+val-margin+nb-reject) transfer? NO
+SmallCNN, n3000, 3 seeds. synth-normal + neg-target on ALL arms incl. oracle.
+nb-reject bitF1 / NORMAL_FAR (3-seed mean):
+- oracle     0.9757 / 0.000
+- overlay    0.6977 / 0.000
+- fcm_pm     0.6230 / 0.003
+- fcm_pm_pm  0.5921 / 0.000
+Verdict: fcm_pm / fcm_pm_pm are the WEAKEST synthesis arms on the PUBLIC WM38
+benchmark (below overlay, far below oracle). The chip domain's ~0.99 result is
+chip-specific and does NOT transfer. nb-reject controls FAR to ~0 for every
+arm (the one robust win), but oracle+synth-normal also reaches FAR 0, so the
+honest FAR claim is "annotation-free synth-normal gives any model FAR 0", not
+"synthesis beats oracle on FAR". Hypothesis (fcm_pm+margin+reject matches/beats
+oracle on WM38) REFUTED. Keep overlay as the WM38 representative; drop fcm_pm
+from the WM38 headline. CSV: wm38_margin_reject_3s.csv.
+
+## WM38 fidelity CAUSAL intervention: attenuate one source's evidence, keep label
+SmallCNN, n3000, 3 seeds. f = evidence-retained fraction (1=full overlay,
+0=erased-but-still-labeled). 3-seed mean:
+| f    | survival | bitF1  | pos    | neg    | NORMAL_FAR |
+| 1.00 | 1.000    | 0.6789 | 0.6547 | 0.0416 | 0.0337     |
+| 0.75 | 0.823    | 0.6906 | 0.6754 | 0.0355 | 0.0027     |
+| 0.50 | 0.646    | 0.7013 | 0.6984 | 0.0312 | 0.0050     |
+| 0.25 | 0.469    | 0.6815 | 0.6703 | 0.0377 | 0.1810     |
+| 0.00 | 0.293    | 0.5785 | 0.5232 | 0.1303 | 0.1223     |
+Verdict: naive "fidelity down -> bit_F1 down monotonically" is REFUTED (bit_F1
+is flat/up to f=0.5; defect still detectable at half strength). The real
+causal effect is on FALSE ALARMS: as fidelity drops, NORMAL_FAR spikes
+(0.003 -> 0.18 at f=0.25) and neg_prob jumps (0.03 -> 0.13 at f=0) — erasing a
+source's evidence while keeping its label teaches spurious firing. This CAUSAL
+result confirms the fidelity->FAR mechanism (Prop 2 / Thm 1 independence term)
+and explains cutmix's high FAR; refines the paper's claim to "fidelity governs
+false alarms first, bit_F1 only at extreme erosion". CSV: wm38_fidelity_causal_3s.csv.
