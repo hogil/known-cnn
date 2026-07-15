@@ -1,9 +1,19 @@
 # Multi-Label Recognition Without Multi-Label Annotation: Label-Faithful Synthesis from Single-Label Data
 
-Working draft v0.1 (2026-07-07). All numbers are measured (sources:
-`docs/superpowers/multilabel_synth_RESULTS.md`, chip leaderboards under
-`outputs/`). Target: IEEE TII / T-Semi.Manuf / Pattern Recognition (stretch:
-WACV/BMVC after COCO + SPML comparison).
+Working draft v0.2 (2026-07-10). All numbers are measured (primary log:
+`D:/project/known-cnn/docs/superpowers/multilabel_synth_RESULTS.md`; result
+CSVs under `D:/project/known-cnn/outputs/multilabel_synth/`). Candidate venues
+are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_260710.md`.
+
+> **WM38 FCM/FCM-PM audit, 2026-07-13.** Historical external CSV keys were
+> `fcm_pm` = FCM and `fcm_pm_pm` = FCM-PM. The first external FCM-PM port was
+> incomplete and is invalid as FCM-PM evidence. Whole-image max-union is the
+> exact binary-domain operator of Shin et al. (2022) Summation Mixup, not an
+> FCM-PM result. Historical runs remain diagnostic because their training
+> protocol is unmatched; an exact named Shin22 arm is now included in the
+> strict common-protocol comparison. Corrected FCM/FCM-PM runs and strict evidence are tracked
+> in `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`
+> and must replace the archived privileged-union headline before submission.
 
 ---
 
@@ -17,26 +27,23 @@ annotate. In contrast, single-defect examples are cheap and unambiguous. We
 study how to train a multi-label classifier from single-label supervision
 alone, by synthesizing combination examples from single-label sources. We show
 that the choice of synthesis operator is governed by a measurable property we
-call label fidelity — the probability that every labeled object actually
-survives in the synthesized image — and that operators preserving whole
-objects with hard labels (per-pixel max/min overlay; full-cover complement
+call label fidelity — the probability that every labeled source retains
+detectable evidence in the synthesized example — and that operators preserving
+source evidence with hard labels (per-pixel max/min overlay; full-cover complement
 mixing) dominate averaging (Mixup) and rectangle-patch (CutMix) synthesis. On
 a controlled MultiMNIST benchmark, blind max-overlay synthesis from
 single-label data exceeds a fully-supervised oracle on the full test
 (mAP 0.868 vs 0.846) and exceeds it by +0.198 mAP on held-out label
 combinations that the oracle never observed. On the public MixedWM38 wafer-map
-benchmark, under an equal-condition comparison (same backbone and budget,
-where the fully-supervised oracle reaches 0.974 +-0.019 bit-F1 — matching
-published 98-99% accuracies), training only on real single-defect wafers
-recovers 86% of the oracle (0.841 +-0.034 over nine seeds) while driving
-false alarms on 1,000 real normal wafers to zero (exactly zero in six of
-nine seeds; mean 0.0008, max 0.005) — the oracle false-alarms on 56% +-8. Crucially, rejection cannot rescue the oracle: its
-confidence on real normals is >=0.99 for 80% of them, so even a 0.99
-threshold leaves a 0.80 false-alarm rate — the reliability advantage is
-created by the synthesis-side training design (defect-erased synthetic
-normals and pair masking shaping the confidence geometry), not by any
-inference trick, and cannot be bought with more real data. A small set of
-known-good samples further yields a finite-sample conformal FAR guarantee
+benchmark, corrected five-seed FCM-PM experiments expose a controllable
+accuracy/rejection tradeoff: negative target 0.02 gives 0.6846 bit-F1, 2.58%
+real-normal FAR, and 0.503 probability gap, whereas 0.20 raises bit-F1 to
+0.7225 but raises real-normal FAR to 25.4% and reduces the gap to 0.424. Our
+method -- FCM-PM (full-cover complement mixing with Pair-Mask), gated by
+source-only val-margin selection and synthetic-only Gaussian (naive-Bayes)
+rejection -- is compared against content-blind reference arms (overlay, CutMix,
+Mixup, FCM, UnionMixup, single-only) under matched update budgets. A small set of known-good samples further
+yields a finite-sample conformal FAR guarantee
 (realized 0.040 at alpha=0.05, 0.006 at alpha=0.01). We
 characterize when the approach transfers to natural images (PASCAL VOC) and
 release the full harness.
@@ -56,8 +63,8 @@ them.
 
 We answer by synthesizing combination examples from single-label sources and
 show that the choice of synthesis operator is governed by one measurable
-quantity: label fidelity — the probability that every labeled object
-actually survives in the synthesized image. Operators that preserve object
+quantity: label fidelity — the probability that every labeled source retains
+detectable evidence in the synthesized example. Operators that preserve source
 evidence (per-pixel max in signal-ordered spaces; vector averaging in
 disjoint-vocabulary text) rank above operators that destroy it (rectangle
 patching, pixel averaging), and the measured survival ordering predicts the
@@ -65,16 +72,17 @@ downstream performance ordering in every domain we test (9/9 pairwise
 orderings across three image families; a fourth, text, explains an apparent
 exception: the fidelity-maximizing operator is modality-dependent).
 
-The reliability result is the practical core. On the public MixedWM38
-benchmark, an equal-condition fully-supervised oracle reaches 0.974 bit-F1
-(matching published 98-99% accuracies) but false-alarms on 56% of real
-normal wafers — and rejection cannot rescue it, because its confidence on
-normals is above 0.99 for most of them. Our pipeline, trained on 7,015 real
-singles with zero multi-label and zero normal annotations, recovers 86% of
-the oracle's bit-F1 while producing zero false alarms across all six seeds,
-and a handful of known-good samples upgrades this to a finite-sample
-conformal guarantee. The trade is explicit and industrially favorable:
-14% of bit-F1 for a false-alarm axis the oracle cannot buy with more data.
+The reliability result is the practical core. Our method is FCM-PM (full-cover
+complement + Pair-Mask) synthesis paired with val-margin checkpoint selection
+and a synthetic-only Gaussian (naive-Bayes) rejection stage; overlay is the
+strongest content-blind image reference arm, not the headline method. On
+MixedWM38, FCM-PM's negative
+target controls a clear raw tradeoff between multi-label F1 and the real-normal
+tail. We therefore select checkpoints on a disjoint held-out-source synthetic
+proxy and fit class-conditional pattern likelihoods using only further disjoint
+single sources and synthetic normals. Real mixed and normal maps remain final
+test data. The paper promotes this pipeline only if it dominates CutMix and the
+closest prior methods at matched coverage or matched real-normal acceptance.
 
 Contributions:
 1. A stricter-than-SPML problem setting — multi-label recognition from
@@ -84,12 +92,12 @@ Contributions:
    benchmark numbers.
 2. Label fidelity as a measurable, predictive property of synthesis
    operators, with a superposition-domain theory that predicts where blind
-   synthesis matches the real-mix distribution, where it fails (natural RGB),
-   and which operator is correct per modality.
-3. False-alarm control by construction: defect-erased synthetic normals and
-   pair masking shape a confidence geometry that yields zero false alarms at
-   full coverage; conformal rejection adds a distribution-free guarantee.
-   The fully-supervised oracle, by contrast, is unrescuable by thresholding.
+   synthesis matches the real-mix distribution, when that zero-shift guarantee
+   ceases to apply, and which operator is appropriate per modality.
+3. A strict source-only reliability pipeline: synthetic validation margin for
+   checkpoint selection, class-conditional Gaussian pattern likelihood for
+   rejection/decoding, and split-conformal calibration for a finite-sample
+   marginal guarantee under exchangeability.
 4. An anatomy of the remaining gap: bit-level evidence composes across
    combination orders while joint appearance does not — the oracle's true
    advantage is the appearance interaction of real high-order mixes, not
@@ -123,23 +131,21 @@ Contributions:
   this failing baseline. Synthesis addresses it; label correction cannot.
   Full positioning + the information-ordering argument in Sec. 6.
 - **Mixed-type wafer map classification.** MixedWM38 (Wang et al., 2020);
-  fully-supervised methods reach 98-99% accuracy (density-aware fusion 2025;
-  MLR-WM-ViT). **Single-to-mixed prior art exists and must be engaged
-  head-on**: (i) ESWA 2023 "Learning from single-defect wafer maps to
-  classify mixed-defect wafer maps" — synthesizes mixed maps via mixup +
-  rotation + noise filtering from normal+single maps; (ii) CAIE 2025
-  "Mixed-defect wafer map separation and detection based on single-defect
-  wafer map"; (iii) SSRN 2025 diffusion+attention synthesis. Our
-  differentiation: (a) label-fidelity mechanism — we measure WHY operators
-  differ and show mixup-style blending is the weakest image operator (bitF1
-  0.435 vs 0.837 overlay stack on WM38); (b) the false-alarm axis these works
-  do not study — the real-mixed-trained oracle false-alarms on 56% +-8 of
-  real normals and cannot be rescued by thresholding, while synthetic normals
-  + pair masking drive this to zero with no normal labels; (c)
-  held-out-combination compositional protocol; (d) cross-domain
-  scope (chip palette maps, MultiMNIST, VOC boundary); (e) training-free
-  operators vs generative (diffusion) synthesis. TODO: obtain ESWA-2023
-  protocol details/numbers for a direct-comparison paragraph.
+  fully-supervised methods reach 98-99% accuracy. The single-to-mixed setting
+  is not new: prior methods use WBM-specific Summation Mixup (Shin et al.,
+  2022), mixup with rotation and noise filtering (Shim and Kang, 2023), binary
+  union-style Mixup and token-level saliency mixing (Yu, 2024), adaptive ROI
+  extraction and combination from single-defect heat maps (Thuan, 2025), or
+  learned separation and diffusion pipelines (Li et al., 2025; Yang et al.,
+  2026). Thuan is the closest direct synthesis competitor, but it explicitly
+  extracts defect support; FCM-PM remains location-agnostic. Our novelty is
+  instead the cross-domain label-fidelity criterion, a
+  controlled operator comparison with held-out combinations and real-normal
+  FAR, and the matched-law theory plus conformal control. A submission-grade
+  version must reproduce every prior whose exact specification is available
+  under our common 8-bit/FAR protocol and report native results plus protocol
+  gaps for inaccessible methods; this is a required comparison, not an
+  optional paragraph.
 - **Open-set / false-alarm control.** Relation to OOD rejection; our pair-mask
   and synthetic-normal are training-side mechanisms (inference-side selection
   and rejection are a separate paper).
@@ -173,10 +179,25 @@ and pos/neg mean predicted probability as calibration diagnostics.
 
 ## 4 Method: Label-Faithful Synthesis
 
+Our method is three named techniques: (i) **FCM-PM** -- a content-blind,
+label-faithful synthesis operator combining full-cover complement mixing (FCM)
+with Pair-Mask (PM); (ii) **val-margin checkpoint selection** on a disjoint
+held-out-source synthetic proxy; and (iii) **NB-reject** -- a synthetic-only
+class-conditional Gaussian (naive-Bayes) pattern-likelihood reject/decode
+stage, optionally backed by the split-conformal FAR guarantee (Sec 5.10). The
+other operators in 4.1 (overlay, CutMix, Mixup, complement-only, single-only,
+oracle) are content-blind reference/baseline arms evaluated under the identical
+gate; overlay (per-pixel max) is the strongest image reference by label
+fidelity but is not the promoted method. Generality is established primarily on
+image datasets (MixedWM38 public wafer, chip-internal, MultiMNIST); text
+(Reuters, Sec 5.9) is an additional modality, and audio is an optional bonus
+extension, not a load-bearing claim.
+
 ### 4.1 Synthesis operators (content-blind)
 
 Given two singles (x_a, a), (x_b, b):
-- **overlay**: per-pixel max (wafer/palette domains: defect intensity wins
+- **overlay** (content-blind reference arm, not the promoted method): per-pixel
+  max (wafer/palette domains: defect intensity wins
   over normal background) — both objects survive whole; hard label {a,b}.
   Domain analog: chip min-blend.
 - **complement (FCM)**: G x G grid (G = 3N, e.g. 9), cells randomly permuted
@@ -264,70 +285,80 @@ also beats the mixup and cutmix augmentation baselines (0.868 vs 0.738 /
 
 ### 5.2 MixedWM38 (public benchmark; real multi-label evaluation)
 
+Audit note (2026-07-10): pre-audit WM38 F1 values in this subsection use the
+legacy macro whose denominator could change when an unsupported test bit
+produced a false positive. They remain provenance records, not final
+submission numbers. The paired saved-probability rerun will replace them with
+supported-class macro-F1; all FAR values remain separately reported.
+
 38,015 real wafer maps: 7,015 singles (train source), 30,000 real mixed
 (29 combos; eval), 1,000 real normals (FAR). SmallCNN, 15 epochs, 3 seeds;
 6 combos excluded from oracle training.
 
-Equal-condition headline (ResNet-18, 30 epochs, both sides):
+Archived historical Summation Mixup diagnostic (excluded from the main table
+until the matched strict rerun completes):
 
 | config                             | seeds | EVAL bitF1      | HOLDOUT bitF1 | NORMAL FAR       |
 |------------------------------------|-------|-----------------|---------------|------------------|
 | oracle (real mixed + multi labels) |     3 | 0.974 +-0.019   |         0.957 | 0.563 +-0.083    |
-| overlay+sn+neg003 (zero labels)    |     9 | 0.841 +-0.034   |         0.823 | 0.0008 (6/9 = 0) |
+| Shin22-style Summation Mixup+sn+neg003 | 9 | 0.841 +-0.034 | 0.823 | 0.0008 (6/9 = 0) |
 
 (The oracle matches published MixedWM38 accuracies 98-99%, validating the
 harness. An earlier "statistical parity" claim against a SmallCNN-15ep oracle
 (0.863) is retracted as a weak-oracle artifact — caught by this fairness
-check. Oracle+rejection: max-prob on real normals >=0.99 for 80% of normals,
-so even tau=0.99 leaves FAR 0.799 — rejection cannot rescue the oracle.)
+check. For the headline oracle checkpoint, max-prob on real normals >=0.99 for
+80% of normals, so tau=0.99 still leaves FAR 0.799. This is a checkpoint-level
+calibration result, not an impossibility claim about all oracle training.)
 
 Secondary configs:
 
 | config (3 seeds)                  | EVAL bitF1      | exact | HOLDOUT bitF1 | NORMAL FAR      |
 |-----------------------------------|-----------------|-------|---------------|-----------------|
-| overlay+sn+neg003 (SmallCNN,n6000)| 0.749 +-0.064   | 0.375 |         0.745 | 0.095           |
-| overlay+sn+neg003 (ResNet18,15ep) | 0.717 +-0.079   | 0.399 |         0.735 | 0.013 +-0.003   |
-| overlay+sn+neg003 (SmallCNN,15ep) | 0.641 +-0.019   | 0.248 |         0.614 | 0.031 +-0.026   |
-| overlay+sn          | 0.581 +-0.022   | 0.178 |         0.554 | 0.001 +-0.001   |
-| fcm_pm_pm+sn+neg003 | 0.540 +-0.035   | 0.254 |         0.487 | 0.058 +-0.031   |
-| overlay (no sn)     | 0.609 (1 seed)  | 0.199 |         0.588 | 0.562           |
+| Summation Mixup+sn+neg003 (SmallCNN,n6000)| 0.749 +-0.064 | 0.375 | 0.745 | 0.095 |
+| Summation Mixup+sn+neg003 (ResNet18,15ep) | 0.717 +-0.079 | 0.399 | 0.735 | 0.013 +-0.003 |
+| Summation Mixup+sn+neg003 (SmallCNN,15ep) | 0.641 +-0.019 | 0.248 | 0.614 | 0.031 +-0.026 |
+| Summation Mixup+sn | 0.581 +-0.022 | 0.178 | 0.554 | 0.001 +-0.001 |
+| FCM-PM + sn + neg003 (legacy `fcm_pm_pm`) | 0.540 +-0.035 | 0.254 | 0.487 | 0.058 +-0.031 |
+| Summation Mixup (no sn) | 0.609 (1 seed) | 0.199 | 0.588 | 0.562 |
 | cutmix              | 0.563 +-0.020   | 0.291 |         0.487 | 0.810 +-0.218   |
-| fcm_pm (no PM)      | 0.495 +-0.009   | 0.230 |         0.435 | 0.839 +-0.125   |
+| FCM (legacy `fcm_pm`) | 0.495 +-0.009 | 0.230 | 0.435 | 0.839 +-0.125 |
 | mixup               | 0.435 +-0.013   | 0.070 |         0.400 | 0.087 +-0.109   |
 | single_only         | 0.232 +-0.035   | 0.014 |         0.204 | 0.778 +-0.126   |
 
-Claims: (i) synthesis recovers 86% of the equal-condition oracle's bit-F1
-with zero multi labels (headline table above); (ii) the oracle cannot
-control false alarms (0.563 +-0.083 on real normals, unrescuable by
-thresholding) — pair masking (0.852 -> 0.012 in isolation) and synthetic
-normals (0.562 -> 0.001) fix it by construction, to zero at the headline
-configuration; (iii) label-fidelity ordering reproduces (overlay > cutmix >
-fcm_pm > mixup for bitF1, matching measured survival).
+Diagnostic interpretation only: (i) Shin22 Summation Mixup preserves source
+support and is the closest published single-to-mixed baseline; (ii) pair masking in the
+complement arm (0.852 -> 0.012 in isolation) and synthetic normals in the
+Summation Mixup arm (0.562 -> 0.001) strongly reduce
+observed normal FAR in historical experiments; (iii)
+label-fidelity ordering reproduces (Summation Mixup > CutMix > FCM > Mixup for
+bitF1, matching measured survival). The oracle's FAR is seed-sensitive and is
+not claimed to be inherently irreducible.
 
 **Full-scale confirmation (ResNet-18, all 7,015 singles as sources, 14,000-mix
 test, 30 epochs, 3 seeds).** synthetic-normal (4,000) and neg-target (0.03)
-applied IDENTICALLY to every non-oracle arm, so the FAR column isolates the
-operator:
+applied IDENTICALLY to every arm, including the oracle, so the FAR column
+supports an operator comparison under the same auxiliary negative control:
 
 | arm (full scale)  | EVAL bitF1      | HOLDOUT | NORMAL FAR | recovery |
 |-------------------|-----------------|---------|------------|----------|
 | oracle            | 0.9844 +-0.0065 |   0.980 |      0.186 |     100% |
-| overlay (ours)    | 0.7947 +-0.0734 |   0.797 |     0.0003 |      81% |
+| Shin22-style Summation Mixup | 0.7947 +-0.0734 | 0.797 | 0.0003 | 81% |
 | cutmix            | 0.8548 +-0.0487 |   0.897 |      0.618 |      87% |
 | mixup             | 0.5809 +-0.0891 |   0.506 |      0.758 |      59% |
 | single_only       | 0.4086 +-0.0098 |   0.375 |      0.390 |      42% |
 
-Two things sharpen at scale. (1) Under an IDENTICAL synthetic-normal control,
-only overlay reaches zero false alarms (0.0003); cutmix and mixup inject
-destroyed-source false-positive labels that defeat the control and fire on
-normals (FAR 0.62 / 0.76) — a direct empirical confirmation of the
-fidelity->FAR mechanism (the independence term of Theorem 1). (2) cutmix's
-HIGHER raw bit-F1 (0.855) is operationally unusable at 62% false alarm: the
-bit-F1-only lens crowns cutmix, the FAR lens shows overlay is the only viable
-operator. overlay's bit-F1 (0.795 +-0.073) is within seed variance of the
-9-seed n=6000 headline (0.841); the oracle rises to 0.984 with full data, so
-recovery reads 81% here. The zero-FAR property and overlay >> single-only
-(2x) ordering hold at full scale.
+This archived experiment shows that source-support preservation changes the
+negative tail. It is mechanism evidence only because the method budgets and
+selection procedures were not yet matched, not because Summation Mixup uses
+extra annotations. The strict rerun compares it with FCM-PM under identical
+source information, view budget, splits, checkpoint selection, and rejection.
+
+TODO(fcm-pm full-scale): the full-scale FCM-PM row (all 7,015 singles, 30
+epochs, five seeds) is still computing. Until it lands, the full-scale
+content-blind reference is the overlay/Summation-Mixup arm above; the promoted
+method's full-scale headline must not be quoted from proxy-scale numbers
+(current FCM-PM proxy-scale bit-F1 0.654-0.6846 is below the overlay reference
+0.795-0.841 and is not yet the comparable headline).
 
 #### 5.2.1 Loss-engineering control: can a better loss on singles substitute?
 
@@ -343,12 +374,12 @@ loss:
 | single_only + BCE          |       0.947 |      0.243 |  0.167/0.032 |      0.591 |
 | single_only + ASL          |       0.923 |      0.316 |  0.231/0.103 |      1.000 |
 | single_only + Focal        |       0.953 |      0.242 |  0.172/0.044 |      0.584 |
-| overlay + BCE (ours)       |       0.936 |      0.607 |  0.555/0.019 |      0.549 |
+| Shin22-style Summation Mixup + BCE | 0.936 | 0.607 | 0.555/0.019 | 0.549 |
 
 All four fit the single-label training data equally (train bit-F1 0.92-0.95).
 The strongest multi-label loss (ASL) lifts EVAL bit-F1 by only +0.073 over BCE
 (0.243 -> 0.316) and does so by over-predicting positives, driving real-normal
-FAR to 1.00. Focal gives nothing (+0.00). Synthesis (overlay) adds +0.364 —
+FAR to 1.00. Focal gives nothing (+0.00). Summation Mixup synthesis adds +0.364 —
 five times the best loss-engineering gain — while keeping FAR lower. The
 bottleneck is not loss calibration but the absence of label co-occurrence
 structure in single-label data, which no loss can recover and which synthesis
@@ -412,7 +443,7 @@ human review). Three independent reproductions (15/30/60-epoch models):
 | 30ep(easy) | 0.9 |    94.4% | 0.699 (kept)    | 0.041 -> 0.000   |
 | 60ep       | 0.9 |    98.1% | 0.747 (kept)    | 0.062 -> 0.000   |
 
-Zero false alarms on 1,000 real normals at 2-8% review cost; accepted-set
+Observed 0/1,000 false alarms on real normals at 2-8% review cost; accepted-set
 accuracy never drops; longer training makes rejection cheaper.
 
 Checkpoint selection (honest scope): on the chip domain, val-F1 saturates at
@@ -443,7 +474,34 @@ thing single-label data cannot supply (Sec Theory, P1 delta).
 Annotation efficiency (winner recipe): 500 real singles (~62/class) already
 reach bit-F1 0.617 with 0.002 NORMAL FAR; 2000 -> 0.697; 7015 -> 0.779.
 
-### 5.8 Fourth family: text (Reuters-21578) and the operator-flip
+### 5.8 Controlled source-evidence intervention
+
+We attenuated one source toward the normal-die baseline before max-overlay,
+kept the hard union label, and changed no other training factor. Five paired
+model/data-split repeats show a threshold rather than a smooth monotonic law.
+The supported-class macro-F1 uses the six bits that occur in the real mixed
+test; Random and NearFull have no positive mixed examples and their false
+positives are counted in FAR, not conditionally inserted into the F1 macro.
+
+| retained evidence f | supported bit-F1 | pos prob | neg prob | gap | NORMAL FAR |
+|---:|---:|---:|---:|---:|---:|
+| 0.00 | 0.631+-0.034 | 0.517 | 0.133 | 0.384 | 0.179+-0.091 |
+| 0.10 | 0.724+-0.028 | 0.602 | 0.067 | 0.536 | 0.507+-0.162 |
+| 0.25 | 0.806+-0.022 | 0.681 | 0.040 | 0.642 | 0.253+-0.125 |
+| 0.50 | 0.811+-0.022 | 0.697 | 0.032 | 0.665 | 0.005+-0.007 |
+| 0.75 | 0.814+-0.029 | 0.687 | 0.032 | 0.655 | 0.012+-0.021 |
+| 1.00 | 0.793+-0.037 | 0.654 | 0.041 | 0.614 | 0.015+-0.017 |
+
+Full versus erased evidence improves supported bit-F1 by 0.162 (paired
+bootstrap 95% CI 0.129--0.208), increases probability gap by 0.229
+(0.191--0.276), and reduces NORMAL FAR by 0.164 (0.087--0.234). Survival is
+associated with bit-F1 (Spearman rho=0.662, p<0.001), gap (rho=0.624), and
+NORMAL FAR (rho=-0.656), but adjacent-step monotonicity is only 60%, 68%, and
+52%, respectively. The defensible mechanism is therefore a minimum-sufficient
+evidence threshold: catastrophic weakening destabilizes the F1/FAR frontier;
+maximal evidence is not itself the F1 optimum.
+
+### 5.9 Fourth family: text (Reuters-21578) and the operator-flip
 
 Natural split, full top-20 categories (5,995 single-topic train / 889
 real multi-topic oracle pool / 300 real multi-topic test; TF-IDF + MLP,
@@ -457,7 +515,7 @@ pixel coordinates and averaging ghosts them. The invariant law is evidence
 preservation (label fidelity); which operator maximizes it is determined by
 the modality's evidence geometry.
 
-### 5.9 Conformal FAR guarantee and its boundary
+### 5.10 Conformal FAR guarantee and its boundary
 
 Split-conformal threshold from 500 known-good real normals: realized FAR
 0.040 at alpha=0.05 and 0.006 at alpha=0.01, coverage >= 99.5% (guarantee
@@ -466,7 +524,7 @@ training-style synthetic normals fails (realized FAR 0.97): training
 collapses their scores, so exchangeability with deployment normals is the
 binding assumption.
 
-### 5.10 What the oracle's advantage actually is
+### 5.11 What the oracle's advantage actually is
 
 Two hypotheses for the residual bit-F1 gap were tested and rejected: (i)
 combination support — synthesizing only the 29 real combos does not recover
@@ -474,22 +532,22 @@ joint accuracy (4-mix exact 0.000 unchanged); (ii) order coverage — adding
 triples/quads hurts. The surviving explanation: real higher-order mixes
 contain appearance interactions (overlapping defects distort one another)
 that independent-union synthesis cannot produce. The oracle's advantage is
-the image distribution of real high-order mixes; conversely, rejection
-cannot buy the oracle our false-alarm control (Sec 5.2). Each side owns one
-axis, and only ours is available without annotation.
+the image distribution of real high-order mixes. Our training-side design is
+more consistently low-FAR in the measured protocols, but the full-scale oracle
+reaches 0.001 normal FAR in one seed, so this is not an impossibility result.
 
 ## 6 Discussion & Limitations
 
 **What each side owns.** Under equal conditions the oracle keeps a bit-F1
 lead (0.974 vs 0.837): real high-order mixes contain appearance interactions
-that independent-union synthesis cannot produce, and we show this gap is not
-closable from the label side — neither combination-support knowledge nor
-higher-order synthesis recovers it (Sec 5.10). Conversely, the oracle's
-false-alarm behavior is not closable from the inference side — with
-confidence above 0.99 on most real normals, no threshold separates its
-normals from defects (FAR 0.799 even at tau 0.99). Each regime owns one
-axis; only the synthesis side's axis is available without annotation, and in
-inspection practice the false-alarm axis is typically the binding one.
+that independent-union synthesis does not reproduce; neither combination-
+support matching nor naive higher-order synthesis closes it in our tests
+(Sec 5.10). On the headline oracle checkpoint, even tau=0.99 leaves normal
+FAR 0.799. However, the full-scale oracle varies from 0.295/0.262/0.001
+across seeds, so this is an optimization/calibration result, not an inherent
+impossibility theorem. The robust claim is that our training-side construction
+reaches near-zero observed normal FAR more consistently without real-normal
+training.
 
 **Positioning against single-positive multi-label (SPML).** SPML is the
 paradigm most easily confused with ours, and the difference is not
@@ -548,9 +606,10 @@ the regime where the val metric saturates (observed in the chip domain;
 absent on WM38) and is reported as a domain-scoped finding.
 
 **Guarantee boundary.** The conformal FAR guarantee requires calibration
-normals exchangeable with deployment normals: 500 known-good samples
-(annotation-free to collect) suffice, whereas training-style synthetic
-normals fail (their scores are collapsed by training itself).
+normals exchangeable with deployment normals. Known-good status must still be
+established, although it requires no defect-type or location annotation.
+Training-style synthetic normals fail because their scores are collapsed by
+training itself.
 
 **Scope.** One public benchmark with real mixed labels carries the
 industrial claim (MixedWM38); chip-domain results use internal data;
@@ -561,14 +620,13 @@ is conceptual, not empirical (Sec. 6).
 
 ## 7 Conclusion
 
-From single-label data alone — no multi-label, no normal, no location
+From single-label training data alone — no multi-label, real-normal, or location
 annotation — label-faithful synthesis trains multi-label recognizers that
 recover 86% of an equal-condition fully-supervised oracle on real mixed
 data, exceed it on unseen combinations when the combination space is rich,
-and achieve a false-alarm regime the oracle cannot reach by any amount of
-real data or thresholding: zero false alarms at full coverage, with a
-finite-sample conformal guarantee available for the price of a handful of
-known-good samples. The governing quantity, label fidelity, is measurable
+and achieve near-zero observed normal FAR across nine seeds. Optional
+calibration on a small known-good set provides a finite-sample marginal FAR
+guarantee under exchangeability. The governing quantity, label fidelity, is measurable
 before training and predicts operator rankings across four domain families;
 the superposition-domain condition predicts where the approach matches the
 real distribution and where it does not. What remains with the oracle is the
@@ -577,15 +635,15 @@ leave as the open problem.
 
 ---
 
-## TODO before submission
+## Required before submission
 
-- [ ] Replace 1-seed WM38 rows with 3-seed (hardening batch running)
-- [ ] Backbone ablation table (ResNet-18, running)
-- [ ] Scaling curve (running)
-- [ ] COCO section 5.4 (downloading)
-- [ ] Literature pass for 2024-26 SPML/synthesis work (web search)
-- [ ] MixedWM38 published-baseline positioning paragraph
-- [ ] Figures: (1) synthesis-arm montage (have: mnist_synthesis_arms.png,
-      mnist_complement_faithful.png), (2) survival-vs-bitF1 scatter,
-      (3) holdout collapse bar chart, (4) FAR bar chart
-- [ ] LaTeX port (venue template)
+- [ ] Finish the queued five-seed common-protocol evaluation of the exact
+      Shin et al. 2022 Original/Average/Summation Mixup arms; implement and
+      evaluate Shim--Kang 2023 only after its exact operator is recovered.
+- [ ] Run the controlled fidelity intervention and paired main-arm seeds.
+- [ ] Produce threshold--bit_F1--NORMAL-FAR frontiers from calibration-selected
+      operating points.
+- [ ] Repeat conformal calibration splits and report finite-sample coverage.
+- [ ] Compile `D:/project/known-cnn/docs/mlsynth_paper/latex/main.tex` with a
+      real LaTeX engine and add the three submission figures listed in
+      `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_260710.md`.

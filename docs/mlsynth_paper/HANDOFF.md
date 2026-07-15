@@ -1,28 +1,126 @@
 # Handoff — "Multi-label from single-label via content-blind synthesis"
 
+> **Critical correction, 2026-07-13.** Historical external CSV keys were
+> `fcm_pm` = FCM and `fcm_pm_pm` = FCM-PM. The first external WM38 FCM-PM port
+> was not the chip project's FCM-PM: it omitted the `g` complementary
+> full-cover views and used the wrong Pair Mask fill. Its result files are
+> audit-only and must not be used as FCMPM evidence. The corrected definition,
+> code paths, strict-vs-calibration information split, and replacement queue
+> are in `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`.
+
 Self-contained state of the mlsynth paper project, for continuation by another
-agent/tool. Everything below is measured and committed to `hogil/known-cnn`
-(branch `main`). Paper artifacts live in `docs/mlsynth_paper/`.
+agent/tool. The measured base state is committed to `hogil/known-cnn` on
+`main`; the 2026-07-10 correctness audit is currently a local, uncommitted
+change set. Paper artifacts live in
+`D:/project/known-cnn/docs/mlsynth_paper/`.
+
+## 0. Active ICLR evidence chain (2026-07-15)
+
+Do not restart from the historical overlay headline. The active claim is
+source-only compositional multi-label learning with a domain-compatible,
+label-faithful operator. On WM38 the structured methods are exactly **FCM** and
+**FCM-PM**; for `g` groups, FCM-PM is the `g` complementary full-cover FCM
+views plus `g` corresponding Pair Mask views. On FSD50K, exact
+waveform summation is the modality-compatible primary operator; FCM and FCM-PM
+remain secondary tested operators rather than assumed winners.
+
+Active/pending order:
+
+1. Finish the historical WM38 FCM/FCM-PM geometry reproduction. At the latest
+   audit it had `40/48` five-seed conditions and was running FCM random
+   `g=4`, `16x16`. Runner:
+   `D:/project/known-cnn/scripts/run_wm38_fcm_geometry_hard_5seed.ps1`.
+2. Immediately run the equal-area `balanced` replication. Its first 18
+   conditions compare `random`, `random_fixed`, and `checkerboard` at
+   `g2/4x4`, `g3/9x9`, and `g4/12x12` for FCM and FCM-PM over five paired
+   seeds. This separates per-pair mask diversity from periodic topology before
+   reusing those results in the full 48-condition factorial. Runners:
+   `D:/project/known-cnn/scripts/run_wm38_layout_diversity_balanced_5seed.ps1`
+   and
+   `D:/project/known-cnn/scripts/run_wm38_fcm_geometry_balanced_5seed.ps1`.
+   Mechanism audit:
+   `D:/project/known-cnn/docs/mlsynth_paper/WM38_LAYOUT_AND_CELL_BOUNDS_AUDIT_260715.md`.
+3. Strict FCM-PM negative-target `.02/.20`, synthetic held-out checkpoint
+   selection, then equal-budget single-only/Mixup/CutMix/exact Shin22
+   variants/UnionMixup/FCM baselines. Chain:
+   `D:/project/known-cnn/scripts/start_wm38_strict_fcmpm_neg_compare_after_geometry.ps1`.
+   A separate 40-row queue adds standard Beta-area CutMix with byte-identical
+   hard-presence and area-soft target variants:
+   `D:/project/known-cnn/scripts/run_wm38_strict_cutmix_beta_neg002_5seed.ps1`.
+   The same chain then runs a preregistered method-aligned checkpoint-proxy
+   sensitivity analysis while retaining the common FCM-PM NB bank. Protocol:
+   `D:/project/known-cnn/docs/mlsynth_paper/WM38_PROXY_POLICY_SENSITIVITY_PROTOCOL_260715.md`.
+   The executable source-role, evaluation-slice, train-budget, and proxy-
+   cardinality audit is **PASS**:
+   `D:/project/known-cnn/docs/mlsynth_paper/WM38_STRICT_PROTOCOL_AUDIT_260715.md`.
+4. Practical real-Normal train/calibrate confirmation and NB operating curves:
+   `D:/project/known-cnn/scripts/start_wm38_real_normal_after_strict.ps1`.
+5. Independent prospective FSD50K source-only-to-sealed-real-multi benchmark:
+   `D:/project/known-cnn/scripts/start_fsd50k_source_only_when_ready.ps1`.
+
+The FSD50K information split, primary endpoint, safety gate, and failure rule
+were frozen before model input download in
+`D:/project/known-cnn/docs/mlsynth_paper/FSD50K_PROSPECTIVE_PROTOCOL_260715.md`.
+The broader acceptance gates are frozen in
+`D:/project/known-cnn/docs/mlsynth_paper/ICLR_EVIDENCE_GATE_260715.md`.
+The runner saves per-seed sealed predictions and reports both seed-paired CIs
+and crossed two-way paired CIs over model seeds and shared evaluation clips.
+The executable pre-result information-split audit is **PASS**: all five
+manifests have zero pairwise audio-path overlap; feature targets, five-seed
+selection/Gaussian-fit/threshold roles, and all 15 waveform-cache provenance
+keys agree. Report and machine-readable evidence:
+`D:/project/known-cnn/docs/mlsynth_paper/FSD50K_INFORMATION_SPLIT_AUDIT_260715.md`
+and
+`D:/project/known-cnn/outputs/multilabel_synth/fsd50k_information_split_audit.json`.
+
+Current FSD50K code paths:
+
+- `D:/project/known-cnn/multilabel_synth/run_fsd50k_source_only.py`
+- `D:/project/known-cnn/multilabel_synth/synthesis/fsd50k_waveform.py`
+- `D:/project/known-cnn/multilabel_synth/analyze_fsd50k_source_only.py`
+- `D:/project/known-cnn/multilabel_synth/analyze_fsd50k_operating_curves.py`
+- `D:/project/known-cnn/multilabel_synth/audit_fsd50k_information_split.py`
+- official audio/data/cache root:
+  `E:/data/fsd50k_source_only_protocol`
+
+Latest verification: all tests under
+`D:/project/known-cnn/tests/multilabel_synth` pass (`121 passed`). No pending
+result may be promoted into the paper until its frozen evidence gate passes.
 
 ## 1. Thesis / novelty (one sentence)
 
 In **superposition domains** (where co-occurring signals combine by a known
-blind operator — pixelwise max for wafer maps / spectrograms, coordinate sum
-for bag-of-words text), you can **train a multi-label recognizer using only
-single-label data** by synthesizing multi-label examples with a **content-blind
-operator** (no location/mask annotation), and **match or beat a fully-supervised
-oracle** — with **zero multi-label, zero normal, zero location annotation**.
+blind operator — pixelwise max for wafer maps and other signal-ordered image
+domains, coordinate sum for bag-of-words text), you can **train a multi-label
+recognizer using only single-label data** by synthesizing multi-label examples
+with a **content-blind operator** (no location/mask annotation), recover a large
+fraction of a fully-supervised oracle on real mixes, and exceed an oracle that
+has not seen held-out combinations. Exact oracle equivalence is a conditional
+theoretical result, not a universal empirical claim. Generality is demonstrated
+primarily across IMAGE datasets (MixedWM38 public wafer, chip-internal ~0.99
+FCM-PM, MultiMNIST); text (Reuters) is an additional modality, and audio
+(FSD50K spectrogram summation) is an OPTIONAL bonus extension — never a
+load-bearing claim.
 
-Three named contributions (the "3 techniques"):
-1. **Label-faithful synthesis** — pick the blind operator that maximizes label
-   fidelity (survival of every source's evidence). Overlay (max) is exact for
-   images; it beats mixup/cutmix/copy-paste in survival-order.
-2. **Synthetic-normal + pair-mask FAR control** — erase defects from singles to
-   make synthetic normals; drives false alarms to ~0 by construction.
-3. **Conformal reject** — split-conformal on real known-good normals gives a
-   distribution-free FAR guarantee.
+Our method = three named techniques (**FCM-PM + val-margin selection +
+NB-reject**):
+1. **FCM-PM (label-faithful synthesis)** — the promoted content-blind operator:
+   full-cover complement mixing (FCM: the `g` complementary full-cover views)
+   plus Pair-Mask (PM). Chosen because it maximizes label fidelity (survival of
+   every source's evidence) in the superposition domain. Overlay (per-pixel max)
+   is a content-blind REFERENCE arm — the strongest image reference by
+   survival-order — NOT the headline method. Synthetic-normal + negative-target
+   is the FAR-control auxiliary applied during FCM-PM training, not a headline
+   technique on its own.
+2. **Val-margin checkpoint selection** — select checkpoints on a disjoint
+   held-out-source synthetic proxy by the pos-neg margin; source-only, never
+   touches real multi-label data.
+3. **NB-reject** — a synthetic-only class-conditional Gaussian (naive-Bayes)
+   pattern-likelihood reject/decode stage at a selective operating point.
+   Split-conformal on real known-good normals additionally gives a
+   finite-sample marginal FAR guarantee under exchangeability.
 
-## 2. Theory (docs/mlsynth_paper/THEORY.md, ported to latex sec:theory)
+## 2. Theory (`D:/project/known-cnn/docs/mlsynth_paper/THEORY.md`, ported to LaTeX)
 
 - **Def 1 (max-superposition domain)**: `x_{a,b} = x_a ∨ x_b` (evidence joined,
   never replaced). Wafer/spectrogram/ink qualify; opaque RGB photos do NOT
@@ -32,31 +130,57 @@ Three named contributions (the "3 techniques"):
   (co-occurrence prior the oracle knows, singles don't) and an **independence
   term** (correlated placement / interaction). Short proof (add/subtract R_syn +
   TV mixture chain rule).
-- **Cor 1 (no oracle advantage)**: superposition + independence + matched support
-  ⇒ TV=0 ⇒ blind synthesis is Bayes-equivalent to full supervision.
-- **Cor 2 (boundary WITHOUT running photos)**: non-join conditional (occlusion)
-  ⇒ irreducible TV floor ⇒ oracle keeps an advantage. **This is why VOC/COCO
-  fail — a theorem, not a required benchmark.**
-- **Theorem 2 (finite-sample)**: ERM adds `4·Rad_m(F) + 2B·sqrt(2ln(2/δ)/m)`;
-  only `2B·TV` is irreducible ⇒ at scale the oracle gap = residual TV.
-- **Prop 2 (fidelity→risk)** + **Prop 3 (conformal FAR)**.
+- **Cor 1 (matched-law risk equivalence)**: superposition + independence +
+  matched subset prior ⇒ TV=0 ⇒ equal population risk within the same
+  hypothesis class. If normals are evaluated, the empty-set conditional must
+  also be matched.
+- **Cor 2 (limit of the guarantee)**: a non-join conditional on a positive-mass
+  subset makes the real and synthetic laws differ. This removes the zero-shift
+  guarantee but does not alone prove a positive classification-risk gap; VOC is
+  the empirical boundary case.
+- **Theorem 2 (finite-sample)**: ERM adds loss-class complexity and
+  concentration terms; asymptotic excess risk has `limsup <= 2B·TV`, not
+  equality.
+- **Prop 2** proves label-content inconsistency at the catastrophe rate;
+  monotonic F1 consequences require a margin model. **Prop 3** uses strict
+  `score > tau` (or explicit tie handling).
 
-## 3. Measured results (all committed; numbers are current)
+## 3. Measured results (correctness audit is local/uncommitted)
 
 Metrics: **bit_F1** = macro-F1 over class bits @0.5; **FAR** = false alarms on
 negative bits; **NORMAL FAR** = false-alarm rate on real all-negative samples;
 mAP; exact-match; pos/neg prob. **Always report bit_F1 AND FAR together.**
 
+Metric audit on 2026-07-10: MixedWM38 bits 5 and 7 occur in singles but have no
+positive example in the real mixed pool. The legacy `bit_f1` conditionally
+included an unsupported class only when it had a false positive, making the
+macro denominator model-dependent. Code now computes macro-F1 over classes
+with positive target support and leaves unsupported-bit false positives in
+FAR. Existing headline F1 numbers below are legacy until the saved-probability
+main rerun is complete.
+
 ### MixedWM38 (public wafer benchmark — the industrial headline)
 - **9-seed headline (n_train 6000, ResNet-18, 30ep)**: oracle 0.974±0.019,
-  **ours(overlay+sn+neg) 0.841±0.034 = 86% recovery, NORMAL FAR 0.0008** (6/9=0).
-  Oracle NORMAL FAR 0.563 unrescuable by thresholding (0.799 @ τ=0.99).
+  **reference overlay+sn+neg 0.841±0.034 = 86% recovery, NORMAL FAR 0.0008** (6/9=0)
+  (overlay is the content-blind REFERENCE arm; the promoted method is FCM-PM,
+  whose full-scale headline is pending — see LIVE_ICLR_EVIDENCE_STATUS.md).
+  Oracle NORMAL FAR is 0.563 in the headline protocol; the reported checkpoint
+  remains at 0.799 under tau=0.99. Full-scale oracle FAR is seed-sensitive and
+  reaches 0.001 in one seed, so no universal impossibility is claimed.
 - **FULL confirmation (all 7015 singles, 14k test, 3 seeds)**: oracle 0.984,
   overlay **0.795** (NORMAL FAR **0.0003**), cutmix 0.855 (FAR **0.618**, unusable),
-  mixup 0.581 (0.758), single_only 0.409 (0.390). KEY: identical synth-normal
-  across arms, yet only overlay's zero label-noise yields zero FAR — cutmix's
-  higher bit_F1 is unusable (62% false alarms). Confirms fidelity→FAR (Thm 1
-  independence term).
+  mixup 0.581 (0.758), single_only 0.409 (0.390). Synthetic-normal is applied
+  identically to every arm, including the oracle. The result is consistent
+  with the label-content inconsistency mechanism, but it does not directly
+  estimate or identify the TV term.
+- **Corrected causal fidelity (SmallCNN, five paired model/data splits)**:
+  retained evidence `f=0/.1/.25/.5/.75/1` gives supported-class F1
+  `0.631/.724/.806/.811/.814/.793` and NORMAL FAR
+  `0.179/.507/.253/.005/.012/.015`. Full versus erased changes F1 by +0.162
+  [0.129,0.208], gap by +0.229 [0.191,0.276], and FAR by -0.164
+  [-0.234,-0.087]. Spearman associations are 0.662/-0.656 for F1/FAR, but
+  adjacent-step monotonicity is only 60%/52%: promote a catastrophe-threshold
+  mechanism, not a global monotonic law.
 
 ### MultiMNIST (controlled mechanism)
 - **FULL (400/class, 8k train, 3k test, 25ep, 3 seeds)**: overlay **0.868 mAP /
@@ -77,9 +201,10 @@ mAP; exact-match; pos/neg prob. **Always report bit_F1 AND FAR together.**
 
 ### VOC 2007 (boundary / negative control — NOT a success case)
 - oracle 0.410, copypaste(content-AWARE, uses boxes) 0.379, single_only 0.303,
-  cutmix 0.285, mixup 0.162. Blind synthesis HURTS (entity-type: objects don't
-  superimpose, single-only already ~74% without us). This is the boundary, and
-  Cor 2 predicts it — so photo benchmarks are NOT required.
+  cutmix 0.285, mixup 0.162. Blind synthesis HURTS (entity-type: objects do not
+  superimpose, single-only already ~74% without us). This illustrates the
+  conditional-mismatch boundary; the theorem does not by itself prove a
+  positive risk gap for every photo dataset.
 
 ### ChestX-ray14 (medical — probed, INCONCLUSIVE, not in paper)
 - ResNet18/128px/20ep/subsampled: oracle itself weak (mAP 0.31), overlay bitF1
@@ -94,7 +219,8 @@ mAP; exact-match; pos/neg prob. **Always report bit_F1 AND FAR together.**
 ## 4. Positioning vs SPML (the nearest paradigm)
 Information ordering: full supervision > SPML (multi-label images, 1 positive
 observed, rest are false negatives) > **ours (no multi-label image at all)**.
-Ours is strictly weaker yet recovers the oracle (Cor 1). SPML's toolkit is
+Ours is strictly weaker yet can be risk-equivalent under Corollary 1's matched-
+law assumptions. SPML's toolkit is
 INAPPLICABLE: our zeros are true negatives (no false negatives to correct), so
 our `single_only` IS SPML's Assume-Negative baseline made unbiased — and it
 still fails (0.24–0.41). An oracle SPML method reduces to that failing baseline.
@@ -108,46 +234,48 @@ benchmark is ill-posed (different inputs) ⇒ conceptual ordering only.
 - **VOC/COCO = boundary, not showcase.** Do not add photo datasets as "wins".
 - **Tier comes from theory + guarantees + the boundary, NOT dataset count.**
 - Augmentation policy: no rotation/flip that breaks class identity; the paper's
-  operators are overlay/mixup/cutmix/copy-paste/fcm-pm as synthesis, not aug.
+  operators are overlay/Mixup/CutMix/copy-paste/FCM/FCM-PM as synthesis, not aug.
 - Fairness: equal-condition oracle (same backbone/epochs/budget).
 
-## 6. Code / harness (multilabel_synth/)
-- `metrics.py` — bit_f1, far, compute_map, exact_match, pos_neg_prob.
-- `models/small_cnn.py` (0.62M, spatial-preserving), `models/resnet.py`
+## 6. Code / harness (`D:/project/known-cnn/multilabel_synth/`)
+- `D:/project/known-cnn/multilabel_synth/metrics.py` — bit_f1, far, compute_map, exact_match, pos_neg_prob.
+- `D:/project/known-cnn/multilabel_synth/models/small_cnn.py` (0.62M, spatial-preserving), `D:/project/known-cnn/multilabel_synth/models/resnet.py`
   (build_resnet18, build_resnet18_small [52px], build_resnet18_gray [128px CXR]).
-- `synthesis/arms.py`, `synthesis/wm38_arms.py`, `synthesis/voc_arms.py` —
-  synthesize_arm/synth_wm38: oracle/overlay(max)/cutmix/mixup/fcm_pm/single_only,
-  +pair_mask, +synth-normal.
+- Synthesis modules under `D:/project/known-cnn/multilabel_synth/synthesis/` —
+  synthesize_arm/synth_wm38: oracle/overlay(max)/CutMix/Mixup/FCM/FCM-PM/
+  single_only, +synth-normal.
 - Runners: `run_matrix.py` (MNIST), `run_wm38.py` (--backbone {small,resnet18}
   --loss {bce,asl,focal}), `run_condition.py` (generic condition-type, --backbone),
   `run_reuters.py`, `run_cxr_hf.py`, `run_voc*.py`, `run_coco*.py`.
 - Datasets: `datasets/{multimnist,mixedwm38,voc,coco,cxr14,plant2021}.py`.
-- Result CSVs: `outputs/multilabel_synth/*.csv` (wm38_FULL_3s, mnist_FULL_3s,
+- Result CSVs: `D:/project/known-cnn/outputs/multilabel_synth/*.csv` (wm38_FULL_3s, mnist_FULL_3s,
   aslbase_{bce,asl,focal}, reuters/voc/coco runs).
 
 ## 7. Paper artifacts
-- `docs/mlsynth_paper/DRAFT.md` — full prose draft (abstract, 6 sections).
-- `docs/mlsynth_paper/THEORY.md` — theory working doc.
-- `docs/mlsynth_paper/latex/main.tex` + `refs.bib` — LaTeX (all sections; theorem/
+- `D:/project/known-cnn/docs/mlsynth_paper/DRAFT.md` — full prose draft (abstract, 6 sections).
+- `D:/project/known-cnn/docs/mlsynth_paper/THEORY.md` — theory working doc.
+- `D:/project/known-cnn/docs/mlsynth_paper/latex/main.tex` + `D:/project/known-cnn/docs/mlsynth_paper/latex/refs.bib` — LaTeX (all sections; theorem/
   corollary defined; `\bibliography{refs}` active; env/brace/cite balance verified;
   **no LaTeX compiler was available in-env — not yet compiled to PDF**).
-- `docs/superpowers/multilabel_synth_RESULTS.md` — running measured-results log.
-- `docs/superpowers/specs/2026-07-06-...design.md` — design spec.
+- `D:/project/known-cnn/docs/superpowers/multilabel_synth_RESULTS.md` — running measured-results log.
+- `D:/project/known-cnn/docs/superpowers/specs/` — design specs.
 
-## 8. Open directions (pick per goal)
-1. **Theory rigor**: P2 constants (replace O(ρ) with a theorem + constants);
-   P3 synthetic→real shift term quantified (KS of max-prob); finite-sample TV
-   estimator + concentration for Thm 1.
-2. **Unified recipe**: show one tuning-free recipe across wafer+MNIST+text (the
-   right kind of generality).
-3. **CXR proper** (if a 2nd real benchmark is wanted): 224px, 50ep+, full data,
-   GPU — a real sub-project, uncertain payoff.
-4. **Paper finishing**: compile the LaTeX to PDF (do a real build; only structural
-   checks were possible in-env), add figures (survival→ranking scatter, FAR
-   geometry, MNIST overlay samples), fill `\author{}`, tighten abstract.
-5. **Venue**: current evidence (WM38 + MNIST + Reuters + boundary + theory +
-   conformal + loss-control) is a coherent TMLR/Q1 story; ICLR stretch wants
-   full-scale (done) + theory rigor + maybe one more real modality.
+## 8. Required next evidence
+1. **Closest-method reproduction**: Shin et al. 2022 Summation Mixup and
+   Shim--Kang 2023 under the common MixedWM38 8-bit/FAR protocol.
+2. **Causal fidelity intervention**: hold the learner fixed and erase controlled
+   fractions of one source's evidence.
+3. **Fair operating curves**: calibration-selected bit_F1--NORMAL-FAR curves
+   for oracle, overlay, CutMix, Mixup, and closest-prior arms.
+4. **Paired replication**: same split and at least five common seeds for every
+   main arm; report paired confidence intervals.
+5. **Conformal repetition**: multiple calibration sizes, alpha values, and
+   resampled calibration splits, with exact tie handling.
+6. **Paper finishing**: compile the LaTeX, add the fidelity curve, Pareto
+   frontier, and held-out-combination figure.
+
+Detailed gates and venue estimates are in
+`D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_260710.md`.
 
 ## 9. Environment notes
 - Windows, RTX 4060 Ti 16GB (shared — user runs their own GPU jobs; prefer CPU,
@@ -157,3 +285,38 @@ benchmark is ill-posed (different inputs) ⇒ conceptual ordering only.
 - HF token in `.hf_token` (gitignored — never commit). Account choichoichoi123.
 - Recent commits (main): SPML positioning (5c0c6cc), CXR probe note, CXR backbone,
   WM38 FULL, finite-sample Thm 2, excess-risk Thm 1, MNIST/Reuters FULL, ASL/Focal.
+
+## 10. Active ICLR Evidence Chain (2026-07-15)
+
+The current queue is intentionally serialized to avoid GPU races:
+
+1. WM38 FCM/FCM-PM geometry: `48` method/layout/group/grid conditions, five seeds.
+2. Strict WM38 FCM-PM negative-target and fair prior-method comparison.
+3. Practical disjoint real-Normal training/calibration comparison.
+4. Prospective FSD50K source-only benchmark with exact waveform summation as the frozen primary candidate.
+5. WM38 original-style FCM-PM `dual_loss` fidelity ablation.
+6. Exploratory FSD50K replication of the same FCM-PM training-mode correction.
+
+The live manager audit is refreshed every five minutes at:
+
+`D:/project/known-cnn/docs/mlsynth_paper/LIVE_ICLR_EVIDENCE_STATUS.md`
+
+The key implementation correction is that the original chip trainer applies
+Pair Mask as an auxiliary second forward,
+`L = L_mixed + lambda_PM L_pair_mask`. The first external harness instead
+split a fixed total view budget between mixed and mask samples, halving FCM-PM
+mixed-view exposure versus FCM. Both protocols are now preserved and compared;
+the preregistered primary runs retain the old `equal_total_views` default.
+
+Relevant absolute paths:
+
+- `D:/project/known-cnn/multilabel_synth/run_wm38_strict_selection.py`
+- `D:/project/known-cnn/multilabel_synth/run_wm38_strict_fcmpm_neg_compare.py`
+- `D:/project/known-cnn/multilabel_synth/run_fsd50k_source_only.py`
+- `D:/project/known-cnn/scripts/start_wm38_fcmpm_dual_loss_after_fsd.ps1`
+- `D:/project/known-cnn/scripts/start_fsd50k_fcmpm_dual_loss_after_wm38_dual.ps1`
+- `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`
+
+Verification: all `D:/project/known-cnn/tests/multilabel_synth` tests pass
+(`121 passed` after the balanced-layout, aligned dual-loss, CutMix-semantics,
+and factorial-analysis additions).
