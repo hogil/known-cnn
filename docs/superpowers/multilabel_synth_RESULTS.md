@@ -721,3 +721,7 @@ die-budget observation to a GENERAL operator-match principle, validated across w
 Honest nuance: waveform_sum wins bitF1 but has higher FAR (0.21 vs 0.10); FCM-PM is the best
 FAR-controlled operator even on audio (0.312 bitF1 / 0.102 FAR). ICLR estimate: ~35-45% (up;
 cross-regime theory validation is a genuine general contribution).
+
+## FCM-PM dual_loss refinement: NEGATIVE, dropped (5 seeds)
+dual_loss training mode: bitF1 0.5669 / FAR 0.5614 vs standard FCM-PM 0.6544 / 0.1472.
+Worse on both -> dropped, not in paper. Standard FCM-PM remains WM38 headline. Do not re-try.
