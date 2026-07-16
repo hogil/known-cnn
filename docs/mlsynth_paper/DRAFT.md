@@ -756,20 +756,22 @@ to within CI), but the *usable coverage* retained at that guarantee separates th
 arms; Pair-Mask, by lowering the model's intrinsic normal confidence, lets the
 conformal reject abstain least:
 
-| method       | alpha=0.01 realized / coverage | alpha=0.05 realized / coverage |
-|--------------|--------------------------------|--------------------------------|
-| FCM-PM       | 0.0098 / **0.972**             | 0.0503 / **0.989**             |
-| fcm (no PM)  | 0.0100 / 0.839                 | 0.0503 / 0.908                 |
-| cutmix       | 0.0097 / 0.759                 | 0.0517 / 0.884                 |
-| mixup        | 0.0096 / 0.737                 | 0.0488 / 0.799                 |
-| single-only  | 0.0092 / 0.518                 | 0.0495 / 0.540                 |
+| method                | alpha=0.01 realized / coverage | alpha=0.05 realized / coverage |
+|------------------------|--------------------------------|--------------------------------|
+| summation (=max-union) | 0.0099 / **0.995**             | (best)                         |
+| FCM-PM                 | 0.0098 / 0.972                 | 0.0503 / 0.989                 |
+| fcm (no PM)            | 0.0100 / 0.839                 | 0.0503 / 0.908                 |
+| cutmix                 | 0.0097 / 0.759                 | 0.0517 / 0.884                 |
+| mixup                  | 0.0096 / 0.737                 | 0.0488 / 0.799                 |
+| single-only            | 0.0092 / 0.518                 | 0.0495 / 0.540                 |
 
-Among these arms, FCM-PM keeps **97.2%** of wafers usable at a guaranteed 1%
-false-alarm rate versus 51.8-83.9% for the others (1.2-1.9x more decisions at the
-same certified safety) — Pair-Mask is the lever. **Honest caveat:** this sweep
-did not include the winning max-union / summation arm, whose own intrinsic FAR
-(0.010, near the 1% target) would also yield high coverage; we therefore claim
-only that (i) the conformal *guarantee* is operator-agnostic and novel, and (ii)
+The guarantee holds for every operator (realized FAR = alpha), and coverage at a
+guaranteed 1% FAR is nearly free for the **best** operator: summation/max-union
+retains **99.5%**, FCM-PM 97.2%, then 51.8-83.9% for the weaker faithful arms.
+**Honest:** the winning summation operator has the *best* coverage (99.5% > 97.2%);
+we therefore claim only that (i) the conformal *guarantee* is operator-agnostic,
+annotation-free, and novel (Shin 2022 provides none) and nearly free on the best
+operator, and (ii)
 Pair-Mask improves coverage among the arms shown — **not** that FCM-PM's coverage
 beats summation.
 
