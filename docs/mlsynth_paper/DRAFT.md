@@ -767,7 +767,7 @@ conformal reject abstain least:
 
 The guarantee holds for every operator (realized FAR = alpha), and coverage at a
 guaranteed 1% FAR is nearly free for the **best** operator: summation/max-union
-retains **99.5%**, FCM-PM 97.2%, then 51.8-83.9% for the weaker faithful arms.
+retains **99.5%**, FCM-PM 97.2%, then 51.8-83.9% for the weaker arms.
 **Honest:** the winning summation operator has the *best* coverage (99.5% > 97.2%);
 we therefore claim only that (i) the conformal *guarantee* is operator-agnostic,
 annotation-free, and novel (Shin 2022 provides none) and nearly free on the best

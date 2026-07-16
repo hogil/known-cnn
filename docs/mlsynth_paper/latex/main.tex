@@ -437,8 +437,9 @@ oracle on held-out pairs. Operator ranking follows measured survival
 \textbf{Summation ($=$ Shin 2022) is the best content-blind operator; density is a
 harmless characterization.} Whole-image max-union --- which under the binary
 encoding equals Shin et al.\ (2022) Summation Mixup --- is the best content-blind
-operator on WM38 (bit-F1 $0.80$, FAR $0.010$; Table~\ref{tab:headline}, five seeds,
-val-tail-margin-guarded selection, negative target $0.02$). Our label-fidelity
+operator on WM38 (bit-F1 $0.80$, FAR $0.010$; Table~\ref{tab:headline} and
+Fig.~\ref{fig:frontier}, five seeds, val-tail-margin-guarded selection, negative
+target $0.02$). Our label-fidelity
 criterion selects exactly this operator (its weaker-source survival is $1.000$), so
 the framework's operator choice is correct and \textbf{we claim no operator novelty
 vs Shin 2022}. Max-union does produce over-dense wafers (defect-die fraction
@@ -508,10 +509,11 @@ Split-conformal calibration on 500 known-good normals realizes FAR $0.040$ at
 $\alpha{=}0.05$ and $0.006$ at $\alpha{=}0.01$; calibrating on training-style
 synthetic normals fails (score-space shift) --- exchangeability is the binding
 assumption. In a coverage-at-guaranteed-FAR sweep (5 seeds $\times$ 50 splits,
-$n_{\mathrm{cal}}{=}500$), the guarantee holds for every operator (realized FAR
-$\approx\alpha$), and coverage at a guaranteed $1\%$ FAR is nearly free for the
+$n_{\mathrm{cal}}{=}500$; Fig.~\ref{fig:conformal}), the guarantee holds for every
+operator (realized FAR $\approx\alpha$), and coverage at a guaranteed $1\%$ FAR is
+nearly free for the
 best operator: summation/max-union retains $\mathbf{99.5\%}$, FCM-PM $97.2\%$, then
-$52$--$84\%$ for the weaker faithful arms (fcm $83.9$, cutmix $75.9$, mixup $73.7$,
+$52$--$84\%$ for the weaker arms (fcm $83.9$, cutmix $75.9$, mixup $73.7$,
 single $51.8$). \emph{Honest:} the winning summation operator has the \emph{best}
 coverage ($99.5\%>97.2\%$); we therefore claim only that the guarantee itself is
 operator-agnostic, annotation-free, and novel (Shin~2022 provides none), that it
@@ -521,6 +523,22 @@ matters only when the validation metric saturates (observed in our chip domain;
 absent on WM38 with a synthetic-combo val set), and no synthetic-val criterion sees
 the real-performance peak (real bit-F1 peaks at epoch 30, $0.818$, while synthetic
 val rises monotonically).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{figs/fig_conformal_coverage}
+\caption{Annotation-free split-conformal FAR guarantee: usable coverage retained at
+a guaranteed $1\%$ NORMAL-FAR (5 seeds $\times$ 50 splits, $n_{\mathrm{cal}}{=}500$).
+The distribution-free guarantee holds for \emph{every} operator (realized FAR
+$\approx\alpha$) --- this operator-agnostic, annotation-free reliability layer is
+precisely what operator-only prior work (incl.\ Shin 2022) lacks. Coverage at the
+guarantee is nearly free on the best operator: summation / max-union retains
+$99.5\%$, FCM-PM $97.2\%$, then $52$--$84\%$ for the weaker arms. Honestly, the
+winning summation operator also has the \emph{best} coverage; we claim only that the
+guarantee is novel and nearly free on the best operator, and that Pair-Mask helps
+among the weaker arms --- \emph{not} that FCM-PM beats summation.}
+\label{fig:conformal}
+\end{figure}
 
 \subsection{Order extrapolation and the oracle's advantage}
 Trained on pairs only, bit-F1 extrapolates gracefully to real 3- and
@@ -551,14 +569,29 @@ all superposition-structured domains in which summation/union is the
 fidelity-maximizing operator, and the same label-fidelity criterion selects it in
 each (it flips to averaging only on disjoint-coordinate text). This is the general
 \emph{operator-match} principle --- the criterion picks the evidence-preserving
-operator for the domain's geometry --- validated across wafer $+$ audio $+$ text,
-and its wafer selection (summation) is consistent with the density-shift refutation
-(Sec.~\ref{sec:experiments}). \emph{Honest nuance:} waveform summation wins bit-F1
+operator for the domain's geometry --- validated across wafer $+$ audio $+$ text
+(Fig.~\ref{fig:opmatch}), and its wafer selection (summation) is consistent with the
+density-shift refutation (Sec.~\ref{sec:experiments}). \emph{Honest nuance:} waveform summation wins bit-F1
 but at higher FAR ($0.212$ vs ${\sim}0.10$) and marginally lower mAP; the
 partition-style FCM-PM stays the best FAR-controlled arm on audio (highest bit-F1,
 $0.312$, among arms holding FAR near $0.10$, at FAR $0.102$). The bit-F1-vs-FAR
 trade-off is operator-dependent. (No real oracle pool is used for audio; arms
 differ only by synthesis operator.)
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\linewidth]{figs/fig_operator_match}
+\caption{Operator-match across regimes (best bit-F1 per domain). One label-fidelity
+criterion selects \emph{summation/union} on all three superposition-structured
+domains --- wafer ($0.80$ vs averaging $0.54$), inked digits ($0.87$ vs $0.74$),
+and audio ($0.43$ vs $0.27$) --- and flips to \emph{vector averaging} only on
+disjoint-coordinate text ($0.43$ vs the summation-style join $0.40$). Summation is
+the evidence-preserving operator wherever sources superpose; averaging wins where
+topic evidence occupies (nearly) disjoint coordinates. The invariant is preserved
+evidence, not a fixed operator, and on wafer the criterion correctly picks
+summation ($=$ Shin 2022).}
+\label{fig:opmatch}
+\end{figure}
 
 \begin{table}[t]
 \centering
@@ -588,6 +621,21 @@ oracle (real mixed + labels)$^{\ast}$   & $0.974$ & $0.563$ & $0.305$ \\
 \multicolumn{4}{l}{\footnotesize $^{\ast}$literature-grade oracle (3-seed headline), density $=$ real; ceiling reference, not a strict-protocol row.}
 \end{tabular}
 \end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{figs/fig_frontier_f1far}
+\caption{MixedWM38 strict operator comparison (5 seeds; bit-F1 vs NORMAL-FAR).
+Whole-image summation / max-union --- which under the binary encoding equals
+Shin et al.\ (2022) Summation Mixup --- is the best content-blind operator on both
+axes (bit-F1 $0.80$, FAR $0.010$; green star), and it is exactly the operator our
+label-fidelity criterion selects, so we claim no operator novelty on wafer. The
+partition-style FCM-PM (blue square) is an \emph{alternative}, not the winner
+($0.654$ / $0.147$); its Pair-Mask lever buys FAR control relative to the weaker
+arms (cutmix $0.691$/$0.439$, FCM-without-PM $0.665$/$0.384$, mixup $0.537$/$0.225$,
+single-only $0.473$/$0.602$).}
+\label{fig:frontier}
+\end{figure}
 
 \paragraph{Operator selection.} The label-fidelity criterion and raw bit-F1
 \emph{agree}: max-union / summation has the highest weaker-source survival
