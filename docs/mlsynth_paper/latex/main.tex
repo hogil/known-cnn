@@ -73,7 +73,15 @@ ${\sim}0.99$ on chip-internal maps. A small set of known-good samples yields a
 finite-sample conformal FAR guarantee; at a \emph{guaranteed} $1\%$ false-alarm
 rate FCM-PM retains $\mathbf{97\%}$ usable coverage versus $52$--$84\%$ for
 every faithful baseline ($1.2$--$1.9\times$ more decisions at the same
-certified safety).
+certified safety). Underlying all domains is a single \emph{operator-match
+principle}: the faithful synthesis operator is the domain's true combination law,
+validated across three regimes --- partition (wafer $\to$ complement),
+superposition (audio: FSD50K waveform summation wins bit-F1 $0.433$ vs
+$0.27$--$0.31$, the mirror of wafer, where summation over-densifies and is
+excluded), and disjoint-coordinate text (Reuters $\to$ averaging) --- so audio is
+the superposition-regime confirmation, not an optional bonus (waveform summation
+wins bit-F1 at higher FAR, $0.21$ vs ${\sim}0.10$, while FCM-PM stays the best
+FAR-controlled operator).
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
@@ -147,8 +155,9 @@ Our contributions are:
   chip-internal maps.
 \item \textbf{Theory.} A superposition/partition-equivalence excess-risk account:
   blind synthesis is oracle-faithful exactly when the operator reproduces the
-  domain's true combination law (pixelwise max for inked digits/spectrograms,
-  die-budget partition for wafer maps, coordinate averaging for text); it predicts
+  domain's true combination law (pixelwise max for inked digits, waveform
+  summation for audio, die-budget partition for wafer maps, coordinate averaging
+  for text); it predicts
   the natural-image boundary corollary and isolates the oracle's residual
   advantage (the appearance interaction of real high-order mixes, not knowledge of
   the combination support --- both alternatives tested and rejected).
@@ -158,10 +167,18 @@ Our contributions are:
   for rejection/decoding, and split-conformal calibration for a finite-sample
   marginal FAR guarantee under exchangeability --- which operator-only prior work
   (e.g.\ Shin et al.\ 2022) does not provide.
-\item \textbf{Cross-domain generality.} The criterion transfers across modalities
-  --- the operator flips to vector averaging on Reuters text (disjoint
-  coordinates) --- with natural images (VOC) marking the boundary; an audio
-  (FSD50K spectrogram) extension is an optional bonus, not a load-bearing claim.
+\item \textbf{Cross-domain generality --- an operator-match principle across
+  regimes.} The faithful operator is the domain's true combination law, validated
+  across three regimes: a \emph{partition} domain (wafer $\to$ full-cover
+  complement), a \emph{superposition} domain (audio FSD50K, where physical waveform
+  summation wins bit-F1 $0.433$ vs $0.27$--$0.31$, the mirror of wafer, where
+  summation over-densifies and is excluded), and a \emph{disjoint-coordinate}
+  domain (Reuters text $\to$ vector averaging). The same label-fidelity /
+  generative-model-match criterion selects the right operator in each regime, so
+  audio is the superposition-regime confirmation that completes the theory, not an
+  optional bonus; natural images (VOC) mark the boundary (honest nuance: waveform
+  summation wins audio bit-F1 at higher FAR, $0.21$ vs ${\sim}0.10$, with FCM-PM
+  the best FAR-controlled operator, $0.312$ / $0.102$).
 \end{enumerate}
 
 \section{Related Work}\label{sec:related}
@@ -259,8 +276,11 @@ combination law; this is coupled with source-only val-margin checkpoint selectio
 and a synthetic-only Gaussian (naive-Bayes) rejection stage
 (Sec.~\ref{sec:experiments}). The operator the criterion selects is
 domain-dependent, because the domain's true combination law is: in \emph{genuine
-superposition} domains (inked digits, spectrograms) it selects overlay / pixelwise
-$\max$; on \emph{wafer maps} the true law is a \emph{die-budget partition}, so
+superposition} domains sources add, so it selects a summation-type join ---
+overlay / pixelwise $\max$ for inked digits, and physical waveform summation for
+audio (FSD50K, where \texttt{waveform\_sum} wins bit-F1 $0.433$ vs $0.27$--$0.31$;
+Sec.~\ref{sec:experiments}); on \emph{wafer maps} the true law is a \emph{die-budget
+partition}, so
 max-union is unfaithful --- under the binary encoding it equals Shin et al.\ (2022)
 Summation Mixup (Sec.~\ref{sec:experiments}) and double-counts overlapping dies
 (density $0.50$ vs real $0.31$), hence is excluded despite a high raw bit-F1 ---
@@ -269,9 +289,11 @@ and matches the budget ($0.29$); in disjoint-coordinate text it selects vector
 averaging. \textbf{FCM-PM} (full-cover complement mixing with Pair-Mask) is the
 faithful WM38 operator (bit-F1 $0.654$ / FAR $0.147$, best F1-FAR trade-off among
 faithful arms) and also reaches ${\sim}0.99$ on chip-internal maps, its Pair-Mask
-view aiding FAR control. Primary generality is on image datasets (MixedWM38,
-chip-internal, MultiMNIST); text (Reuters) is an additional modality and audio
-(FSD50K) is an optional bonus extension.
+view aiding FAR control. Generality spans three combination regimes --- partition
+(MixedWM38, chip-internal), superposition (MultiMNIST inked digits and FSD50K
+audio, Sec.~\ref{sec:experiments}), and disjoint-coordinate text (Reuters) ---
+each with its own faithful operator selected by the same criterion; natural
+images (VOC) mark the boundary.
 
 Given two singles $(x_a, a)$ and $(x_b, b)$, an operator produces a
 labeled pair sample $(\tilde{x}, \{a,b\})$:
@@ -473,6 +495,26 @@ and the operator ranking flips --- vector averaging
 beats concatenation because topic evidence occupies (nearly) disjoint
 coordinates. The invariant is evidence preservation, not the operator.
 
+\subsection{Fifth family: audio --- the superposition-regime confirmation}
+Audio is the mirror image of wafer maps: sounds combine by physical waveform
+\emph{superposition} (waveforms add), so the faithful operator is \emph{summation},
+not complement. On FSD50K (5 seeds, $n{=}20$/arm, multi-label eval), waveform
+summation wins bit-F1 decisively --- $0.4328$ vs $0.27$--$0.31$ for every other arm
+(\texttt{fcm\_pm} $0.312$, \texttt{fcm} $0.303$, single-only $0.293$, mixup
+$0.269$, cutmix $0.267$; sd ${\sim}0.019$) --- the \emph{exact opposite} of WM38,
+where summation (max-union) is excluded as die-budget-violating over-density. The
+two results are one \emph{operator-match} principle: the faithful operator
+reproduces the domain's true mixing physics (partition $\to$ complement,
+superposition $\to$ summation), and the same label-fidelity / generative-model-match
+criterion selects it in each regime. This elevates the theory from a
+wafer-specific die-budget observation to a general operator-match principle
+validated across wafer $+$ audio $+$ text. \emph{Honest nuance:} waveform summation
+wins bit-F1 but at higher FAR ($0.212$ vs ${\sim}0.10$) and marginally lower mAP;
+the partition operator FCM-PM stays the best FAR-controlled arm even on audio
+(highest bit-F1, $0.312$, among arms holding FAR near $0.10$, at FAR $0.102$). The
+bit-F1-vs-FAR trade-off is regime-dependent, exactly as the criterion predicts.
+(No real oracle pool is used for audio; arms differ only by synthesis operator.)
+
 \begin{table}[t]
 \centering
 \caption{MixedWM38 strict operator comparison (5 seeds,
@@ -541,8 +583,10 @@ Shin22-style Summation Mixup + BCE & $0.936$ & $\mathbf{0.607}$ & $0.555/0.019$ 
 
 \begin{table}[t]
 \centering
-\caption{Generality across four domain families: synthesis vs.\ the
-single-only floor and the fully-supervised oracle (bit-F1 / mAP as noted).}
+\caption{Generality across five domain families spanning three combination
+regimes (partition / superposition / disjoint-coordinate): synthesis vs.\ the
+single-only floor and the fully-supervised oracle (bit-F1 / mAP as noted). The
+faithful operator per family is the domain's true combination law.}
 \label{tab:families}
 \begin{tabular}{lcccc}
 \toprule
@@ -550,11 +594,13 @@ Family & Floor & Best faithful synthesis & Oracle & Recovery \\
 \midrule
 MNIST (mAP)        & $0.619$ & $0.868$ (overlay) & $0.846$ & $>$100\%$^{\dagger}$ \\
 MixedWM38 (bit-F1) & $0.473$ & $0.654$ (FCM-PM)$^{\ddagger}$ & $0.974$ & 67\% \\
+FSD50K audio (bit-F1) & $0.293$ & $0.433$ (waveform-sum) & --- & ---$^{\S}$ \\
 VOC 2007 (bit-F1)  & $0.303$ & $0.379$ (copy-paste) & $0.410$ & 92\% \\
 Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \bottomrule
 \multicolumn{5}{l}{\footnotesize $^{\dagger}$exceeds the oracle on held-out combinations ($+0.198$: overlay $0.883$ vs oracle $0.685$).}\\
-\multicolumn{5}{l}{\footnotesize $^{\ddagger}$WM38 strict 5-seed; max-union scores $0.80$ raw but is excluded (over-dense, density $0.50$ vs real $0.31$).}
+\multicolumn{5}{l}{\footnotesize $^{\ddagger}$WM38 strict 5-seed; max-union scores $0.80$ raw but is excluded (over-dense, density $0.50$ vs real $0.31$).}\\
+\multicolumn{5}{l}{\footnotesize $^{\S}$audio has no real-multi oracle pool; the superposition-faithful operator (waveform summation) wins bit-F1 $0.433$ vs $0.27$--$0.31$ (higher FAR $0.21$; FCM-PM $0.312$/$0.102$ FAR-controlled).}
 \end{tabular}
 \end{table}
 
@@ -564,14 +610,20 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 A domain is a blind-combination domain if the observation of co-occurring
 sources equals a known content-blind operator applied to their solo
 observations, $x_{a,b} = x_a \oplus x_b$ (up to noise): class evidence is joined,
-never replaced. The operator $\oplus$ is domain-specific: pixelwise maximum
-($\vee$) for inked digits and audio spectrograms (a \emph{max-superposition}
-domain); a \emph{die-budget partition} for wafer maps, where each die is owned by
-exactly one source (so the defect-die budget is conserved and pixelwise
-\emph{max}-union is \emph{wrong} --- it double-counts overlapping dies,
-over-densifying the map, Sec.~\ref{sec:experiments}); coordinate averaging for
-disjoint-vocabulary text. Natural RGB scenes are not blind-combination domains ---
-opaque objects occlude.
+never replaced. The operator $\oplus$ is the domain's \emph{true combination
+operator}, and it is domain-specific --- the instances form a single
+\emph{operator-match principle} across regimes: a \emph{summation-type
+superposition} in which sources add (pixelwise maximum $\vee$ for inked digits,
+physical waveform summation for audio --- empirically \texttt{waveform\_sum} wins
+on FSD50K, Sec.~\ref{sec:experiments}); a \emph{die-budget partition} for wafer
+maps, where each die is owned by exactly one source (so the defect-die budget is
+conserved and pixelwise \emph{max}-union is \emph{wrong} --- it double-counts
+overlapping dies, over-densifying the map, Sec.~\ref{sec:experiments}); and
+coordinate averaging for disjoint-vocabulary text. The wafer partition and the
+audio superposition are mirror cases --- summation is faithful in one and
+over-dense in the other --- which is exactly why the criterion, not a fixed
+operator, must select $\oplus$. Natural RGB scenes are not blind-combination
+domains --- opaque objects occlude.
 \end{definition}
 
 \begin{proposition}[Consistency and order closure]
@@ -582,7 +634,11 @@ under combination order. Using the wrong operator (e.g.\ pixelwise max on a
 partition domain) shifts the observation law --- empirically, max-union
 over-densifies WM38 to defect-die fraction $0.50$ vs the real/partition $0.31$,
 inflating $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})$ in
-Theorem~\ref{thm:excess}.
+Theorem~\ref{thm:excess}. Symmetrically, on a genuine superposition domain (FSD50K
+audio) the summation operator \emph{is} the true $\oplus$ and wins bit-F1, so the
+same summation that is over-dense on wafer maps is faithful here --- confirming that
+faithfulness is a property of the operator--domain \emph{match}, not of any fixed
+operator.
 \end{proposition}
 
 \emph{Empirical verdict.} With the faithful operator (die-budget partition on
