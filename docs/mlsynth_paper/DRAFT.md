@@ -778,6 +778,17 @@ operator, and (ii)
 Pair-Mask improves coverage among the arms shown — **not** that FCM-PM's coverage
 beats summation.
 
+**Full calibration curve (multi-alpha).** Extending the two operating points to a
+sweep over target levels alpha in {0.5, 1, 2, 5, 10}% (5 seeds x 50 splits,
+n_cal=500 known-good real normals), the realized NORMAL FAR tracks target alpha to
+within **0.15 pp** (maximum deviation across all seven operators and five levels)
+for *every* operator -- the distribution-free, finite-sample calibration that
+operator-only prior work (incl. Shin 2022's Summation Mixup) lacks -- and the
+guarantee is nearly free on the best operator (summation / max-union). See
+`docs/mlsynth_paper/latex/figs/fig_conformal_calibration.pdf`; per-arm numbers in
+`outputs/multilabel_synth/wm38_conformal_calibration_curve_summary.csv`. This adds
+the multi-alpha curve; the @1% coverage results above are unchanged.
+
 ### 5.12 What the oracle's advantage actually is
 
 Two hypotheses for the residual bit-F1 gap were tested and rejected: (i)

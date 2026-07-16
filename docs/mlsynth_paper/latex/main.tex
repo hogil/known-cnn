@@ -518,7 +518,13 @@ single $51.8$). \emph{Honest:} the winning summation operator has the \emph{best
 coverage ($99.5\%>97.2\%$); we therefore claim only that the guarantee itself is
 operator-agnostic, annotation-free, and novel (Shin~2022 provides none), that it
 is nearly free on the best operator, and that Pair-Mask helps among the weaker
-arms --- \emph{not} that FCM-PM's coverage beats summation. Checkpoint selection by margin versus val-F1
+arms --- \emph{not} that FCM-PM's coverage beats summation. Extending the two
+operating points to a full calibration sweep, across target levels
+$\alpha\in[0.5\%,10\%]$ the realized NORMAL FAR tracks $\alpha$ to within
+$0.15$~pp (maximum deviation over all seven operators and five levels) for
+\emph{every} operator (Fig.~\ref{fig:calib}) --- the distribution-free calibration
+that Shin~2022's Summation Mixup lacks --- and the guarantee is nearly free on the
+best operator (summation). Checkpoint selection by margin versus val-F1
 matters only when the validation metric saturates (observed in our chip domain;
 absent on WM38 with a synthetic-combo val set), and no synthetic-val criterion sees
 the real-performance peak (real bit-F1 peaks at epoch 30, $0.818$, while synthetic
@@ -538,6 +544,21 @@ winning summation operator also has the \emph{best} coverage; we claim only that
 guarantee is novel and nearly free on the best operator, and that Pair-Mask helps
 among the weaker arms --- \emph{not} that FCM-PM beats summation.}
 \label{fig:conformal}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{figs/fig_conformal_calibration}
+\caption{Multi-alpha split-conformal calibration curve (5 seeds $\times$ 50 splits,
+$n_{\mathrm{cal}}{=}500$ known-good real normals). Across target levels
+$\alpha\in[0.5\%,10\%]$ the realized NORMAL FAR tracks the $y{=}x$ diagonal for
+\emph{every} synthesis operator (maximum deviation $0.15$~pp over all seven
+operators and five levels), the distribution-free finite-sample calibration that
+operator-only prior work --- including Shin~2022's Summation Mixup --- lacks.
+Honestly, the guarantee is operator-agnostic and nearly free on the best operator
+(summation / max-union, green); we do \emph{not} claim FCM-PM (blue) beats
+summation. Error bars are bootstrap $95\%$ CIs.}
+\label{fig:calib}
 \end{figure}
 
 \subsection{Order extrapolation and the oracle's advantage}
