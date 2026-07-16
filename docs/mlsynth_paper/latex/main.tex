@@ -508,13 +508,15 @@ Split-conformal calibration on 500 known-good normals realizes FAR $0.040$ at
 $\alpha{=}0.05$ and $0.006$ at $\alpha{=}0.01$; calibrating on training-style
 synthetic normals fails (score-space shift) --- exchangeability is the binding
 assumption. In a coverage-at-guaranteed-FAR sweep (5 seeds $\times$ 50 splits,
-$n_{\mathrm{cal}}{=}500$) among the arms measured, Pair-Mask lowers intrinsic normal
-confidence so the conformal reject abstains least: FCM-PM retains $97.2\%$ usable
-coverage at a guaranteed $1\%$ FAR versus $52$--$84\%$ for the others. \emph{Honest
-caveat:} this sweep did not include the winning max-union arm, whose own low FAR
-($0.010$) would also give high coverage; we claim only that the guarantee is
-operator-agnostic and novel and that Pair-Mask helps among the arms shown --- not
-that FCM-PM's coverage beats summation. Checkpoint selection by margin versus val-F1
+$n_{\mathrm{cal}}{=}500$), the guarantee holds for every operator (realized FAR
+$\approx\alpha$), and coverage at a guaranteed $1\%$ FAR is nearly free for the
+best operator: summation/max-union retains $\mathbf{99.5\%}$, FCM-PM $97.2\%$, then
+$52$--$84\%$ for the weaker faithful arms (fcm $83.9$, cutmix $75.9$, mixup $73.7$,
+single $51.8$). \emph{Honest:} the winning summation operator has the \emph{best}
+coverage ($99.5\%>97.2\%$); we therefore claim only that the guarantee itself is
+operator-agnostic, annotation-free, and novel (Shin~2022 provides none), that it
+is nearly free on the best operator, and that Pair-Mask helps among the weaker
+arms --- \emph{not} that FCM-PM's coverage beats summation. Checkpoint selection by margin versus val-F1
 matters only when the validation metric saturates (observed in our chip domain;
 absent on WM38 with a synthetic-combo val set), and no synthetic-val criterion sees
 the real-performance peak (real bit-F1 peaks at epoch 30, $0.818$, while synthetic
