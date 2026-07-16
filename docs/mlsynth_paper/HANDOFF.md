@@ -1,12 +1,22 @@
 # Handoff — "Multi-label from single-label via content-blind synthesis"
 
-> **Critical correction, 2026-07-13.** Historical external CSV keys were
-> `fcm_pm` = FCM and `fcm_pm_pm` = FCM-PM. The first external WM38 FCM-PM port
-> was not the chip project's FCM-PM: it omitted the `g` complementary
-> full-cover views and used the wrong Pair Mask fill. Its result files are
-> audit-only and must not be used as FCMPM evidence. The corrected definition,
-> code paths, strict-vs-calibration information split, and replacement queue
-> are in `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`.
+> **Positioning correction, 2026-07-16 (operator coincidence — read first).**
+> The paper's contribution is a **FRAMEWORK + THEORY + annotation-free GUARANTEE,
+> NOT a new synthesis operator.** On WM38 the content-blind operator selected by
+> the label-fidelity criterion is whole-image **max-union**, and — verified in
+> `multilabel_synth/synthesis/wm38_arms.py` (`summation_mixup_shin22`/`overlay`
+> both compute `np.maximum(ca, cb)`) — under WM38's binary encoding (normal 0.5,
+> defect 1.0) max-union IS the faithful re-encoded clipped sum of Shin et al.
+> (2022) Summation Mixup. So our best WM38 operator **coincides with the closest
+> prior work's operator; we claim NO operator novelty on WM38.** Strict common
+> protocol (5 seeds, val-tail-margin-guarded, neg 0.02): max-union bit-F1 **0.80**
+> (FAR 0.010) $>$ cutmix 0.691 (FAR 0.44) $>$ **FCM-PM 0.654** (FAR 0.147) — FCM-PM
+> LOSES to max-union on WM38. FCM-PM is therefore scoped to the **chip domain**
+> (~0.99, Pair-Mask aids FAR); the earlier FCM-PM-as-WM38-headline framing is
+> UNDONE. The historical external FCM-PM CSV port (`fcm_pm`=FCM, `fcm_pm_pm`=FCM-PM)
+> was also incomplete (omitted `g` complementary full-cover views, wrong Pair Mask
+> fill) and is audit-only. Corrected definition, code paths, and strict evidence:
+> `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`.
 
 Self-contained state of the mlsynth paper project, for continuation by another
 agent/tool. The measured base state is committed to `hogil/known-cnn` on
@@ -16,13 +26,19 @@ change set. Paper artifacts live in
 
 ## 0. Active ICLR evidence chain (2026-07-15)
 
-Do not restart from the historical overlay headline. The active claim is
-source-only compositional multi-label learning with a domain-compatible,
-label-faithful operator. On WM38 the structured methods are exactly **FCM** and
-**FCM-PM**; for `g` groups, FCM-PM is the `g` complementary full-cover FCM
-views plus `g` corresponding Pair Mask views. On FSD50K, exact
-waveform summation is the modality-compatible primary operator; FCM and FCM-PM
-remain secondary tested operators rather than assumed winners.
+The active claim is source-only compositional multi-label learning as a
+**framework + theory + annotation-free guarantee**, with the content-blind
+operator SELECTED per modality by the label-fidelity criterion — not a new
+operator. On WM38 the selected operator is **max-union**, which coincides with
+Shin et al. (2022) Summation Mixup under the binary encoding (no novelty claimed);
+**FCM** and **FCM-PM** are chip-domain operators (for `g` groups, FCM-PM is the
+`g` complementary full-cover FCM views plus `g` corresponding Pair Mask views) and
+on WM38 they underperform max-union — they are diagnostic/secondary there, NOT the
+WM38 headline. On FSD50K, exact waveform summation is the modality-compatible
+primary operator; FCM and FCM-PM remain secondary tested operators rather than
+assumed winners. The evidence queue below still runs the WM38 FCM/FCM-PM geometry
+work, but its role is now a chip-vs-wafer operator-transfer diagnostic, not a
+search for the WM38 headline method.
 
 Active/pending order:
 
@@ -95,30 +111,37 @@ domains, coordinate sum for bag-of-words text), you can **train a multi-label
 recognizer using only single-label data** by synthesizing multi-label examples
 with a **content-blind operator** (no location/mask annotation), recover a large
 fraction of a fully-supervised oracle on real mixes, and exceed an oracle that
-has not seen held-out combinations. Exact oracle equivalence is a conditional
-theoretical result, not a universal empirical claim. Generality is demonstrated
-primarily across IMAGE datasets (MixedWM38 public wafer, chip-internal ~0.99
-FCM-PM, MultiMNIST); text (Reuters) is an additional modality, and audio
+has not seen held-out combinations. The contribution is the **framework**
+(fidelity criterion selecting the operator per modality), the **theory**
+(superposition equivalence + boundary corollary), and the **annotation-free FAR
+guarantee** — NOT a new operator: on WM38 the selected operator (max-union)
+coincides with Shin et al. (2022) Summation Mixup under the binary encoding.
+Exact oracle equivalence is a conditional theoretical result, not a universal
+empirical claim. Generality is demonstrated primarily across IMAGE datasets
+(MixedWM38 public wafer with max-union, chip-internal ~0.99 FCM-PM, MultiMNIST);
+text (Reuters) is an additional modality, and audio
 (FSD50K spectrogram summation) is an OPTIONAL bonus extension — never a
 load-bearing claim.
 
-Our method = three named techniques (**FCM-PM + val-margin selection +
-NB-reject**):
-1. **FCM-PM (label-faithful synthesis)** — the promoted content-blind operator:
-   full-cover complement mixing (FCM: the `g` complementary full-cover views)
-   plus Pair-Mask (PM). Chosen because it maximizes label fidelity (survival of
-   every source's evidence) in the superposition domain. Overlay (per-pixel max)
-   is a content-blind REFERENCE arm — the strongest image reference by
-   survival-order — NOT the headline method. Synthetic-normal + negative-target
-   is the FAR-control auxiliary applied during FCM-PM training, not a headline
-   technique on its own.
+Our method = a **framework**, not a single operator. Three parts:
+1. **Label-fidelity criterion (operator selection)** — measure, before training,
+   which content-blind operator preserves every source's evidence (survival), and
+   use it. The selected operator is NOT novel: in signal-ordered image domains
+   (incl. WM38) it is overlay / max-union, which coincides with Shin et al. (2022)
+   Summation Mixup under the binary encoding; in disjoint-coordinate text it is
+   vector averaging. **FCM-PM** (full-cover complement + Pair-Mask) is a
+   **chip-domain** operator (~0.99, Pair-Mask aids FAR); on WM38 it underperforms
+   max-union (0.654 vs 0.80 strict) and is NOT the WM38 method. Synthetic-normal +
+   negative-target is a FAR-control auxiliary, not a headline technique on its own.
 2. **Val-margin checkpoint selection** — select checkpoints on a disjoint
    held-out-source synthetic proxy by the pos-neg margin; source-only, never
    touches real multi-label data.
 3. **NB-reject** — a synthetic-only class-conditional Gaussian (naive-Bayes)
    pattern-likelihood reject/decode stage at a selective operating point.
    Split-conformal on real known-good normals additionally gives a
-   finite-sample marginal FAR guarantee under exchangeability.
+   finite-sample marginal FAR guarantee under exchangeability. Parts 2-3 (plus
+   synthetic normals + neg-target) are the **annotation-free FAR guarantee** that
+   operator-only prior work (Shin22) does not provide.
 
 ## 2. Theory (`D:/project/known-cnn/docs/mlsynth_paper/THEORY.md`, ported to LaTeX)
 
@@ -161,9 +184,12 @@ main rerun is complete.
 
 ### MixedWM38 (public wafer benchmark — the industrial headline)
 - **9-seed headline (n_train 6000, ResNet-18, 30ep)**: oracle 0.974±0.019,
-  **reference overlay+sn+neg 0.841±0.034 = 86% recovery, NORMAL FAR 0.0008** (6/9=0)
-  (overlay is the content-blind REFERENCE arm; the promoted method is FCM-PM,
-  whose full-scale headline is pending — see LIVE_ICLR_EVIDENCE_STATUS.md).
+  **max-union (= Shin22 Summation Mixup) +sn+neg 0.841±0.034 = 86% recovery,
+  NORMAL FAR 0.0008** (6/9=0). max-union is the WM38 operator and coincides with
+  the closest prior work under the binary encoding — NO operator novelty claimed;
+  the contribution is the fidelity criterion selecting it, the theory, and the FAR
+  guarantee. FCM-PM is a chip-domain operator and on WM38 underperforms max-union
+  (strict 0.654 vs 0.80) — it is NOT the WM38 headline.
   Oracle NORMAL FAR is 0.563 in the headline protocol; the reported checkpoint
   remains at 0.799 under tau=0.99. Full-scale oracle FAR is seed-sensitive and
   reaches 0.001 in one seed, so no universal impossibility is claimed.
