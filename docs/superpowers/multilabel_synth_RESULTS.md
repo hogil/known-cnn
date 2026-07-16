@@ -586,36 +586,83 @@ for user direction; paper does NOT claim CXR. The paper stands on the clean
 superposition domains (WM38 / MNIST / Reuters) + the theory (Thm 1/2, Cor 1/2)
 which already explains where the method applies without needing CXR.
 
-## WM38 margin+reject: does the chip recipe (fcm_pm+val-margin+nb-reject) transfer? NO
+## WM38 margin+confidence reject: does the chip recipe transfer? NO
 SmallCNN, n3000, 3 seeds. synth-normal + neg-target on ALL arms incl. oracle.
-nb-reject bitF1 / NORMAL_FAR (3-seed mean):
+Max-probability confidence-reject bitF1 / NORMAL_FAR (3-seed mean):
 - oracle     0.9757 / 0.000
 - overlay    0.6977 / 0.000
 - fcm_pm     0.6230 / 0.003
 - fcm_pm_pm  0.5921 / 0.000
 Verdict: fcm_pm / fcm_pm_pm are the WEAKEST synthesis arms on the PUBLIC WM38
 benchmark (below overlay, far below oracle). The chip domain's ~0.99 result is
-chip-specific and does NOT transfer. nb-reject controls FAR to ~0 for every
+chip-specific and does NOT transfer. Confidence rejection controls FAR to ~0 for every
 arm (the one robust win), but oracle+synth-normal also reaches FAR 0, so the
 honest FAR claim is "annotation-free synth-normal gives any model FAR 0", not
 "synthesis beats oracle on FAR". Hypothesis (fcm_pm+margin+reject matches/beats
 oracle on WM38) REFUTED. Keep overlay as the WM38 representative; drop fcm_pm
-from the WM38 headline. CSV: wm38_margin_reject_3s.csv.
+from the WM38 headline. This experiment is not Gaussian NB: it thresholds the
+maximum predicted bit probability. CSV:
+`D:/project/known-cnn/outputs/multilabel_synth/wm38_margin_reject_3s.csv`.
 
 ## WM38 fidelity CAUSAL intervention: attenuate one source's evidence, keep label
 SmallCNN, n3000, 3 seeds. f = evidence-retained fraction (1=full overlay,
-0=erased-but-still-labeled). 3-seed mean:
-| f    | survival | bitF1  | pos    | neg    | NORMAL_FAR |
-| 1.00 | 1.000    | 0.6789 | 0.6547 | 0.0416 | 0.0337     |
-| 0.75 | 0.823    | 0.6906 | 0.6754 | 0.0355 | 0.0027     |
-| 0.50 | 0.646    | 0.7013 | 0.6984 | 0.0312 | 0.0050     |
-| 0.25 | 0.469    | 0.6815 | 0.6703 | 0.0377 | 0.1810     |
-| 0.00 | 0.293    | 0.5785 | 0.5232 | 0.1303 | 0.1223     |
+0=erased-but-still-labeled). Preliminary 3-seed mean:
+| f    | bitF1  | pos    | neg    | NORMAL_FAR |
+| 1.00 | 0.6789 | 0.6547 | 0.0416 | 0.0337     |
+| 0.75 | 0.6906 | 0.6754 | 0.0355 | 0.0027     |
+| 0.50 | 0.7013 | 0.6984 | 0.0312 | 0.0050     |
+| 0.25 | 0.6815 | 0.6703 | 0.0377 | 0.1810     |
+| 0.00 | 0.5785 | 0.5232 | 0.1303 | 0.1223     |
 Verdict: naive "fidelity down -> bit_F1 down monotonically" is REFUTED (bit_F1
 is flat/up to f=0.5; defect still detectable at half strength). The real
-causal effect is on FALSE ALARMS: as fidelity drops, NORMAL_FAR spikes
-(0.003 -> 0.18 at f=0.25) and neg_prob jumps (0.03 -> 0.13 at f=0) — erasing a
-source's evidence while keeping its label teaches spurious firing. This CAUSAL
-result confirms the fidelity->FAR mechanism (Prop 2 / Thm 1 independence term)
-and explains cutmix's high FAR; refines the paper's claim to "fidelity governs
-false alarms first, bit_F1 only at extreme erosion". CSV: wm38_fidelity_causal_3s.csv.
+preliminary signal is a threshold effect: neg_prob jumps at full erasure and
+NORMAL_FAR becomes highly variable below f=0.5. It does not yet establish a
+monotonic FAR law (three seeds and large variance are insufficient).
+
+The original `survival` column is invalid for a causal slope because it credits
+source-B evidence inside source-A's support, producing about 0.292 survival at
+`f=0`. The implementation was corrected to counterfactual marginal survival
+(`f=1 -> 1`, `f=0 -> 0`), catastrophe rate, per-class probabilities, and five
+paired data splits. Until the corrected run completes, use this only as a
+preliminary negative/non-monotonic result. Legacy CSV:
+`D:/project/known-cnn/outputs/multilabel_synth/wm38_fidelity_causal_3s.csv`.
+
+Corrected five-split result (counterfactual marginal survival):
+
+| f | supported bitF1 | pos | neg | gap | NORMAL FAR |
+|---:|---:|---:|---:|---:|---:|
+| 0.00 | 0.631 | 0.517 | 0.133 | 0.384 | 0.179 |
+| 0.10 | 0.724 | 0.602 | 0.067 | 0.536 | 0.507 |
+| 0.25 | 0.806 | 0.681 | 0.040 | 0.642 | 0.253 |
+| 0.50 | 0.811 | 0.697 | 0.032 | 0.665 | 0.005 |
+| 0.75 | 0.814 | 0.687 | 0.032 | 0.655 | 0.012 |
+| 1.00 | 0.793 | 0.654 | 0.041 | 0.614 | 0.015 |
+
+Endpoint paired-bootstrap effects (full minus erased): bitF1 +0.162
+[0.129, 0.208], gap +0.229 [0.191, 0.276], NORMAL FAR -0.164
+[-0.234, -0.087]. Spearman rho is 0.662 for bitF1, 0.624 for gap, and
+-0.656 for FAR, but adjacent-step monotonicity is only 60%, 68%, and 52%.
+Conclusion: catastrophic evidence loss degrades the operating frontier, while
+maximum evidence is not the F1 optimum. Corrected CSV:
+`D:/project/known-cnn/outputs/multilabel_synth/wm38_fidelity_causal_corrected_5split.csv`.
+
+## WM38 strict prior-method comparison COMPLETE (5 seeds, pick=val_tail_margin_guarded, neg=.02)
+KEY FINDING: `summation_mixup_shin22` == `overlay` == np.maximum(ca,cb) in wm38_arms.py
+(binary encoding: max-union IS the faithful re-encoded clipped sum of Shin 2022).
+So our best operator COINCIDES with the closest prior work. No operator novelty on WM38.
+| operator                        | bitF1  | nrmFAR |
+| max-union/overlay(=Shin22 summ) | 0.8000 | 0.0102 |  <- best
+| cutmix                          | 0.6909 | 0.4390 |
+| fcm (no Pair-Mask)              | 0.6649 | 0.3836 |
+| FCM-PM (chip op)                | 0.6544 | 0.1472 |
+| average_mixup_shin22            | 0.5741 | 0.6762 |
+| union_mixup                     | 0.5667 | 0.6550 |
+| mixup                           | 0.5370 | 0.2250 |
+| single_only                     | 0.4732 | 0.6022 |
+| mixup_shin22                    | 0.4536 | 0.4814 |
+Implications: (1) FCM-PM (0.654) LOSES to max-union (0.80) on WM38 -> FCM-PM scoped to chip
+(0.99) not WM38 headline. (2) Pair-Mask value = FAR control: FCM-PM 0.147 vs fcm 0.384 FAR
+at similar bitF1. (3) Paper repositioned to FRAMEWORK + THEORY + GUARANTEE (commit 4e03deb):
+contribution is the fidelity criterion (predicts max-union is best), the superposition theory
+(why it matches oracle), and the annotation-free conformal FAR guarantee (Shin22 lacks) -
+NOT a new operator. Pending: operating-curves + conformal (the guarantee evidence).
