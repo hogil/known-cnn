@@ -1,0 +1,7 @@
+# 3-component ablation for,oneaxis_seed_repeat_p_p065_s99_T7_LS029500_g3_grid9_cmp10000_p06500_mpos065_s99_ep10_tr200_ev02000
+# eval_pool,chip_multilabel_v15direct_n2000
+# NOTE,champion checkpoints pruned; (c) read from bit_far_metrics.json (I10); (b) reconstructed from ep4 raw-threshold pcls diagnostic via micro chip-FAR; (a) not obtainable (ep2/val-F1 ckpt pruned + never eval'd)
+config,trn_bit_F1,trn_pos,trn_neg,evl_bit_F1,evl_pos,evl_neg,NI-FAR,OOD-FAR,Total-FAR,delta-vs-prev,note
+(a) FCM-PM only [val-F1 sel ep2 + raw-thresh],NA,NA,NA,NA,NA,NA,NA,NA,NA,baseline missing,ep2/best_f1_model.pth pruned AND never evaluated on eval pool -> not obtainable
+(b) FCM-PM + val-margin [val-margin sel ep4 + raw-thresh],0.9921,0.8499,0.1476,0.9962,0.8153,0.2416,0.32,9.33,7.18,(a)=NA,"raw sigmoid@0.5, no acceptor; reconstructed from ep4 pcls (bit_F1=POS-class macro)"
+(c) FCM-PM + val-margin + nb-reject [val-margin sel ep4 + I10],0.9921,0.8499,0.1476,0.9979,0.8153,0.2416,0.00,0.08,0.06,bitF1 +0.0017; NI -0.32pp; OOD -9.25pp; Total -7.12pp,I10 = val-fitted joint-macro-F1 thresh + entropy-Normal reject gate (== champion)
