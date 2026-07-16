@@ -789,6 +789,24 @@ an inherent impossibility theorem. Our faithful training-side construction reach
 its operating point (FAR 0.147) with margin rejection and a conformal guarantee
 (Sec 5.6, 5.11) rather than real-normal training.
 
+**Does density faithfulness matter if over-density does not hurt raw F1?** We
+concede the sharpest reading: in our WM38 test the distributionally mismatched
+max-union arm attains the *highest* raw bit-F1 (0.80) at the *lowest* FAR (0.010),
+so over-density does not empirically penalize raw F1 here, and we do not claim it
+does. The faithful-operator claim is not a raw-F1 win but three separable results:
+(i) a certified excess-risk guarantee that is non-vacuous *only* for the
+density-matching operator (max-union's is vacuous, TV >= 0.86); (ii) the
+coverage-at-guaranteed-FAR frontier (FCM-PM keeps 97% usable coverage at a
+guaranteed 1% FAR, Sec 5.11), a direct measured result independent of the density
+argument; and (iii) the cross-regime flip. Whether over-density *does* degrade a
+detector is decidable but unsettled by our protocol, where train and test share the
+benchmark density; the decisive future test is a **density-shift stress test**
+(faithful vs. over-dense training evaluated under a deliberately shifted test
+density, at matched FAR operating points and on real higher-order mixes), whose
+outcome we do not pre-judge. We keep max-union in every table with its measured
+numbers: the claim is certified distributional faithfulness, not a hidden or
+defined-away baseline.
+
 **Positioning against single-positive multi-label (SPML).** SPML is the
 paradigm most easily confused with ours, and the difference is not
 incremental — it is a difference in what is OBSERVED, which makes SPML's
@@ -858,6 +876,16 @@ VOC/COCO results are subsampled-scale boundary analyses. We do not run a
 head-to-head SPML benchmark by design — the settings consume different
 inputs (SPML requires multi-label images; we forbid them), so the comparison
 is conceptual, not empirical (Sec. 6).
+
+**Contribution type, not leaderboard SOTA.** We do not claim state-of-the-art
+accuracy: fully-supervised MixedWM38 methods reach 98-99%, whereas our faithful
+operator recovers ~67% of an equal-condition oracle *from single-label data alone*,
+with a finite-sample FAR guarantee. The contribution is annotation-free
+multi-label competence plus reliability, evaluated for cross-regime generality
+across five families spanning three combination regimes -- a weak-supervision and
+reliability result, not a single-benchmark accuracy win; reliance on one public
+real-multi-label benchmark is a real limitation, and the cross-regime breadth is
+what carries the claim beyond it.
 
 ## 7 Conclusion
 
