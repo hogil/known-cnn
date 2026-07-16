@@ -235,3 +235,31 @@ perceived novelty and significance more than any single new experiment would, an
 only writing time. (The one compute item that still matters, W3's saved-probability rerun,
 should proceed in parallel to remove the metric liability, but it lowers risk rather than
 raising the ceiling.)
+
+---
+
+## W3 INVESTIGATION RESULT (2026-07-16, read-only diagnosis)
+
+Read-only cross-check of the strict saved-probability CSVs against the paper's headline
+numbers. Finding is mixed but mostly reassuring:
+
+RESOLVED (flagship is already the clean strict metric, no change needed):
+- summation/overlay (= Shin 2022) headline 0.80/0.010 matches
+  `wm38_strict_baselines_neg002_5seed.csv` at pick=val_tail_margin_guarded, neg=0.02
+  EXACTLY (0.8000/0.0102, 5 seeds). Baselines match exactly too: cutmix 0.6909/0.4390,
+  fcm 0.6649/0.3836, mixup 0.5370/0.2250, single_only 0.4732/0.6022. So the "pre-audit
+  legacy macro / provenance records" caveat in the Audit note applies only to SUPERSEDED
+  values; the reported headline arms ARE the post-audit strict metric.
+
+OPEN (needs a user decision — a fair-protocol inconsistency that changes a reported number):
+- fcm_pm 0.654/0.147 is NOT from the same run/pick as the other headline arms. Its source
+  is `wm38_strict_fcmpm_neg002_neg020_5seed.csv`, and the favorable 0.147 FAR only appears
+  at pick=val_margin (0.6708/0.1451). At the SAME pick used for the other headline arms
+  (val_tail_margin_guarded) fcm_pm is 0.6629/0.2283 — materially worse FAR.
+- Decision required: report fcm_pm at the consistent pick (val_tail_margin_guarded ->
+  0.663/0.228, honest but changes FCM-PM's FAR-control story) OR keep 0.147 with an explicit
+  "best-pick" disclosure. Either way it is a paper-claim change, deferred to the user.
+- Oracle 0.974 threshold-sweep failure (separate) not re-examined here.
+
+Net: the flagship claim is safe; the fcm_pm FAR figure is the one real reviewer-catchable
+inconsistency remaining, and it is a judgment call, not an autonomous edit.
