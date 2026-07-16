@@ -575,14 +575,17 @@ one of our content-blind operators. The content-blind constraint (no
 location annotation) governs the industrial setting and all headline
 claims (WM38, MNIST, Reuters, all blind). On natural scenes we
 deliberately relax it to measure the boundary: blind operators fail here,
-and matching the oracle requires location supervision — which is itself
-the finding predicted by the superposition-domain condition.
+and even approaching the oracle requires location supervision — which is
+itself the finding predicted by the superposition-domain condition.
 
 Natural single-category (56%) vs multi-category (44%) split — no label
-masking. ResNet-18, subsampled protocol. Findings: (i) copy-paste (crops onto
-scene backgrounds) is the only synthesis matching the oracle's bit-F1 (0.357
-vs 0.355) — natural scenes need object/context scale alignment; (ii) tight
-crops alone regress (scale mismatch); (iii) region > blend ordering persists.
+masking. ResNet-18, 3-seed held-out-pair protocol. Findings: (i) copy-paste
+(crops onto scene backgrounds) beats the floor (bit-F1 0.379+-0.010 vs
+0.303+-0.019) but stays below the trained oracle (0.410+-0.076) — natural
+scenes need object/context scale alignment, and even the location-supervised
+arm leaves a residual gap; (ii) tight crops alone regress (scale mismatch);
+(iii) region > blend ordering persists; (iv) no compositional advantage
+appears — all arms drop together on held-out-pair scenes.
 Positions the domain condition: label-faithful blind synthesis requires the
 domain's combination to be reproducible by a content-blind, evidence-preserving
 operator (summation/union in superposition-structured domains — inked digits,
