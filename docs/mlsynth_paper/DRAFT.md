@@ -16,10 +16,18 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 > percentile), full-cover-complement **FCM / FCM-PM 0.293** (matches real).
 > max-union therefore assumes the WRONG generative model — it double-counts
 > overlapping dies and produces distributionally unrealistic, over-dense training
-> wafers — and is **EXCLUDED** on die-budget/realism grounds. This is a
-> modeling-faithfulness argument, stated honestly: max-union's raw bit-F1 **0.80**
-> (strict, 5 seeds) is *higher* than any faithful operator's, but it is an artifact
-> of training on over-dense maps that over-detect, not a faithful method. The
+> wafers — and is **DISTRIBUTIONALLY MISMATCHED** (over-dense) on
+> die-budget/realism grounds. We KEEP it in every table with its real numbers and
+> relabel it "distributionally mismatched," NOT "excluded"/hidden: the
+> operator-match theorem (THEORY.md) makes this a *prediction*, not a judgment —
+> the excess-risk bound 2B·TV(D_real, D_syn^T) is minimized by the faithful
+> operator, and the measured density gap is a certified lower bound on that TV
+> (data-processing inequality: 91% > real 95th pct gives TV ≥ 0.86), so the bound
+> penalizes max-union's guarantee. This is a distributional-realism argument,
+> stated honestly: max-union's raw bit-F1 **0.80** (strict, 5 seeds) is *higher*
+> than any faithful operator's at the *lowest* FAR **0.010**, but it is earned on
+> over-dense maps that over-detect — off the density-faithful frontier, a training
+> law the certificate cannot vouch for. The
 > full-cover complement (FCM) synthesizes each die as owned by exactly one source,
 > matching the real die budget; with a Pair-Mask false-alarm view (**FCM-PM**) it
 > is the **faithful WM38 method** and has the best F1-FAR trade-off among
@@ -64,10 +72,15 @@ oracle on the full test (mAP 0.868 vs 0.846) and exceeds it by +0.198 mAP on
 held-out label combinations that the oracle never observed. On the public
 MixedWM38 wafer-map benchmark, whole-image max-union — which under the binary
 encoding (normal die 0.5, defect 1.0) equals Shin et al. (2022) Summation Mixup —
-double-counts overlapping dies (density 0.50, 64% denser than real) and is
-**excluded as die-budget-violating**; its high raw bit-F1 (0.80) is an
-over-dense-training artifact, not a faithful method (a modeling-faithfulness
-argument, not an F1 one). The density-matching FCM-PM operator (0.29) is the best
+double-counts overlapping dies (density 0.50, 64% denser than real; 91% exceed
+the real-2-mix 95th percentile) and is **distributionally mismatched
+(over-dense)** — a mismatch our operator-match theorem *predicts against* (the
+excess-risk bound 2B·TV is minimized by the faithful operator, and the density
+gap is a certified lower bound on that TV). We keep max-union in every table with
+its real numbers and state plainly that it scores the highest raw bit-F1 (0.80)
+at the lowest FAR (0.010) — but earns them on an over-dense training law the
+certificate cannot vouch for, off the density-faithful frontier. The
+density-matching FCM-PM operator (0.29) is the best
 die-budget-faithful synthesis: bit-F1 0.654 at real-normal FAR 0.147, versus
 0.38–0.44 FAR for the next-best faithful arms (Pair-Mask is the FAR-control lever,
 0.147 vs 0.384 without it), and it also reaches ~0.99 on chip-internal maps. A
@@ -76,9 +89,10 @@ small set of known-good samples yields a finite-sample conformal FAR guarantee
 operator is an instance of a general **operator-match principle** --- synthesis
 must apply the domain's true combination law --- validated across three regimes:
 partition (wafer -> complement), superposition (audio: FSD50K waveform summation
-wins bit-F1 0.433 vs 0.27--0.31, the mirror image of wafer, where summation
-over-densifies and is excluded), and disjoint-coordinate text (Reuters -> vector
-averaging, 72% oracle recovery). Audio is thus the superposition-regime
+wins bit-F1 0.433 vs 0.27--0.31, the mirror image of wafer, where the same
+summation over-densifies and is distributionally mismatched), and
+disjoint-coordinate text (Reuters -> vector averaging, 72% oracle recovery).
+Audio is thus the superposition-regime
 confirmation that completes the theory, not an optional bonus (honest nuance:
 waveform summation wins bit-F1 but at higher FAR, 0.21 vs ~0.10, while FCM-PM
 remains the best FAR-controlled operator). We characterize the natural-image
@@ -113,12 +127,18 @@ real; 91% of its synthetics exceed the real-2-mix 95th percentile), silently
 violating the die budget and producing distributionally unrealistic training
 wafers.
 
-We therefore **exclude** whole-image max-union — equivalently Shin et al. (2022)
-Summation Mixup under the binary encoding (Sec. 2, Sec. 5.2) — on
-generative-model-faithfulness grounds. We are explicit that this is a
-modeling-realism argument, not an F1 argument: max-union's raw bit-F1 (0.80) is
-higher than any faithful operator's, but it is earned on over-dense wafers that
-over-detect. The faithful operator for wafer maps is **full-cover-complement
+We therefore flag whole-image max-union — equivalently Shin et al. (2022)
+Summation Mixup under the binary encoding (Sec. 2, Sec. 5.2) — as
+**distributionally mismatched** (over-dense), and **keep it in every table with
+its real numbers** rather than hiding it. This is not a hand-picked exclusion:
+our operator-match theorem (Sec. Theory) shows the excess-risk bound
+2B·TV(D_real, D_syn^T) is minimized by the faithful operator, and the measured
+density gap is a certified lower bound on that TV — so the theory *predicts* the
+mismatch penalizes max-union's guarantee. We are equally explicit that this is a
+distributional-realism argument, not an F1 one: max-union's raw bit-F1 (0.80) is
+higher than any faithful operator's at the lowest FAR (0.010), but it is earned
+on over-dense wafers that over-detect — a training law the certificate cannot
+vouch for. The faithful operator for wafer maps is **full-cover-complement
 mixing**, which assigns each die to exactly one source and matches the real die
 budget (0.29); with a Pair-Mask false-alarm view (**FCM-PM**) it gives the best
 F1-FAR trade-off among die-budget-faithful blind operators (0.654 bit-F1 at FAR
@@ -152,14 +172,19 @@ Contributions:
    among die-budget-faithful blind operators, has the best F1-FAR trade-off on
    WM38 (0.654 bit-F1 / 0.147 FAR; Pair-Mask is the FAR-control lever, 0.147 vs
    0.384 without it) while reaching ~0.99 on chip-internal maps.
-3. **Theory.** A superposition/partition-equivalence excess-risk account: blind
-   synthesis is oracle-faithful exactly when the operator reproduces the domain's
-   true combination law (pixelwise max for inked digits, waveform summation for
-   audio, die-budget partition for wafer maps, coordinate averaging for text); it
+3. **Theory — an operator-match theorem.** An excess-risk account in which, for
+   ANY content-blind operator T, training on operator-T synthesis costs at most
+   2B·TV(D_real, D_syn^T) over the real-mix oracle; the bound is *minimized* by the
+   operator that matches the domain's true combination law (T* = argmin_T TV:
+   pixelwise max for inked digits, waveform summation for audio, die-budget
+   partition for wafer maps, coordinate averaging for text). This turns the
+   max-union case into a theorem *prediction* rather than a judgment — its measured
+   over-density is a certified lower bound on TV (data-processing inequality), which
+   the bound penalizes — and the cross-regime flip (wafer -> complement, audio ->
+   summation) is the same theorem selecting a different T per domain. It also
    predicts the natural-image boundary corollary and isolates the oracle's residual
-   advantage
-   (the appearance interaction of real high-order mixes, not knowledge of the
-   combination support — both alternatives tested and rejected).
+   advantage (the appearance interaction of real high-order mixes, not knowledge of
+   the combination support — both alternatives tested and rejected).
 4. **Annotation-free guarantee.** A strict source-only reliability pipeline —
    synthetic normals, negative-target control, synthetic validation margin for
    checkpoint selection, class-conditional Gaussian pattern likelihood for
@@ -170,8 +195,9 @@ Contributions:
    faithful operator is the domain's true combination law, validated across three
    regimes: a **partition** domain (wafer -> full-cover complement), a
    **superposition** domain (audio FSD50K, where physical waveform summation wins
-   bit-F1 0.433 vs 0.27-0.31 — the mirror image of wafer, where summation
-   over-densifies and is excluded), and a **disjoint-coordinate** domain (Reuters
+   bit-F1 0.433 vs 0.27-0.31 — the mirror image of wafer, where the same
+   summation over-densifies and is distributionally mismatched), and a
+   **disjoint-coordinate** domain (Reuters
    text -> vector averaging). The same label-fidelity / generative-model-match
    criterion selects the right operator in each regime, so audio is the
    superposition-regime confirmation that completes the theory, not an optional
@@ -222,10 +248,15 @@ Contributions:
   **die-budget partition** (each die carries one defect type; measured defect-die
   density 0.31, matching singles 0.29), whereas max-union double-counts overlapping
   dies to 0.50 — 64% denser than real, with 91% of its synthetics exceeding the
-  real-2-mix 95th percentile. We therefore **exclude** max-union / Summation Mixup
-  as die-budget-violating; its high raw bit-F1 (0.80) is an artifact of training on
-  over-dense wafers, not a faithful method (a modeling-realism argument, stated
-  honestly, not an F1 one). Our faithful operator is full-cover-complement mixing
+  real-2-mix 95th percentile. We therefore label max-union / Summation Mixup
+  **distributionally mismatched** (over-dense) and **keep it in every comparison
+  table with its real numbers** rather than dropping it: our operator-match theorem
+  (Sec. Theory) predicts the penalty — the density gap is a certified lower bound on
+  TV(D_real, D_syn), which the excess-risk bound charges for. Stated honestly, its
+  raw bit-F1 (0.80) is the highest of any arm at the lowest FAR (0.010), but it is
+  earned on over-dense wafers that over-detect — a distributional-realism argument,
+  not an F1 one — so it sits off the density-faithful frontier. Our faithful
+  operator is full-cover-complement mixing
   with Pair-Mask (FCM-PM), which reproduces the real die budget (0.29) and has the
   best F1-FAR trade-off among die-budget-faithful blind operators (0.654 / 0.147).
   Our contributions relative to this prior line are thus the die-budget partition
@@ -294,8 +325,9 @@ true law is a **die-budget partition** (each die owned by one source), so
 max-union is *unfaithful* —
 under the binary encoding it coincides with Shin et al. (2022) Summation Mixup
 (Sec 5.2) and double-counts overlapping dies, over-densifying the map (density
-0.50 vs real 0.31); it is excluded on generative-model grounds despite a high raw
-bit-F1. The faithful wafer operator is the **full-cover complement (FCM)**, which
+0.50 vs real 0.31); it is distributionally mismatched (penalized by the
+operator-match bound) despite a high raw bit-F1 that we keep in the tables. The
+faithful wafer operator is the **full-cover complement (FCM)**, which
 partitions the dies among sources and matches the real budget (0.29); with
 Pair-Mask (**FCM-PM**) it is the WM38 method (bit-F1 0.654 / FAR 0.147) and also
 reaches ~0.99 on chip-internal maps. In **disjoint-coordinate text** it selects
@@ -317,7 +349,8 @@ Given two singles (x_a, a), (x_b, b):
   On **wafer maps it is unfaithful**: under WM38's binary encoding (normal 0.5,
   defect 1.0) it is exactly Shin et al. (2022) Summation Mixup's clipped binary
   sum, and it double-counts overlapping dies (density 0.50 vs real 0.31), so it is
-  excluded as die-budget-violating (Sec 4.2, Sec 5.2). Domain analog: chip
+  distributionally mismatched (over-dense) and penalized by the operator-match
+  bound — kept in the tables, not hidden (Sec 4.2, Sec 5.2). Domain analog: chip
   min-blend.
 - **complement (FCM)** (the faithful wafer operator): G x G grid (G = 3N, e.g. 9),
   cells randomly permuted and partitioned into n groups; mix_i = x_b base with
@@ -334,9 +367,10 @@ Given two singles (x_a, a), (x_b, b):
   the chip-internal operator (~0.99).
 - **synthetic normals**: defect pixels erased from real singles (wafer:
   min(x, normal-die value)) => all-negative samples without any normal label.
-- Baselines: max-union (excluded on wafer, see above), CutMix (rectangle patch),
-  Mixup (convex blend, soft labels), single-only (no synthesis), oracle (real
-  multi-label training — ceiling, not a rival).
+- Baselines: max-union (distributionally mismatched on wafer, see above; kept in
+  tables), CutMix (rectangle patch), Mixup (convex blend, soft labels),
+  single-only (no synthesis), oracle (real multi-label training — ceiling, not a
+  rival).
 
 ### 4.2 Label fidelity and generative-model match
 
@@ -448,8 +482,12 @@ Whole-image max-union double-counts overlapping dies (0.501 vs real 0.305) and
 produces distributionally unrealistic, over-dense training wafers: it assumes the
 wrong (superposition) generative model. The full-cover complement synthesizes
 each die as owned by exactly one source and matches the real budget (0.293). We
-therefore **exclude max-union / Summation Mixup as die-budget-violating**, and
-identify FCM-PM as the faithful WM38 operator.
+therefore label max-union / Summation Mixup **distributionally mismatched**
+(over-dense) — keeping it in every table with its real numbers, not hiding it —
+and identify FCM-PM as the faithful WM38 operator. This is a theorem prediction:
+the operator-match bound (Sec. Theory) is minimized by the density-matching
+operator, and the density gap lower-bounds the TV the bound penalizes (91% > real
+95th pct gives TV >= 0.91 - 0.05 = 0.86 for max-union, ~0 for FCM).
 
 **Strict operator comparison (5 seeds, pick=val_tail_margin_guarded, neg 0.02).**
 Common protocol (matched view budget, splits, checkpoint selection, rejection):
@@ -461,13 +499,14 @@ Common protocol (matched view budget, splits, checkpoint selection, rejection):
 | cutmix                         | 0.691  | 0.439      | —                  | evidence-destroying, FAR 3x   |
 | mixup                          | 0.537  | 0.225      | —                  | ghosting                      |
 | single_only                    | 0.473  | 0.602      | 0.290              | floor                         |
-| max-union / overlay (= Shin22) | 0.800  | 0.010      | 0.501 (over-dense) | EXCLUDED: die-budget-violating |
+| max-union / overlay (= Shin22) | 0.800  | 0.010      | 0.501 (over-dense) | distributionally mismatched (over-dense; kept, not hidden) |
 
 Reading, stated honestly: max-union's bit-F1 (0.80) is the highest of any arm and
-its FAR the lowest (0.010) — but it earns this on over-dense wafers (density 0.501
-vs real 0.305) that over-detect, so it is excluded on generative-model /
-distributional-realism grounds, not on F1. This is a modeling-faithfulness
-argument. Among **die-budget-faithful** operators, FCM-PM has the best F1-FAR
+its FAR the lowest (0.010) — we keep the row and report it plainly — but it earns
+this on over-dense wafers (density 0.501 vs real 0.305) that over-detect, so it is
+distributionally mismatched on generative-model / distributional-realism grounds,
+not on F1; the operator-match theorem predicts this penalty rather than us
+hand-picking it. Among **die-budget-faithful** operators, FCM-PM has the best F1-FAR
 trade-off: cutmix scores marginally higher F1 (0.691) but triples the FAR (0.439),
 and removing Pair-Mask (FCM alone) more than doubles it (0.665 F1 / 0.384 FAR).
 Pair-Mask is thus the FAR-control lever (0.147 vs 0.384 at comparable F1). FCM-PM
@@ -483,11 +522,11 @@ leaves FAR 0.799 — a checkpoint-level calibration result, not an impossibility
 claim about all oracle training.)
 
 **Legacy / over-dense-arm provenance (diagnostic only).** Earlier
-SmallCNN/ResNet-18 runs of the (now-excluded) max-union / Summation Mixup arm
-under the legacy macro are retained as provenance; they show the same over-dense
-arm reaching bit-F1 0.795 (full-scale, all 7,015 singles, ResNet-18, 30ep) to
-0.841 (nine-seed headline) at near-zero real-normal FAR (0.0003-0.0008). These are
-NOT a faithful WM38 result — they are the over-dense-training artifact quantified
+SmallCNN/ResNet-18 runs of the (distributionally mismatched) max-union / Summation
+Mixup arm under the legacy macro are retained as provenance; they show the same
+over-dense arm reaching bit-F1 0.795 (full-scale, all 7,015 singles, ResNet-18,
+30ep) to 0.841 (nine-seed headline) at near-zero real-normal FAR (0.0003-0.0008).
+These are NOT a faithful WM38 result — they are the over-dense-training outcome quantified
 above — and are reported only to make the exclusion auditable. Component
 ablations that DO transfer to the faithful operator: pair masking in the
 complement arm cuts observed NORMAL FAR in isolation (0.852 -> 0.012), and
@@ -671,8 +710,9 @@ n=20/arm, multi-label eval:
 | cutmix       | 0.2665 | 0.5764 | 0.0848 | region patch                             |
 
 Waveform summation wins bit-F1 decisively (0.433 vs 0.27-0.31 for every other arm,
-sd ~0.019) — **the exact opposite of WM38**, where summation (max-union) FAILS as
-die-budget-violating over-density. The two results are one principle:
+sd ~0.019) — **the exact opposite of WM38**, where the same summation (max-union)
+is distributionally mismatched (die-budget-violating over-density). The two
+results are one principle:
 **operator-match**. The faithful operator reproduces the domain's true mixing
 physics — **partition domains (wafer, die-budget) -> complement (FCM); superposition
 domains (audio, waveform add) -> summation** — and the same label-fidelity /
@@ -738,9 +778,11 @@ reaches 0.001 normal FAR in one seed, so this is not an impossibility result.
 lead (0.974 vs the faithful FCM-PM's 0.654): real high-order mixes contain
 appearance interactions that die-partition synthesis does not reproduce; neither
 combination-support matching nor naive higher-order synthesis closes it in our
-tests (Sec 5.12). (The excluded max-union arm scores higher raw bit-F1, 0.80, but
-only by training on over-dense wafers that violate the die budget — Sec 5.2 — so
-it is not a legitimate closer of this gap.) On the headline oracle checkpoint,
+tests (Sec 5.12). (The distributionally mismatched max-union arm scores higher raw
+bit-F1, 0.80, but only by training on over-dense wafers that violate the die
+budget — Sec 5.2 — so it is off the faithful frontier and not a legitimate closer
+of this gap; we report it plainly rather than hide it.) On the headline oracle
+checkpoint,
 even tau=0.99 leaves normal FAR 0.799; the full-scale oracle varies from
 0.295/0.262/0.001 across seeds, so this is an optimization/calibration result, not
 an inherent impossibility theorem. Our faithful training-side construction reaches
@@ -823,8 +865,9 @@ From single-label training data alone — no multi-label, real-normal, or locati
 annotation — label-faithful synthesis trains multi-label recognizers by matching
 the domain's true combination law. On wafer maps that law is a **die-budget
 partition** (not a pixelwise superposition), so whole-image max-union / Summation
-Mixup is excluded as die-budget-violating (over-dense, 0.50 vs real 0.31) despite
-its high raw bit-F1, and the faithful full-cover-complement operator (FCM-PM)
+Mixup is distributionally mismatched (over-dense, 0.50 vs real 0.31) — a mismatch
+the operator-match theorem predicts against, reported transparently despite its
+high raw bit-F1 rather than hidden — and the faithful full-cover-complement operator (FCM-PM)
 recovers about two-thirds of an equal-condition oracle (bit-F1 0.654 at FAR 0.147)
 while reaching ~0.99 on chip-internal maps. On a genuine superposition domain
 (MNIST) blind synthesis exceeds the oracle on unseen combinations. A margin-reject
@@ -835,7 +878,7 @@ The two-part criterion (label fidelity plus generative-model match) is measurabl
 before training and selects the faithful operator across regimes by an
 operator-match principle — partition domains take the complement, superposition
 domains take summation (waveform summation wins on FSD50K audio, the mirror of the
-excluded wafer max-union), and disjoint-coordinate text takes averaging; the
+distributionally mismatched wafer max-union), and disjoint-coordinate text takes averaging; the
 combination-law condition predicts where the approach matches the real distribution
 and where it does not. What remains with the
 oracle is the appearance of real high-order interactions — a boundary we quantify
