@@ -1,34 +1,37 @@
 # Handoff — "Multi-label from single-label via content-blind synthesis"
 
-> **Positioning correction, 2026-07-16 (die-budget partition — read first;
-> supersedes the earlier "operator = max-union" revision).** A decisive density
-> measurement shows WM38 real mixing is a **die-budget PARTITION** (each die
-> carries exactly one defect type; a "2-mix" partitions dies among sources), NOT a
-> pixelwise superposition. Measured defect-die fraction: real 2-mix **0.305**,
-> single **0.290**, whole-image **max-union / overlay / Shin22 Summation Mixup
-> 0.501** (64% denser than real; 91% of synthetics exceed the real-2-mix 95th
-> percentile), **FCM / FCM-PM 0.293** (matches real). max-union (verified in
-> `multilabel_synth/synthesis/wm38_arms.py`: `summation_mixup_shin22`/`overlay`
-> both compute `np.maximum(ca, cb)`, and under the binary encoding this equals Shin
-> et al. 2022 Summation Mixup) therefore **double-counts overlapping dies →
-> over-dense → distributionally UNREALISTIC**, and is **EXCLUDED as
-> die-budget-violating**. This is a modeling-faithfulness argument, stated
-> honestly: max-union's raw bit-F1 **0.80** (strict, 5 seeds) is *higher* than any
-> faithful operator's, but it is an over-dense-training artifact, not a faithful
-> method. **FCM-PM (full-cover complement + Pair-Mask) IS the faithful WM38
-> method**: it matches the real die budget (0.293) and among die-budget-faithful
-> blind operators has the best F1-FAR trade-off — FCM-PM **0.654 / 0.147** vs
-> cutmix 0.691/0.439, FCM-no-PM 0.665/0.384, mixup 0.537/0.225, single-only
-> 0.473/0.602 (5 seeds, pick=val_tail_margin_guarded, neg 0.02). Pair-Mask's role =
-> FAR control (0.147 vs FCM 0.384). FCM-PM also excels on chip (~0.99). The earlier
-> "max-union = our operator / no operator novelty / FCM-PM chip-only" framing is
-> UNDONE. The historical external FCM-PM CSV port (`fcm_pm`=FCM, `fcm_pm_pm`=FCM-PM)
-> was incomplete (omitted `g` complementary full-cover views, wrong Pair Mask fill)
-> and is audit-only. Density evidence:
-> `D:/project/known-cnn/docs/superpowers/multilabel_synth_RESULTS.md` (section
-> "max-union violates wafer die-budget"). Corrected definition, code paths, strict
-> evidence:
-> `D:/project/known-cnn/docs/mlsynth_paper/FCMPM_CORRECTION_AND_EVIDENCE_PLAN_260713.md`.
+> **Positioning correction, 2026-07-16 (FINAL — density-shift refutation; READ
+> FIRST; supersedes ALL earlier die-budget / faithful-operator framing below).**
+> A decisive **density-shift stress test REFUTED** the die-budget /
+> faithful-operator thesis. On WM38, whole-image **max-union** (= Shin et al. 2022
+> Summation Mixup under the binary encoding; `summation_mixup_shin22`/`overlay`
+> both compute `np.maximum(ca, cb)`) **BEATS the partition-style FCM-PM on EVERY
+> real-mix density stratum AND every mix order** (2-mix 0.855/0.830/0.805 vs
+> 0.787/0.787/0.714; 3-mix 0.725 vs 0.634; 4-mix 0.655 vs 0.484), at higher bit-F1
+> (0.80 vs 0.65) and lower FAR (0.010 vs 0.147). **"Over-density hurts" is FALSE.**
+> **DROPPED (do not reuse):** "FCM-PM is the faithful WM38 method"; "max-union is
+> distributionally mismatched / EXCLUDED / die-budget-violating"; "die-budget
+> partition makes complement beat summation"; any claim to beat Shin22 on the wafer
+> operator; the TV lower bound used as a *preference* argument. **On WM38 the best
+> content-blind operator is summation/union (= Shin 2022 Summation Mixup); we claim
+> NO operator novelty on wafer.** Density facts are kept only as a characterization
+> (max-union over-dense 0.50; FCM matches real 0.29) — empirically harmless, hence
+> a modeling property, NOT a performance advantage. The paper is repositioned as an
+> **annotation-free, reliability-guaranteed, cross-domain FRAMEWORK**: (i)
+> single→multi setting/method (zero multi-label annotation); (ii) a
+> **label-fidelity / operator-match criterion** that selects the right operator per
+> domain (summation/union on superposition-structured wafer/digits/audio; averaging
+> on disjoint-coordinate text) and correctly selects summation on wafer; (iii) an
+> **annotation-free distribution-free split-conformal FAR guarantee** (Shin22 lacks
+> it) — strongest asset; (iv) an excess-risk theory as a general, one-directional
+> bound (not a superiority proof); (v) cross-domain validation + honest VOC
+> boundary. FCM-PM is reported honestly as an **alternative** operator (does NOT
+> beat summation on wafer; useful on chip-internal ~0.99 + FAR control among weaker
+> arms cutmix/mixup/FCM-no-PM). The reframed paper (DRAFT.md, latex/main.tex,
+> THEORY.md) is fully reconciled to this. Evidence:
+> `D:/project/known-cnn/docs/superpowers/multilabel_synth_RESULTS.md` (sections
+> "DECISIVE density-shift stress test" and "Conformal FAR guarantee COMPLETE").
+> **Everything below this banner is HISTORICAL and superseded.**
 
 Self-contained state of the mlsynth paper project, for continuation by another
 agent/tool. The measured base state is committed to `hogil/known-cnn` on
