@@ -666,3 +666,21 @@ at similar bitF1. (3) Paper repositioned to FRAMEWORK + THEORY + GUARANTEE (comm
 contribution is the fidelity criterion (predicts max-union is best), the superposition theory
 (why it matches oracle), and the annotation-free conformal FAR guarantee (Shin22 lacks) -
 NOT a new operator. Pending: operating-curves + conformal (the guarantee evidence).
+
+## DECISIVE: max-union (=Shin22 summation) violates wafer die-budget (density evidence)
+Defect-die fraction of on-wafer area (measured):
+- real 2-mix (ground truth): 0.3052 +/- 0.050
+- single (1 defect):         0.2904
+- max-union/overlay/Shin22:  0.5012 +/- 0.123   <- 64% denser than real; 91% exceed real 95th pct
+- FCM (complement):          0.2925             <- matches real 2-mix
+- FCM-PM (complement+PM):    0.2925             <- matches real
+INTERPRETATION: WM38 real mixing is a die-budget PARTITION (each die = one defect type),
+NOT max-superposition (union double-counts). max-union assumes the WRONG generative model
+-> over-dense (0.50 vs real 0.31) -> distributionally unrealistic ("cheating" per user, now
+empirically justified). FCM complement is the FAITHFUL partition model (matches real density).
+CONSEQUENCE: max-union/overlay/summation EXCLUDED as die-budget-violating. Among faithful blind
+synthesis, FCM-PM has the best F1-FAR trade-off (0.654 bitF1 / 0.147 FAR vs cutmix 0.69/0.44,
+fcm 0.665/0.384). This REHABILITATES FCM-PM as the legitimate WM38 method and connects to the
+theory (correct generative model -> oracle-faithful). Repositioning: FCM-PM = method (faithful
++ best legit trade-off + Pair-Mask FAR control + conformal guarantee); die-budget partition is
+a novel verified insight (WM38 is partition, not superposition). ICLR estimate up to ~28-40%.
