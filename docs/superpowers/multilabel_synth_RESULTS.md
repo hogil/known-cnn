@@ -745,3 +745,14 @@ fidelity-maximizing summation/union operator (= the good operator, not novel vs 
 annotation-free conformal FAR guarantee (Shin22 lacks it); (3) theory + cross-domain (wafer/audio/
 text) + honest VOC boundary. Novelty is framework+reliability, not a new/faithful operator.
 ICLR ~15-25% (core novelty refuted); TMLR ~60-75% (framework+rigor+guarantee). Caught pre-submission.
+
+## Conformal coverage WITH max-union (honesty gap filled): max-union has BEST coverage too
+@ alpha=0.01 (1% FAR guarantee), real-cal n=500, mixed coverage:
+  summation/max-union(=Shin22) 0.9950  <- BEST
+  FCM-PM                       0.9723
+  fcm 0.839, cutmix 0.759, mixup 0.737, single 0.518
+=> FCM-PM does NOT win coverage either; max-union dominates FCM-PM on ALL axes (F1, FAR, coverage,
+all density strata, all mix orders). Honest framing: the CONTRIBUTION is the annotation-free
+distribution-free FAR GUARANTEE ITSELF (Shin22 lacks it), which applies to the BEST operator
+(summation) and is nearly free there (99.5% coverage at guaranteed 1% FAR). NOT "FCM-PM has best
+coverage". Pair-Mask coverage edge is only vs the weaker faithful arms (cutmix/mixup/single).
