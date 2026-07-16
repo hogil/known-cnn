@@ -642,6 +642,27 @@ training-style synthetic normals fails (realized FAR 0.97): training
 collapses their scores, so exchangeability with deployment normals is the
 binding assumption.
 
+**Coverage at a guaranteed FAR is where the method pays off (5 seeds x 50
+splits, n_cal=500).** Every method meets the finite-sample guarantee (realized
+FAR = alpha to within CI), but the *usable coverage* retained at that
+guarantee separates them sharply:
+
+| method (die-budget-faithful) | alpha=0.01 realized / coverage | alpha=0.05 realized / coverage |
+|------------------------------|--------------------------------|--------------------------------|
+| FCM-PM (ours)                | 0.0098 / **0.972**             | 0.0503 / **0.989**             |
+| fcm (no Pair-Mask)           | 0.0100 / 0.839                 | 0.0503 / 0.908                 |
+| cutmix                       | 0.0097 / 0.759                 | 0.0517 / 0.884                 |
+| mixup                        | 0.0096 / 0.737                 | 0.0488 / 0.799                 |
+| single-only                  | 0.0092 / 0.518                 | 0.0495 / 0.540                 |
+
+At a *guaranteed* 1% false-alarm rate, FCM-PM keeps **97.2%** of wafers usable
+versus 51.8-83.9% for every faithful baseline (1.2-1.9x more decisions at the
+same certified safety). Pair-Mask lowers the model's intrinsic normal
+confidence, so the conformal reject abstains the least to reach the target.
+This coverage-at-guaranteed-FAR advantage is a direct measured result and does
+not depend on the die-budget exclusion argument; it is the practical payoff of
+the faithful-synthesis + Pair-Mask design.
+
 ### 5.11 What the oracle's advantage actually is
 
 Two hypotheses for the residual bit-F1 gap were tested and rejected: (i)
