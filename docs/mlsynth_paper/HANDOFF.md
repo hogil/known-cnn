@@ -39,11 +39,18 @@ agent/tool. The measured base state is committed to `hogil/known-cnn` on
 change set. Paper artifacts live in
 `D:/project/known-cnn/docs/mlsynth_paper/`.
 
-## 0. Active ICLR evidence chain (2026-07-15)
+## 0. [SUPERSEDED 2026-07-16] Old die-budget evidence chain (2026-07-15)
 
-The active claim is source-only compositional multi-label learning built on a
-**die-budget partition insight + a generative-model-match criterion + the faithful
-operator (FCM-PM) + theory + annotation-free guarantee**. The content-blind
+**SUPERSEDED — do NOT use as the current claim.** The density-shift refutation
+(top banner) retired this chain: on WM38 the best content-blind operator is
+summation/union (= max-overlay = Shin 2022), FCM-PM is an honest alternative
+(not the winner), and the paper is positioned as an annotation-free,
+reliability-guaranteed, cross-domain FRAMEWORK. Text below is kept only as a
+record of the abandoned die-budget/faithful-operator framing.
+
+The (abandoned) claim was source-only compositional multi-label learning built
+on a **die-budget partition insight + a generative-model-match criterion + the
+faithful operator (FCM-PM) + theory + annotation-free guarantee**. The content-blind
 operator is SELECTED per modality by a two-part criterion (evidence survival AND
 generative-model/density match). On WM38 the real combination law is a **die-budget
 partition**, so whole-image **max-union** (= Shin et al. 2022 Summation Mixup under
