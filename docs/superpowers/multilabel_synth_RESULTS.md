@@ -684,3 +684,19 @@ fcm 0.665/0.384). This REHABILITATES FCM-PM as the legitimate WM38 method and co
 theory (correct generative model -> oracle-faithful). Repositioning: FCM-PM = method (faithful
 + best legit trade-off + Pair-Mask FAR control + conformal guarantee); die-budget partition is
 a novel verified insight (WM38 is partition, not superposition). ICLR estimate up to ~28-40%.
+
+## Conformal FAR guarantee COMPLETE (real-normal cal, 5 seeds x 50 splits) - FCM-PM WINS coverage
+Distribution-free split-conformal on max-prob; realized FAR ~= alpha for ALL methods (guarantee holds),
+but COVERAGE at guaranteed FAR differs sharply (FCM-PM = far more usable):
+| method       | a=0.01 realized/cov | a=0.05 realized/cov |
+| FCM-PM (ours)| 0.0098 / 0.972      | 0.0503 / 0.989      |  <- best coverage
+| fcm (no PM)  | 0.0100 / 0.839      | 0.0503 / 0.908      |
+| cutmix       | 0.0097 / 0.759      | 0.0517 / 0.884      |
+| mixup        | 0.0096 / 0.737      | 0.0488 / 0.799      |
+| single_only  | 0.0092 / 0.518      | 0.0495 / 0.540      |
+KEY: at a GUARANTEED 1% false-alarm rate, FCM-PM retains 97.2% of wafers usable vs 51.8-83.9% for
+baselines (1.2-1.9x more). Pair-Mask lowers intrinsic FAR so the conformal reject abstains least.
+This is the decisive differentiator: FCM-PM = die-budget-faithful synthesis + best legit F1-FAR
+trade-off + highest coverage under a distribution-free FAR guarantee. Combined with the die-budget
+insight + theory + cross-domain (text) + chip (0.99), the package is coherent+rigorous.
+ICLR estimate: ~32-42% (up; clean quantified guarantee win). TMLR/IEEE TSM 70-85%.
