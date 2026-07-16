@@ -725,3 +725,23 @@ cross-regime theory validation is a genuine general contribution).
 ## FCM-PM dual_loss refinement: NEGATIVE, dropped (5 seeds)
 dual_loss training mode: bitF1 0.5669 / FAR 0.5614 vs standard FCM-PM 0.6544 / 0.1472.
 Worse on both -> dropped, not in paper. Standard FCM-PM remains WM38 headline. Do not re-try.
+
+## DECISIVE density-shift stress test: over-density does NOT hurt -> FAITHFUL-OPERATOR THESIS REFUTED
+SmallCNN, 3 seeds, real 2-mix stratified by density tertile + 3/4-mix. bit_F1:
+| condition        | max_union(=Shin22) | FCM-PM |
+| 2mix low density | 0.8548             | 0.7868 |
+| 2mix mid density | 0.8298             | 0.7874 |
+| 2mix high density| 0.8049             | 0.7144 |
+| 3mix             | 0.7245             | 0.6336 |
+| 4mix             | 0.6552             | 0.4841 |
+max-union WINS on EVERY density stratum AND every mix order, including the low-density/high-order
+regimes where over-dense training was predicted to hurt. Gap GROWS with order (4mix +0.17).
+=> "over-density hurts" hypothesis REFUTED. The die-budget/faithful-operator argument for
+preferring FCM-PM over max-union(=Shin22) is NOT empirically supported: max-union is simply better
+on wafer (F1, FAR 0.010 vs 0.147, all densities, all orders). This is the item-7 backfire the
+strategy agent flagged. HONEST CONSEQUENCE: the paper must DROP "FCM-PM is the faithful method /
+max-union excluded" and reposition around what survives: (1) the single->multi FRAMEWORK using the
+fidelity-maximizing summation/union operator (= the good operator, not novel vs Shin22); (2) the
+annotation-free conformal FAR guarantee (Shin22 lacks it); (3) theory + cross-domain (wafer/audio/
+text) + honest VOC boundary. Novelty is framework+reliability, not a new/faithful operator.
+ICLR ~15-25% (core novelty refuted); TMLR ~60-75% (framework+rigor+guarantee). Caught pre-submission.
