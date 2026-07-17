@@ -76,20 +76,24 @@ combination examples from single-label sources. We contribute (i)~the
 \textbf{single$\to$multi setting and the objective of performance maximization within
 it}: a multi-label-trained \emph{oracle} bounds the problem as an upper reference (it
 uses supervision we forbid);
-(ii)~an \textbf{operator-match law, now measured}: the right content-blind operator
-depends on the domain's \emph{true combination law} --- a summation/union join
-(overlay $=$ Shin et al.\ 2022 Summation Mixup) for \emph{superposition-structured}
-domains where evidence adds or saturates, and \textbf{FCM-PM} (a partition-complement
-operator) for \emph{partition-structured} domains where each unit carries one
-condition. We verify the crossover on the real chip domain, whose true law is a
-partition: under an \emph{identical} protocol, across three seeds, FCM-PM beats overlay
-decisively on \emph{both} axes (eval bit-F1 $0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$,
-$+0.12$; Total-FAR $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, ${\sim}24\times$ lower on
-average and holding for every seed with no distribution overlap --- the worst FCM-PM
-seed beats the best overlay seed), because pixelwise-max mis-models a partition and
-under-detects the second defect in combinations while FCM-PM keeps every combination
-crisp --- a head-to-head that converts operator-match from an assertion into a
-falsifiable, verified law;
+(ii)~an \textbf{operator-match law, now a publicly reproducible law}: the right
+content-blind operator depends on the domain's \emph{true combination law} --- a
+summation/union join (overlay $=$ Shin et al.\ 2022 Summation Mixup) for
+\emph{superposition-structured} domains where evidence adds or saturates, and
+\textbf{FCM-PM} (a partition-complement operator) for \emph{partition-structured} domains
+where each unit carries one condition. We verify the crossover on the real chip domain,
+whose true law is a partition: under an \emph{identical} protocol, across three seeds,
+FCM-PM beats overlay decisively on \emph{both} axes (eval bit-F1
+$0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$, $+0.12$; Total-FAR $0.68 \pm 0.63\%$ vs
+$16.20 \pm 5.53\%$, ${\sim}24\times$ lower on average and holding for every seed with no
+distribution overlap --- the worst FCM-PM seed beats the best overlay seed), because
+pixelwise-max mis-models a partition and under-detects the second defect in combinations
+while FCM-PM keeps every combination crisp --- a head-to-head that converts operator-match
+from an assertion into a falsifiable, verified law; and we reproduce the same flip in
+\emph{both} directions on a controlled public MNIST benchmark (partition domain:
+partition-placement $0.876$ vs overlay $0.638$; superposition domain: overlay $0.696$ vs
+partition-placement $0.400$; matched wins each direction with no std overlap and recovers
+the oracle), so the law is publicly verifiable and not reliant on internal data;
 (iii)~our \textbf{method --- FCM-PM, val-margin checkpoint selection, and naive-Bayes
 rejection}: on the public MixedWM38 benchmark it gives the best FAR-controlled
 tradeoff among the content-blind operators (bit-F1 $0.663$ at NORMAL-FAR $0.228$ at
@@ -159,9 +163,13 @@ source's evidence adds or saturates (inked digits, audio, and wafer maps under a
 binary die encoding), whereas a \emph{partition-complement} (FCM-PM) is the right
 operator for \emph{partition-structured} domains, where each unit carries one
 condition and two defects occupy distinct spatial regions (chip-internal maps). We
-verify the crossover directly: on the real chip domain, whose true law is a partition,
-FCM-PM beats overlay decisively on both bit-F1 and FAR under an identical protocol
-(Sec.~\ref{sec:crossover}), because pixelwise-max mis-models a partition. The
+verify the crossover directly and in \emph{both} directions: on the real chip domain,
+whose true law is a partition, FCM-PM beats overlay decisively on both bit-F1 and FAR
+under an identical protocol (Sec.~\ref{sec:crossover}), because pixelwise-max mis-models a
+partition; and on a controlled, fully public MNIST benchmark we reproduce the same flip
+in both regimes --- the matched operator wins each direction with no std overlap and
+recovers the oracle (Sec.~\ref{sec:opmatch-mnist}) --- so the law is publicly verifiable
+and not reliant on internal data. The
 operator-match criterion is measured before any training via \emph{label fidelity}
 (every labeled source must retain detectable evidence after synthesis); operators that
 destroy evidence (rectangle patching, pixel averaging) train on false labels. The same
@@ -220,9 +228,9 @@ Our contributions are:
   \emph{oracle} bounds the problem as an upper reference (it trains on the real
   multi-label data we forbid). The setting is stricter-than-SPML (genuinely
   single-label training images), evaluated on real multi-label data and real normals.
-\item \textbf{The operator-match law, now measured.} The right content-blind operator
-  is not fixed by fiat but by the domain's \emph{true combination law}: a
-  summation/union join (overlay $=$ Shin et al.\ 2022 Summation Mixup, a pixelwise
+\item \textbf{The operator-match law, now a publicly reproducible law.} The right
+  content-blind operator is not fixed by fiat but by the domain's \emph{true combination
+  law}: a summation/union join (overlay $=$ Shin et al.\ 2022 Summation Mixup, a pixelwise
   $\max$ of two single maps) is evidence-preserving for \emph{superposition-structured}
   domains, while the partition-complement FCM-PM is right for
   \emph{partition-structured} domains. We convert this from an assertion into a
@@ -232,9 +240,17 @@ Our contributions are:
   $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, ${\sim}24\times$ lower on average with no
   per-seed overlap), the two operators learning single defects equally (train bit-F1 ${\sim}0.99$)
   so the entire gap is multi-defect eval, where pixelwise-max mis-models the partition
-  and under-detects the second defect. On WM38 --- a superposition regime under the
-  binary encoding --- overlay is instead the matched operator and is honestly strong
-  ($0.80$/$0.010$); we do \emph{not} claim to beat it there.
+  and under-detects the second defect. We demonstrate the \emph{same flip in both
+  directions on a controlled public MNIST benchmark} (Sec.~\ref{sec:opmatch-mnist}): the
+  matched operator wins each regime with no std overlap (partition domain:
+  partition-placement $0.8763 \pm 0.0105$ vs overlay $0.6382 \pm 0.0359$; superposition
+  domain: overlay $0.6961 \pm 0.0250$ vs partition-placement $0.4000 \pm 0.0078$) and
+  recovers the oracle in each direction (partition $0.876$ vs $0.880$; superposition
+  $0.696$ vs $0.697$), so the law is measured on \emph{both} public data (MNIST, both
+  directions) and the real chip domain --- publicly verifiable without internal data. On
+  WM38 --- a superposition regime under the binary encoding --- overlay is instead the
+  matched operator and is honestly strong ($0.80$/$0.010$); we do \emph{not} claim to beat
+  it there.
 \item \textbf{The method: FCM-PM $+$ val-margin $+$ naive-Bayes rejection.} A
   partition-style full-cover complement with a Pair-Mask view (FCM-PM), val-margin
   checkpoint selection on a disjoint synthetic proxy, and a synthetic-only
@@ -539,6 +555,68 @@ oracle on held-out pairs. Operator ranking follows measured survival
 (Table~\ref{tab:fidelity}); mixup trails at $0.738$ and cutmix at $0.606$.
 (400 singles/class, 8k synth train, 3k test, 25 epochs, 3 seeds.)
 
+\subsection{Operator-match law on public data: the partition/superposition flip}\label{sec:opmatch-mnist}
+\textbf{The chip head-to-head (Sec.~\ref{sec:crossover}) shows the partition-direction
+win on real fab data; here we reproduce the operator-match law in \emph{both} directions
+on a fully public, controlled MNIST benchmark, so the law is publicly verifiable without
+internal data.} We build two multi-label domains from the \emph{same} public MNIST source
+on a $56{\times}56$ two-by-two-cell canvas, train the \emph{same} shared SmallCNN
+($20$ epochs, $3$ seeds), and change \emph{only} the domain's true two-digit combination
+law: a \emph{partition} domain (the two digits occupy disjoint cells) and a
+\emph{superposition} domain (the two digits share one cell, combined by pixelwise
+$\max$). In each domain we run the two content-blind operators head-to-head ---
+partition-placement (the FCM-PM analogue) and overlay/max-union --- alongside the
+single-only floor and an oracle trained on true-law combinations (upper reference).
+Evaluation is a held-out real multi-label MNIST-test set; the matched operator is the one
+whose combine matches the domain's true law. Table~\ref{tab:opmatch-mnist}.
+
+\textbf{The flip is clean and public.} In each domain the \emph{matched} blind operator
+wins with no standard-deviation overlap and the mismatched one is clearly worse: on the
+partition domain partition-placement reaches bit-F1 $0.8763 \pm 0.0105$ vs overlay's
+$0.6382 \pm 0.0359$ ($+0.238$), while on the superposition domain overlay reaches
+$0.6961 \pm 0.0250$ vs partition-placement's $0.4000 \pm 0.0078$ ($+0.296$) --- the exact
+operator-match flip, winner and loser trading places as the law changes. \textbf{The
+matched operator recovers the oracle within noise in \emph{both} directions} (partition
+$0.876$ vs oracle $0.880$; superposition $0.696$ vs oracle $0.697$), so matched blind
+synthesis is statistically indistinguishable from training on the true law. The
+single-only floor is genuinely low in both domains ($0.283$ partition, $0.235$
+superposition), so the combinations are load-bearing rather than a trivial tie. This
+extends the (superposition-only) MultiMNIST study above by adding the partition direction
+under one controlled protocol, and it is the \emph{public, reproducible} counterpart to
+the internal chip head-to-head (Sec.~\ref{sec:crossover}), which shows the same
+partition-direction win (FCM-PM beats overlay) on real fab data: the operator-match law is
+now measured on \emph{both} a controlled public domain (MNIST, both directions, matched
+recovering the oracle) and the real chip partition domain. Runner:
+\texttt{multilabel\_synth/run\_operator\_match.py} (committed).
+
+\begin{table}[t]
+\centering
+\caption{Operator-match law on public MNIST (same public source, $56{\times}56$
+two-by-two-cell canvas, shared SmallCNN, $20$ epochs, $3$ seeds; the only variable is the
+domain's true two-digit combination law). Evaluation is a held-out real multi-label
+MNIST-test set. In \emph{each} regime the matched blind operator (bold) wins with no
+std overlap and recovers the oracle within noise, while the mismatched operator is
+clearly worse and the single-only floor is genuinely low --- the partition/superposition
+flip made public, the reproducible counterpart to the internal chip head-to-head
+(Table~\ref{tab:crossover}). ``---'' where a mAP was not recorded.}
+\label{tab:opmatch-mnist}
+\begin{tabular}{llcc}
+\toprule
+Regime & Arm (role) & bit-F1 (mean $\pm$ std) & mAP \\
+\midrule
+Partition     & partition-placement (matched, ours)  & $\mathbf{0.8763 \pm 0.0105}$ & $0.9499$ \\
+              & overlay / max-union (mismatched)      & $0.6382 \pm 0.0359$          & $0.8773$ \\
+              & single-only (floor)                   & $0.2833$                     & --- \\
+              & oracle (upper reference)              & $0.8800$                     & --- \\
+\midrule
+Superposition & overlay / max-union (matched)         & $\mathbf{0.6961 \pm 0.0250}$ & $0.8166$ \\
+              & partition-placement (mismatched)      & $0.4000 \pm 0.0078$          & $0.7048$ \\
+              & single-only (floor)                   & $0.2354$                     & --- \\
+              & oracle (upper reference)              & $0.6969$                     & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Real multi-label benchmark: MixedWM38 (a superposition regime)}
 \textbf{On WM38 overlay is the matched, strong operator (we report it honestly and do
 not claim to beat it); among the content-blind operators FCM-PM gives the best
@@ -630,7 +708,11 @@ $19.00\%$, OOD-FAR $7.66\%$), whereas FCM-PM keeps every combination crisp
 $0.00\%$). This is the crossover the paper's law predicts, and the piece WM38-only
 evidence could not supply: a real, multi-label, matched head-to-head in which overlay's
 superposition assumption \emph{loses}, converting operator-match from an assertion into
-a verified law.
+a verified law. The same partition/superposition flip is reproduced in full on a
+controlled public MNIST benchmark (Sec.~\ref{sec:opmatch-mnist}), where the matched
+operator recovers the oracle in both directions, so the operator-match law is measured on
+\emph{both} the real chip partition domain and public data --- publicly verifiable and
+not reliant on internal data.
 
 \begin{table}[t]
 \centering
