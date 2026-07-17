@@ -99,7 +99,10 @@ real fab-chip data, on real public SVHN house numbers (a genuine partition law
 we did not define, where the matched operator recovers a non-collapsed real
 oracle within ${\sim}1\%$), on real remote-sensing land cover, and on a
 four-dataset controlled mechanism study that reproduces the flip in \emph{both}
-directions; throughout, the matched operator is the \emph{best} content-blind
+directions; this operator choice is moreover \emph{learnable end-to-end} --- from a
+neutral initialization a one-step hypergradient gate recovers the domain's matched
+operator in $4/4$ regimes with no domain label, \emph{matching} (not beating)
+hand-selection. Throughout, the matched operator is the \emph{best} content-blind
 choice, beating the mismatched operator, CutMix, and MixUp with no
 standard-deviation overlap, while on the public MixedWM38 wafer benchmark
 (a superposition regime) the matched summation/overlay operator is genuinely
@@ -292,6 +295,14 @@ Our contributions are:
   trichotomy (Cor.~\ref{cor:trichotomy}) that predicts full recovery, partial recovery up to
   the appearance floor, or outright failure, and calls the measured pattern across our
   domains (including the measured oracle-recovery, Cor.~\ref{cor:oraclerecover}).
+  \textbf{The operator choice is moreover learnable end-to-end (Sec.~\ref{sec:opmatch-learned}):}
+  a neutral-initialized one-step-hypergradient soft-gate over a convex overlay/partition blend
+  recovers the domain's matched operator in $4/4$ regimes with no domain label (learned
+  $g_{\text{grad}}{\approx}0$ on partition domains, ${\approx}1$ on superposition domains; a
+  held-out-bit-F1 profile peaks at the same endpoint), and it \emph{matches}, but does
+  \emph{not} beat, hand-selection (the optimum sits at a blend endpoint hand-selection already
+  picks) --- so operator-match is not only predictive but a learnable prediction, adding
+  algorithmic content while independently corroborating the criterion.
 \item \textbf{An annotation-free FAR guarantee (a practical reliability layer).} A strict
   source-only reliability pipeline --- synthetic normals, negative-target control, synthetic
   validation margin for checkpoint selection, class-conditional Gaussian (naive-Bayes)
@@ -699,6 +710,64 @@ KMNIST         & partition     & $\mathbf{0.6811 \pm 0.013}$ & $0.4727 \pm 0.045
 \midrule
 EMNIST-letters & partition     & $\mathbf{0.6146 \pm 0.011}$ & $0.3465 \pm 0.030$ & $0.5493 \pm 0.007$ & $0.5057 \pm 0.035$ & $0.3188$ & $0.6119$ \\
                & superposition & $\mathbf{0.4045 \pm 0.017}$ & $0.2284 \pm 0.013$ & $0.2464 \pm 0.016$ & $0.3086 \pm 0.027$ & $0.2039$ & $0.4027$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\subsection{The operator choice is learnable end-to-end}\label{sec:opmatch-learned}
+A fair objection to operator-match is that selecting between two \emph{known} operators is
+hand-selection, not an algorithm. We answer it directly: on the same MNIST/FashionMNIST
+constructed canvases and the same SmallCNN recipe, the operator choice is \emph{learnable
+end-to-end} from a small real multi-label signal, with \emph{no domain label}. We parameterize
+the two-tile combine as a learnable convex blend
+$x(g) = g\cdot\mathrm{overlay}(a,b) + (1{-}g)\cdot\mathrm{partition\_place}(a,b)$, $g\in[0,1]$,
+whose endpoints are exactly the two hand-selected primitives ($g{=}1$ the superposition/overlay
+join, $g{=}0$ the partition-complement placement). Two learners, \emph{neither told the domain},
+set $g$: (i) a gradient soft-gate $g=\sigma(\rho)$ \emph{initialized neutral} at $g{=}0.5$ and
+updated by a one-step hypergradient that lowers the classifier's loss on a small held-out
+\emph{real} multi-label batch; (ii) a profile that picks the $g$ maximizing real held-out
+bit-F1. Learning uses only a small real multi-label pool drawn from the \emph{train} split (no
+eval-instance leak); all comparison is on the test split, same recipe, three seeds
+(Table~\ref{tab:opmatch-learned}). From the neutral start the gradient gate converges to
+$g_{\text{grad}}{=}0.011$/$0.014$ on the MNIST/FashionMNIST \emph{partition} domains (recovering
+the $g{=}0$ partition primitive) and to $0.940$/$0.995$ on the \emph{superposition} domains
+(recovering the $g{=}1$ overlay primitive) --- the matched operator recovered in \emph{4/4}
+regimes without being told the domain --- and the profile's held-out bit-F1 landscape is monotone,
+peaking exactly at the matched endpoint every time. On test the learned gate matches
+hand-selection within noise everywhere ($0.9075$/$0.9019$ vs matched $0.9025$ on MNIST partition;
+$0.7401$/$0.7632$ vs $0.7669$ superposition; FashionMNIST $0.7160$/$0.7153$ vs $0.7153$ and
+$0.5979$/$0.5824$ vs $0.5862$) and far exceeds the mismatched operator ($+0.15$ to $+0.34$
+bit-F1). \textbf{We state the scope honestly: the learned gate \emph{matches}, and does not
+\emph{beat}, hand-selection} --- the optimum sits at a blend endpoint that hand-selection already
+picks --- so the contribution is not a performance gain but algorithmic content: the operator
+choice is a learnable synthesis gate whose one-step hypergradient recovers the domain's operator
+end-to-end from a small real signal, converting hand-selection into a learned prediction and
+independently corroborating the operator-match criterion. Runner:
+\texttt{multilabel\_synth/run\_operator\_match\_learned.py} (committed).
+
+\begin{table}[t]
+\centering
+\caption{The operator choice is \emph{learnable end-to-end}. A learnable convex blend
+$x(g)=g\cdot\mathrm{overlay}+(1{-}g)\cdot\mathrm{partition\_place}$ has the two hand-selected
+operators as its endpoints ($g{=}1$ overlay/superposition, $g{=}0$ partition-complement). From a
+\emph{neutral} $g{=}0.5$ start, a one-step-hypergradient soft-gate (learned $g_{\text{grad}}$)
+and a held-out-bit-F1 profile both recover the \emph{matched} operator in 4/4 regimes without
+being told the domain (learning on a small real multi-label pool from the train split, no eval
+leak). On the test split the learned gate \emph{matches} hand-selection within noise and far
+exceeds the mismatched operator, but does \emph{not} beat hand-selection (the optimum is an
+endpoint hand-selection already picks). Same SmallCNN recipe, 3 seeds; bit-F1 on the test split.}
+\label{tab:opmatch-learned}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccc}
+\toprule
+Dataset & Regime & learned $g_{\text{grad}}$ (matched $g$) & learned-grad & learned-profile & matched & mismatched \\
+\midrule
+MNIST        & partition     & $0.011$ ($g{=}0$) & $0.9075$ & $0.9019$ & $0.9025$ & $0.6431$ \\
+             & superposition & $0.940$ ($g{=}1$) & $0.7401$ & $0.7632$ & $0.7669$ & $0.4296$ \\
+\midrule
+FashionMNIST & partition     & $0.014$ ($g{=}0$) & $0.7160$ & $0.7153$ & $0.7153$ & $0.5543$ \\
+             & superposition & $0.995$ ($g{=}1$) & $0.5979$ & $0.5824$ & $0.5862$ & $0.3236$ \\
 \bottomrule
 \end{tabular}%
 }

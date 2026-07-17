@@ -87,7 +87,7 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 
 ## Abstract
 
-Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is an **operator-match law**: the content-blind synthesis operator that best preserves label fidelity is fixed, *before training*, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory that -- decomposing the excess-risk bound into a *geometry* term closed by operator-match and an *appearance* term equal to the co-occurrence dependence, which single-label marginals do not identify and no content-blind synthesizer can cross -- now *predicts* a recovery trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured outcome. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
+Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is an **operator-match law**: the content-blind synthesis operator that best preserves label fidelity is fixed, *before training*, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; this operator choice is moreover *learnable end-to-end* -- from a neutral initialization a one-step hypergradient gate recovers the domain's matched operator in 4/4 regimes with no domain label, *matching* (not beating) hand-selection. Throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory that -- decomposing the excess-risk bound into a *geometry* term closed by operator-match and an *appearance* term equal to the co-occurrence dependence, which single-label marginals do not identify and no content-blind synthesizer can cross -- now *predicts* a recovery trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured outcome. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
 
 ## 1 Introduction
 
@@ -244,7 +244,13 @@ Contributions:
    non-identifiable from single-label marginals hence irreducible under content-blindness --
    yielding a recovery trichotomy (full / partial-up-to-the-appearance-floor / fail) that
    predicts the measured pattern across our domains (a compact "when does recovery happen?"
-   subsection + Appendix A).
+   subsection + Appendix A). **The operator choice is moreover learnable end-to-end (Sec 5.1.1a):**
+   a neutral-initialized one-step-hypergradient soft-gate over a convex overlay/partition blend
+   recovers the domain's matched operator in 4/4 regimes with no domain label (learned g_grad ~0
+   on partition domains, ~1 on superposition domains; a held-out-bit_F1 profile peaks at the same
+   endpoint), and it *matches*, but does **not** beat, hand-selection (the optimum sits at a blend
+   endpoint hand-selection already picks) -- so operator-match is not only predictive but a
+   learnable prediction, adding algorithmic content while independently corroborating the criterion.
 2. **An annotation-free FAR guarantee (a practical reliability layer).** A strict source-only
    reliability pipeline -- synthetic normals, negative-target control, synthetic validation
    margin for checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern likelihood
@@ -630,6 +636,43 @@ directions), a real **public** partition benchmark (SVHN), and a real chip parti
 so the operator-match partition win is established on real, public, non-constructed data, not
 only on constructed canvases. Runner: `multilabel_synth/run_operator_match_baselines.py`
 (committed).
+
+#### 5.1.1a The operator choice is learnable end-to-end
+
+A fair objection to operator-match is that selecting between two **known** operators is
+hand-selection, not an algorithm. We answer it directly: on the same MNIST/FashionMNIST
+constructed canvases and the same SmallCNN recipe, the operator choice is **learnable
+end-to-end** from a small real multi-label signal, with **no domain label**. We parameterize the
+two-tile combine as a learnable convex blend `x(g) = g*overlay(a,b) + (1-g)*partition_place(a,b)`,
+g in [0,1], whose endpoints are exactly the two hand-selected primitives (g=1 the
+superposition/overlay join, g=0 the partition-complement placement). Two learners, **neither told
+the domain**, set g: (i) a gradient soft-gate g=sigmoid(rho) **initialized neutral** at g=0.5 and
+updated by a one-step hypergradient that lowers the classifier's loss on a small held-out **real**
+multi-label batch; (ii) a profile that picks the g maximizing real held-out bit_F1. Learning uses
+only a small real multi-label pool drawn from the **train** split (no eval-instance leak); all
+comparison is on the test split, same recipe, 3 seeds.
+
+| dataset      | regime        | learned g_grad (matched g) | learned-grad | learned-profile | matched | mismatched |
+|--------------|---------------|----------------------------|--------------|-----------------|---------|------------|
+| MNIST        | partition     | 0.011 (g=0)                | 0.9075       | 0.9019          | 0.9025  | 0.6431     |
+| MNIST        | superposition | 0.940 (g=1)                | 0.7401       | 0.7632          | 0.7669  | 0.4296     |
+| FashionMNIST | partition     | 0.014 (g=0)                | 0.7160       | 0.7153          | 0.7153  | 0.5543     |
+| FashionMNIST | superposition | 0.995 (g=1)                | 0.5979       | 0.5824          | 0.5862  | 0.3236     |
+
+From the neutral start the gradient gate converges to g_grad=0.011/0.014 on the MNIST/FashionMNIST
+**partition** domains (recovering the g=0 partition primitive) and to 0.940/0.995 on the
+**superposition** domains (recovering the g=1 overlay primitive) — the matched operator recovered
+in **4/4** regimes without being told the domain — and the profile's held-out bit_F1 landscape is
+monotone, peaking exactly at the matched endpoint every time. On test the learned gate matches
+hand-selection within noise everywhere (0.9075/0.9019 vs matched 0.9025 on MNIST partition;
+0.7401/0.7632 vs 0.7669 superposition; FashionMNIST 0.7160/0.7153 vs 0.7153 and 0.5979/0.5824 vs
+0.5862) and far exceeds the mismatched operator (+0.15 to +0.34 bit_F1). **We state the scope
+honestly: the learned gate *matches*, and does not *beat*, hand-selection** — the optimum sits at
+a blend endpoint that hand-selection already picks — so the contribution is not a performance gain
+but algorithmic content: the operator choice is a learnable synthesis gate whose one-step
+hypergradient recovers the domain's operator end-to-end from a small real signal, converting
+hand-selection into a learned prediction and independently corroborating the operator-match
+criterion. Runner: `multilabel_synth/run_operator_match_learned.py` (committed).
 
 #### 5.1.2 Real, public partition benchmark: SVHN house numbers
 
