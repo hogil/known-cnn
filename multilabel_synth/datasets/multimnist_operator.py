@@ -96,6 +96,68 @@ def build_multi(imgs, labels, n, seed, allowed_pairs, law,
     return X, np.stack(Y)
 
 
+def build_multi_baseline(imgs, labels, n, seed, allowed_pairs, mode,
+                         grid=2, cell=28, n_classes=10):
+    """Content-blind combo-synthesis baselines (no true-law knowledge).
+
+    Both baselines start from the SAME single sources as build_singles/build_multi:
+    each of the two source digits is first rendered on its own single-style canvas
+    (one digit in one random grid cell). They then combine those two single
+    canvases WITHOUT any knowledge of the domain's true combination law:
+
+      mode='cutmix': paste a random rectangular patch cropped from the second
+        single canvas onto the first (standard CutMix box, size ~sqrt(1-lam)).
+        The only spatial "knowledge" is a random rectangle -- no cell/partition
+        awareness. Multi-hot union label {a, b}.
+      mode='mixup' : alpha-blend the two single canvases by a 0.5/0.5 pixel
+        average. Multi-hot union label {a, b}.
+
+    Because neither matches a clean partition (disjoint cells) nor a clean
+    superposition (single-cell max-union), both should UNDER-perform the operator
+    matched to the domain's true law in either regime.
+    """
+    canvas = canvas_size(grid, cell)
+    rng = np.random.default_rng(seed)
+    by = _index_by_class(labels, n_classes)
+    n_cell = grid * grid
+    pairs = list(allowed_pairs)
+    X, Y = [], []
+    for _ in range(n):
+        a, b = pairs[int(rng.integers(0, len(pairs)))]
+        da = imgs[int(rng.choice(by[a]))].astype(np.float32)
+        db = imgs[int(rng.choice(by[b]))].astype(np.float32)
+        # render each source digit on its own single-style canvas (one random cell)
+        ca = np.zeros((canvas, canvas), dtype=np.float32)
+        cb = np.zeros((canvas, canvas), dtype=np.float32)
+        ka = int(rng.integers(0, n_cell))
+        y0, x0 = _cell_origin(ka, grid, cell)
+        ca[y0:y0 + cell, x0:x0 + cell] = da
+        kb = int(rng.integers(0, n_cell))
+        y0, x0 = _cell_origin(kb, grid, cell)
+        cb[y0:y0 + cell, x0:x0 + cell] = db
+        if mode == "cutmix":
+            img = ca.copy()
+            lam = float(rng.random())                 # ~U(0,1) -> Beta(1,1)
+            cut = int(round(canvas * np.sqrt(1.0 - lam)))
+            if cut > 0:
+                cx = int(rng.integers(0, canvas))
+                cy = int(rng.integers(0, canvas))
+                x1 = max(0, cx - cut // 2); x2 = min(canvas, cx + cut // 2)
+                y1 = max(0, cy - cut // 2); y2 = min(canvas, cy + cut // 2)
+                img[y1:y2, x1:x2] = cb[y1:y2, x1:x2]
+        elif mode == "mixup":
+            img = 0.5 * ca + 0.5 * cb                  # 0.5/0.5 pixel average
+        else:
+            raise ValueError("mode must be 'cutmix' or 'mixup'")
+        t = np.zeros(n_classes, dtype=np.float32)
+        t[a] = 1.0
+        t[b] = 1.0
+        X.append(img)
+        Y.append(t)
+    X = np.stack(X)[:, None, :, :].astype(np.float32) / 255.0
+    return X, np.stack(Y)
+
+
 def build_normal(n, grid=2, cell=28, n_classes=10):
     """All-negative (blank canvas) pool for a false-alarm-rate probe."""
     canvas = canvas_size(grid, cell)

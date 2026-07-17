@@ -28,13 +28,21 @@ import argparse
 import numpy as np
 
 from .datasets.multimnist import load_mnist, all_pairs
-from .datasets.multimnist_operator import build_singles, build_multi, build_normal
+from .datasets.multimnist_operator import (build_singles, build_multi,
+                                          build_multi_baseline, build_normal)
 from .train import train_model, evaluate
 from .metrics import bit_f1, far, compute_map, pos_neg_prob
 
 REGIMES = ["partition", "superposition"]
 ARMS = ["overlay", "partition", "single_only", "oracle"]
+# extended arm set adds two content-blind combo-synthesis baselines
+ARMS_BASELINE = ["overlay", "partition", "cutmix", "mixup", "single_only",
+                 "oracle"]
 MATCHED = {"partition": "partition", "superposition": "overlay"}
+# per regime, the mismatched operator arm (the other placement/overlay)
+MISMATCHED = {"partition": "overlay", "superposition": "partition"}
+# content-blind synthesis baselines the matched operator must dominate
+CONTENT_BLIND = {r: [MISMATCHED[r], "cutmix", "mixup"] for r in REGIMES}
 FIELDS = ["dataset", "regime", "arm", "matched", "seed", "bit_f1", "mAP", "far",
           "normal_far", "pos_prob", "neg_prob"]
 
@@ -58,6 +66,13 @@ def build_train_for_arm(arm, regime, tr_imgs, tr_labels, pairs,
                              grid=grid, cell=cell, n_classes=n_classes)
     if arm == "single_only":
         return spX, spY
+    if arm in ("cutmix", "mixup"):
+        # content-blind baselines: combine two single canvases with no true-law
+        # knowledge (random rectangle paste / 0.5-0.5 blend), union label.
+        cX, cY = build_multi_baseline(tr_imgs, tr_labels, n_train, seed, pairs,
+                                      arm, grid=grid, cell=cell,
+                                      n_classes=n_classes)
+        return np.concatenate([cX, spX]), np.concatenate([cY, spY])
     if arm == "overlay":
         law = "superposition"
     elif arm == "partition":
@@ -173,6 +188,40 @@ def flip_holds(rows, dataset=None):
                                no_overlap=no_overlap,
                                recovers_oracle=recovers_oracle, win=win)
     return flip_ok, details
+
+
+def dominance_holds(rows, dataset=None, tol=0.02):
+    """Stronger verdict: in BOTH regimes the matched operator beats EVERY
+    content-blind synthesis baseline (mismatched placement/overlay, cutmix,
+    mixup) with no mean+/-std overlap, AND recovers the oracle.
+
+    Returns (dom_ok, details) where details[regime] carries per-baseline margins
+    and a list of any baselines that tied/beat the matched operator.
+    """
+    details = {}
+    dom_ok = True
+    for regime in REGIMES:
+        matched = MATCHED[regime]
+        bm, bmstd = _agg(rows, regime, matched, "bit_f1", dataset)
+        boc, _ = _agg(rows, regime, "oracle", "bit_f1", dataset)
+        recovers_oracle = bm >= (boc - tol)
+        beaten_by = []          # baselines that tie/beat matched (bounds claim)
+        overlaps = []           # baselines whose std band overlaps matched
+        per_base = {}
+        for base in CONTENT_BLIND[regime]:
+            bb, bbstd = _agg(rows, regime, base, "bit_f1", dataset)
+            clean_win = (bm - bmstd) > (bb + bbstd)
+            per_base[base] = dict(mean=bb, std=bbstd, clean_win=clean_win)
+            if bb >= bm:
+                beaten_by.append((base, bb, bbstd))
+            if not clean_win:
+                overlaps.append(base)
+        win = (len(beaten_by) == 0) and (len(overlaps) == 0) and recovers_oracle
+        dom_ok = dom_ok and win
+        details[regime] = dict(matched=matched, bm=bm, bmstd=bmstd, oracle=boc,
+                               recovers_oracle=recovers_oracle, per_base=per_base,
+                               beaten_by=beaten_by, overlaps=overlaps, win=win)
+    return dom_ok, details
 
 
 def print_verdict(rows, dataset=None):
