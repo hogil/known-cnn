@@ -54,15 +54,18 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 > excluding overlay", "density-shift is moot".
 >
 > The paper is an **annotation-free, reliability-guaranteed, cross-domain FRAMEWORK**
-> whose contribution order (broad-venue repositioning; theory DEMOTED 2026-07-17 -- no
-> longer a numbered contribution, now a supporting informal subsection + Appendix A) is:
+> whose contribution order (broad-venue repositioning; theory DEMOTED 2026-07-17 as a
+> numbered contribution but UPGRADED 2026-07-17 from support to PREDICTIVE: a compact
+> "when does recovery happen?" subsection + Appendix A) is:
 > (i) the **operator-match
 > LAW** as a general principle, with a predictive before-training criterion (evidence
 > survival) and a falsifiable flip MEASURED in both directions on public MNIST and by
 > the real chip head-to-head (right operator per domain's combination law; FCM-PM wins
-> on partition domains; operator-match is the risk-minimizing content-blind choice, tied
-> to the measured oracle-recovery -- excess-risk theory folded in as support, not a
-> headline); (ii) an **annotation-free, distribution-free split-conformal
+> on partition domains; the excess-risk theory now *predicts* a recovery trichotomy --
+> the bound's conditional term splits into a geometry term closed by operator-match and an
+> appearance term = the co-occurrence dependence, non-identifiable from single-label
+> marginals hence an irreducible floor -- calling full / partial-with-floor / fail before
+> measuring); (ii) an **annotation-free, distribution-free split-conformal
 > FAR guarantee** (operator-agnostic; a practical transferable reliability layer, NOT a
 > differentiator -- it holds for any operator and overlay in fact gets the highest
 > coverage; operator-only prior work, incl. Shin22, provides none); (iii) the
@@ -84,7 +87,7 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 
 ## Abstract
 
-Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is an **operator-match law**: the content-blind synthesis operator that best preserves label fidelity is fixed, *before training*, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory identifying operator-match as the risk-minimizing content-blind choice. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
+Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is an **operator-match law**: the content-blind synthesis operator that best preserves label fidelity is fixed, *before training*, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory that -- decomposing the excess-risk bound into a *geometry* term closed by operator-match and an *appearance* term equal to the co-occurrence dependence, which single-label marginals do not identify and no content-blind synthesizer can cross -- now *predicts* a recovery trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured outcome. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
 
 ## 1 Introduction
 
@@ -236,10 +239,12 @@ Contributions:
    *full-recovery* generality. On WM38 -- a superposition
    regime under the binary encoding -- overlay is instead the matched operator and is honestly
    strong (0.80/0.010); we do *not* claim to beat it there. A short excess-risk argument
-   (Sec Theory) formalizes *why*: among content-blind operators the one matching the domain's
-   combination law minimizes the excess-risk bound, so *operator-match is the risk-minimizing
-   content-blind choice*, tied to the measured oracle-recovery -- the theory supports, rather
-   than headlines, the result (a compact informal subsection + Appendix A).
+   (Sec Theory) makes this *predictive*: it decomposes the bound into a *geometry* term closed
+   by operator-match and an *appearance* term equal to the co-occurrence dependence --
+   non-identifiable from single-label marginals hence irreducible under content-blindness --
+   yielding a recovery trichotomy (full / partial-up-to-the-appearance-floor / fail) that
+   predicts the measured pattern across our domains (a compact "when does recovery happen?"
+   subsection + Appendix A).
 2. **An annotation-free FAR guarantee (a practical reliability layer).** A strict source-only
    reliability pipeline -- synthetic normals, negative-target control, synthetic validation
    margin for checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern likelihood
@@ -335,7 +340,10 @@ Contributions:
   within it; (b) the operator-match law, measured by the chip head-to-head; (c) the
   FCM-PM method (with val-margin selection and NB-reject), the winner on the chip
   partition domain and the best FAR-controlled content-blind operator on WM38; (d) the
-  excess-risk theory that explains *when* blind synthesis can match the oracle; and (e)
+  excess-risk theory that now *predicts* a recovery trichotomy (geometry closes under
+  operator-match; the appearance term = the co-occurrence dependence is a non-identifiable,
+  irreducible floor) calling *when* blind synthesis recovers the oracle fully, partially, or
+  not at all; and (e)
   an annotation-free, distribution-free FAR-control layer (synthetic normals +
   val-margin selection + NB-reject + split-conformal guarantee) that Shin et al. and the
   other operator-only methods above do not provide. Density is a modeling
@@ -1221,9 +1229,10 @@ superposition regime, so its matched operator (overlay) is expected to win there
 does not contradict FCM-PM winning where the true law is a partition — as the chip
 head-to-head measures (Sec 5.2.1). Density-faithfulness is a modeling property tied to
 the combination law, not a stand-alone performance lever. The excess-risk TV bound
-(Sec Theory) is retained as a general, one-directional guarantee — it explains when
-synthesis can match the oracle — and we do not use its density-mismatch lower bound to
-prefer any operator. The surviving contributions are the single→multi setting and
+(Sec Theory) is one-directional and we do not use its density-mismatch lower bound to
+prefer any operator; its geometry/appearance decomposition instead quarantines this density
+gap to the support term, where it *predicts* nothing about recovery (the recovery trichotomy
+is governed by the appearance term, ~0 for WM38 at pair level). The surviving contributions are the single→multi setting and
 objective, the operator-match law measured by the chip head-to-head, the FCM-PM method
 with its FAR levers, the annotation-free conformal FAR guarantee, the theory, and
 cross-domain framework support.

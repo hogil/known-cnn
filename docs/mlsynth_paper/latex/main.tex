@@ -36,8 +36,9 @@
 % matched operator (overlay) is expected to win there; FCM-PM wins where the law is a
 % partition (chip). Upper reference (multi-label-trained, a genuine supervision
 % distinction): the oracle = multi-label TRAINING (0.974). Contribution order
-% (broad-venue repositioning; theory DEMOTED 2026-07-17 -- no longer a numbered
-% contribution, now a supporting informal subsection + Appendix A): (i) the operator-match
+% (broad-venue repositioning; theory DEMOTED 2026-07-17 as a numbered contribution, but
+% UPGRADED 2026-07-17 from support to PREDICTIVE: a compact "when does recovery happen?"
+% subsection + Appendix A): (i) the operator-match
 % LAW as a general principle (predictive before-training evidence-survival criterion;
 % falsifiable flip verified on public MNIST both directions + real chip head-to-head; right
 % operator per domain's combination law; FCM-PM wins on partition domains; operator-match is
@@ -47,9 +48,17 @@
 % overlay in fact gets highest coverage; Shin22 provides none); (iii) the single->multi
 % setting + performance-maximization objective (oracle upper reference); (iv) method =
 % FCM-PM + val-margin + nb-reject (instantiation for partition/chip domains); (v) cross-domain
-% framework support (MNIST/audio/text) + VOC location boundary. The excess-risk theory
-% (matched operator minimizes TV, hence the 2B*TV bound; oracle-level risk up to residual TV)
-% is retained as support only (Sec. "Why matched synthesis works (informal)" + Appendix A).
+% framework support (MNIST/audio/text) + VOC location boundary. The excess-risk theory now
+% PREDICTS a recovery trichotomy: the 2B*TV bound's conditional term splits (Thm decomp) into
+% a GEOMETRY term G (=0 under operator-match) and an APPEARANCE term A_raw = TV(Q_S,P_S) = the
+% co-occurrence appearance dependence, which is NON-IDENTIFIABLE from single-label marginals
+% (Lemma floor) and hence an irreducible floor under content-blindness. Trichotomy (Cor):
+% op-matchable + appearance-preserving -> full recovery (can beat oracle); op-matchable +
+% appearance-interacting -> partial, floored ~2B*E[A]; non-op-matchable (occlusion) -> fail.
+% Risk-floor step is a labeled CONJECTURE (needs a margin lemma), NOT a theorem. This predicts
+% every measured outcome (MNIST +0.198 beat, SVHN/chip/WM38-pair full, land-cover ~0.10 mAP
+% floor, VOC fail) and quarantines the vacuous cor:density (TV>=0.86) into the support term.
+% Sec. "When does recovery happen? A geometry/appearance decomposition" + Appendix A.
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{booktabs}
@@ -60,7 +69,9 @@
 \newtheorem{definition}{Definition}
 \newtheorem{proposition}{Proposition}
 \newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
 \newtheorem{corollary}{Corollary}
+\newtheorem{conjecture}{Conjecture}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
 \title{Multi-Label Recognition Without Multi-Label Annotation:\\
@@ -94,8 +105,12 @@ standard-deviation overlap, while on the public MixedWM38 wafer benchmark
 (a superposition regime) the matched summation/overlay operator is genuinely
 strong and we do \emph{not} claim to beat it. We further contribute an
 \textbf{annotation-free, distribution-free split-conformal false-alarm-rate
-guarantee} that holds for \emph{any} operator, and a theory identifying
-operator-match as the risk-minimizing content-blind choice. Blind synthesis even
+guarantee} that holds for \emph{any} operator, and a theory that---decomposing the
+excess-risk bound into a \emph{geometry} term closed by operator-match and an
+\emph{appearance} term equal to the co-occurrence dependence, which single-label
+marginals do not identify and no content-blind synthesizer can cross---now
+\emph{predicts} a recovery trichotomy (full / partial-up-to-an-appearance-floor /
+fail) matching every measured outcome. Blind synthesis even
 \emph{exceeds} a fully-supervised oracle on held-out MultiMNIST combinations
 ($+0.198$ mAP); the same criterion predicts the counterintuitive Reuters text
 averaging-flip and the FSD50K audio summation ranking; and natural images (VOC)
@@ -270,10 +285,13 @@ Our contributions are:
   \emph{ordering}-generality without extending \emph{full-recovery} generality. On WM38 --- a superposition regime under the binary encoding
   --- overlay is instead the matched operator and is honestly strong ($0.80$/$0.010$); we
   do \emph{not} claim to beat it there. A short excess-risk argument
-  (Sec.~\ref{sec:theory}) formalizes \emph{why}: among content-blind operators the one
-  matching the domain's combination law minimizes the excess-risk bound, so
-  \emph{operator-match is the risk-minimizing content-blind choice}, tied to the measured
-  oracle-recovery (Cor.~\ref{cor:oraclerecover}).
+  (Sec.~\ref{sec:theory}) makes this \emph{predictive}: it decomposes the bound into a
+  \emph{geometry} term closed by operator-match and an \emph{appearance} term equal to the
+  co-occurrence dependence---non-identifiable from single-label marginals and hence
+  irreducible under content-blindness (Lemma~\ref{lem:floor})---yielding a recovery
+  trichotomy (Cor.~\ref{cor:trichotomy}) that predicts full recovery, partial recovery up to
+  the appearance floor, or outright failure, and calls the measured pattern across our
+  domains (including the measured oracle-recovery, Cor.~\ref{cor:oraclerecover}).
 \item \textbf{An annotation-free FAR guarantee (a practical reliability layer).} A strict
   source-only reliability pipeline --- synthetic normals, negative-target control, synthetic
   validation margin for checkpoint selection, class-conditional Gaussian (naive-Bayes)
@@ -1320,20 +1338,28 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \end{tabular}
 \end{table}
 
-\subsection{Why matched synthesis works (informal)}\label{sec:theory}
+\subsection{When does recovery happen? A geometry/appearance decomposition}\label{sec:theory}
 
-The theory \emph{supports} the empirical results rather than driving them, so we keep only
-a brief, informal excess-risk argument here --- for \emph{why} matching the domain's
-combination law helps and \emph{when} blind synthesis reaches oracle-level performance ---
-and defer the operator-match minimality corollary, the density-gap looseness illustration,
-the finite-sample bound, and the conformal-control statement to Appendix~\ref{app:theory}.
-The bound below is a \emph{general, one-directional} upper bound: it upper-bounds risk by
-$2B$ times a total-variation distance, so a \emph{larger} TV only weakens the \emph{upper}
-guarantee and never certifies larger risk --- it therefore does \emph{no}
-operator-\emph{preference} work on WM38, where the matched, over-dense max-union attains the
-best risk. What it does establish is the sense in which matching the domain's combination
-law is the risk-minimizing content-blind choice, borne out by the measured MNIST
-oracle-recovery (Cor.~\ref{cor:oraclerecover}).
+The theory here does \emph{predictive} work: from two structural properties of a domain,
+fixed \emph{before any training}, it calls whether content-blind synthesis recovers the
+oracle fully, recovers it partially up to a floor, or fails. The mechanism is an
+operator-explicit decomposition of the excess-risk bound (Thm~\ref{thm:excess}) into a
+\emph{geometry} term that vanishes when the synthesizer matches the domain's combination law
+and an \emph{appearance} term equal to the co-occurrence appearance \emph{dependence} of the
+sources --- a joint statistic that single-label marginals do not identify and that no
+content-blind synthesizer can cross (Lemma~\ref{lem:floor}). The resulting trichotomy
+(Cor.~\ref{cor:trichotomy}) predicts, rather than merely fits, the measured pattern across
+our domains. We are explicit about depth: the decomposition is \emph{elementary} --- one
+triangle inequality and one data-processing inequality on top of Thm~\ref{thm:excess} --- and
+its value is predictive and organizing, not technical. The bound stays
+\emph{one-directional}: a larger geometry or appearance term only weakens the \emph{upper}
+guarantee and never certifies larger risk, so it does \emph{no} operator-\emph{preference}
+work, and the vacuous density gap of Cor.~\ref{cor:density} ($\mathrm{TV}\ge0.86$ on WM38) is
+\emph{quarantined} to the support/frequency term, where it never touches recovery. The
+operator-match minimality (Cor.~\ref{cor:opmatch}), matched-law risk equivalence
+(Cor.~\ref{cor:noadv}), the density-gap looseness illustration (Cor.~\ref{cor:density}), the
+zero-shift boundary (Cor.~\ref{cor:boundary}), Lemma~\ref{lem:floor}'s proof, and the
+finite-sample and conformal results are collected in Appendix~\ref{app:theory}.
 
 \begin{definition}[Blind-combination domain]\label{def:blindcomb}
 A domain is a blind-combination domain if the observation of co-occurring
@@ -1353,7 +1379,8 @@ superposition-structured, so summation ($=$ max-union) is the matched join in ea
 is strong (Sec.~\ref{sec:experiments}); the chip domain is partition-structured, so the
 matched operator is FCM-PM, which beats overlay in a measured head-to-head
 (Sec.~\ref{sec:crossover}). Natural RGB scenes are not blind-combination domains ---
-opaque objects occlude.
+opaque objects occlude, so no content-blind $\oplus$ reproduces the observation
+(operator-\emph{non}-matchable).
 \end{definition}
 
 \begin{theorem}[Excess risk of blind synthesis]\label{thm:excess}
@@ -1367,7 +1394,7 @@ respectively, over the same $\mathcal F$,
 \[
 R_{\mathrm{real}}(f_{\mathrm{syn}}) - R_{\mathrm{real}}(f^\star)
 \;\le\; 2B\!\left(\underbrace{\mathrm{TV}(\pi_{\mathrm{real}},\pi_{\mathrm{syn}})}_{\text{support}}
-+\; \mathbb{E}_{S\sim\pi_{\mathrm{syn}}}\!\underbrace{\mathrm{TV}\!\big(K_{\mathrm{real}}(\cdot|S),K_{\mathrm{syn}}(\cdot|S)\big)}_{\text{independence}}\right).
++\; \mathbb{E}_{S\sim\pi_{\mathrm{syn}}}\!\underbrace{\mathrm{TV}\!\big(K_{\mathrm{real}}(\cdot|S),K_{\mathrm{syn}}(\cdot|S)\big)}_{\text{conditional}}\right).
 \]
 \end{theorem}
 \begin{proof}
@@ -1381,26 +1408,126 @@ The mixture chain rule $\mathrm{TV}(\pi\!\cdot\!K,\pi'\!\cdot\!K')\le
 \mathrm{TV}(\pi,\pi')+\mathbb{E}_{S\sim\pi'}\mathrm{TV}(K,K')$ finishes.
 \end{proof}
 
-\emph{Operator-match minimizes this bound.} Theorem~\ref{thm:excess} holds for
-\emph{every} content-blind operator, and its certificate depends on the operator only
-through $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$; in a blind-combination
-domain (Def.~\ref{def:blindcomb}) the operator matching the true combination law sets
-$K_{\mathrm{syn}}=K_{\mathrm{real}}$, driving the conditional term to its residual, so
-among content-blind operators \emph{operator-match is the risk-minimizing choice} and
-matched synthesis attains oracle-level risk up to the residual TV. The full statement
-(Cor.~\ref{cor:opmatch}), the matched-law risk equivalence (Cor.~\ref{cor:noadv}), the
-one-directional density-gap looseness illustration (Cor.~\ref{cor:density}), and the
-finite-sample and conformal results are collected in Appendix~\ref{app:theory}; the bound
-does no operator-preference work, and the measured operator selections (including the chip
-head-to-head, Sec.~\ref{sec:crossover}) are one criterion on different
-$D_{\mathrm{real}}$, not a per-domain rule.
+The conditional term is where recovery is decided. Thm~\ref{thm:decomp} splits it, for any
+content-blind operator, into a geometry piece an operator can close and an appearance piece
+it cannot.
+
+\begin{theorem}[Geometry/appearance decomposition of the bound]\label{thm:decomp}
+Fix a subset $S$. Let $P_S=\prod_{c\in S}P_{\mathrm{solo}}(\cdot|c)$ be the product of the
+single-label (solo) source laws, let $Q_S$ be their \emph{joint} law given co-occurrence
+(with the same marginals $P_{\mathrm{solo}}$), and let $\oplus$ be the domain's true
+combination operator, so $K_{\mathrm{real}}(\cdot|S)=\oplus_{\#}Q_S$ (Def.~\ref{def:blindcomb}).
+A content-blind operator $T$ draws sources independently and yields
+$K_{\mathrm{syn}}(\cdot|S)=T_{\#}P_S$. Then
+\[
+\mathrm{TV}\!\big(K_{\mathrm{real}}(\cdot|S),K_{\mathrm{syn}}(\cdot|S)\big)
+\;\le\;
+\underbrace{\mathrm{TV}(Q_S,P_S)}_{A_{\mathrm{raw}}(S)\ \text{(appearance)}}
+\;+\;
+\underbrace{\mathrm{TV}(\oplus_{\#}P_S,\,T_{\#}P_S)}_{G(S,T)\ \text{(geometry)}},
+\]
+and hence
+\[
+R_{\mathrm{real}}(f_{\mathrm{syn}})-R_{\mathrm{real}}(f^\star)
+\;\le\; 2B\Big(\mathrm{TV}(\pi_{\mathrm{real}},\pi_{\mathrm{syn}})
++\mathbb{E}_{S\sim\pi_{\mathrm{syn}}}\big[\,G(S,T)+A_{\mathrm{raw}}(S)\,\big]\Big).
+\]
+Under \emph{operator-match} ($T=\oplus$, available iff the domain is operator-matchable)
+$G(S,\oplus)=0$ for every $S$, leaving the appearance term $\mathbb{E}_S[A_{\mathrm{raw}}(S)]$
+as the only conditional residual.
+\end{theorem}
+\begin{proof}
+Insert the pivot $\oplus_{\#}P_S$ and apply the triangle inequality:
+$\mathrm{TV}(\oplus_{\#}Q_S,T_{\#}P_S)\le
+\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)+\mathrm{TV}(\oplus_{\#}P_S,T_{\#}P_S)$.
+The first summand is $\le\mathrm{TV}(Q_S,P_S)=A_{\mathrm{raw}}(S)$ by the data-processing
+inequality for TV (the fixed Markov map $\oplus_{\#}$ applied to both arguments cannot
+increase TV); the second is $G(S,T)$ by definition. Substituting into the mixture chain rule
+of Thm~\ref{thm:excess} gives the display, and $T=\oplus$ makes $\oplus_{\#}P_S=T_{\#}P_S$, so
+$G(S,\oplus)=0$.
+\end{proof}
+
+The geometry term $G$ closes under operator-match; the appearance term is a floor, and the
+reason it is irreducible --- not merely hard --- is an identifiability fact.
+
+\begin{lemma}[Appearance floor and non-identifiability]\label{lem:floor}
+Let $\mathcal C(S)$ be the set of conditionals a content-blind synthesizer can produce for
+subset $S$ --- the closure of laws constructible from the solo marginals
+$\{P_{\mathrm{solo}}(\cdot|c)\}_{c\in S}$ alone, using no joint sample of $S$ --- and let
+$A(S):=\inf_{D\in\mathcal C(S)}\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),D)$.
+\emph{(a) Floor.} Every content-blind $T$ has $T_{\#}P_S\in\mathcal C(S)$, so
+$\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),K_{\mathrm{syn}}(\cdot|S))\ge A(S)$; once the prior is
+matched, the bound of Thm~\ref{thm:decomp} cannot be driven below $2B\,\mathbb{E}_S[A(S)]$ by
+any content-blind operator.
+\emph{(b) Zero iff appearance-preserving.} Under operator-match $A(S)\le A_{\mathrm{raw}}(S)=\mathrm{TV}(Q_S,P_S)$,
+so conditionally independent sources ($Q_S=P_S$) give $A(S)=0$; if $\oplus$ does not collapse
+the difference on the relevant support, the converse holds and $A(S)=0$ iff appearance-preserving.
+\emph{(c) Non-identifiability.} Every element of $\mathcal C(S)$ is a functional of the solo
+\emph{marginals} only, whereas $A_{\mathrm{raw}}(S)$ is a property of the \emph{joint} $Q_S$:
+two joints with identical marginals differ exactly in their dependence (copula). Hence whenever
+the co-occurrence dependence of $Q_S$ is not marginal-determined,
+$K_{\mathrm{real}}(\cdot|S)\notin\mathcal C(S)$ and $A(S)>0$ for \emph{every} content-blind
+synthesizer. The appearance residual is thus irreducible by \emph{identifiability}, not by
+optimization difficulty. (Proof in Appendix~\ref{app:theory}.)
+\end{lemma}
+
+\begin{corollary}[Recovery trichotomy]\label{cor:trichotomy}
+Assume the synthesizer matches the evaluated co-occurrence support ($\mathrm{TV}(\pi_{\mathrm{real}},\pi_{\mathrm{syn}})=0$
+on the evaluated subsets, achievable content-blind by generating the eval's subsets from
+singles). Two before-training properties then fix the regime.
+\emph{(I) Operator-matchable and appearance-preserving} ($A_{\mathrm{raw}}(S)=0$ on all
+evaluated $S$): the matched operator gives $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})=0$
+and $R_{\mathrm{real}}(f_{\mathrm{syn}})=R_{\mathrm{real}}(f^\star)$ --- \emph{full} oracle
+recovery; where $\pi_{\mathrm{syn}}$ covers subsets the oracle's own training prior missed,
+synthesis can \emph{exceed} the oracle on those subsets.
+\emph{(II) Operator-matchable but appearance-interacting} ($A_{\mathrm{raw}}(S)>0$ on a
+positive-mass set): geometry and support close, but the bound is floored at
+$2B\,\mathbb{E}_S[A(S)]>0$ (Lemma~\ref{lem:floor}a) --- \emph{partial} recovery; matching real
+geometry lowers $G$ but leaves $\mathbb{E}_S[A(S)]$ untouched, so the residual after
+geometry-matching estimates the appearance floor.
+\emph{(III) Not operator-matchable} ($\oplus$ not in the content-blind class, e.g.\ opaque
+occlusion): $G(S,T)$ is bounded away from $0$ for every content-blind $T$, and content-blind
+synthesis need not even beat the single-only floor; closing the gap requires location/mask
+supervision, outside the class.
+The regime is fixed by \emph{whether $\oplus$ is in the class} and \emph{whether $Q_S$ is a
+product} --- neither read off the recovery number it predicts.
+\end{corollary}
+
+\emph{Predictive verdict.} The trichotomy calls every measured outcome. Regime (I) predicts the
+full recoveries: MultiMNIST overlay beats the oracle on held-out pairs ($+0.198$ mAP), the
+four-dataset flip recovers the oracle in both directions ($4/4$), SVHN ($\sim99\%$ of a real
+multi-digit oracle), chip ($\sim0.998$ bit-F1), WM38 at pair level, and FSD50K audio
+summation. Regime (II) predicts partial recovery with a floor: land cover, where matching real
+region geometry closes only ${\sim}25\%$ of the mAP gap ($0.7973\to0.8323$) and a ${\sim}0.10$
+mAP appearance residual persists to the oracle ($0.9371$), and WM38 high-order mixes, where the
+exact-match residual grows with order. Regime (III) predicts VOC failure (content-blind cutmix
+$0.226$, mixup $0.194$, both below the single-only floor $0.242$; only content-aware copy-paste
+$0.350$ clears it). The two \emph{direct} tests --- land cover's realistic-geometry arm and
+WM38's order-extrapolation --- are the strongest evidence that the appearance term is a real
+floor: in both, geometry/support was explicitly closed and the residual persisted, exactly as
+Lemma~\ref{lem:floor} predicts for a co-occurrence dependence no content-blind manipulation can
+reach.
+
+The floor of Lemma~\ref{lem:floor} is a floor on the \emph{bound}; whether it forces a positive
+\emph{risk} floor needs one further step, which we state honestly as a conjecture, not a theorem.
+
+\begin{conjecture}[Appearance-limited risk floor]\label{conj:riskfloor}
+If the co-occurrence appearance dependence is \emph{label-informative} --- on a positive-mass
+region the Bayes-optimal multi-label decision under $K_{\mathrm{real}}$ differs from that under
+every $D\in\mathcal C(S)$ --- then $\mathbb{E}_S[A(S)]>0$ induces a strictly positive
+excess-\emph{risk} floor $c\,\mathbb{E}_S[A(S)]$ for a domain/loss-dependent $c>0$, for every
+content-blind synthesizer. A proof requires a discriminability/margin lemma linking the TV
+projection residual to a Bayes-risk gap on a positive-mass region, which we do not supply; the
+two direct tests above are its empirical support.
+\end{conjecture}
 
 \begin{corollary}[Measured oracle-recovery]\label{cor:oraclerecover}
 The controlled multi-dataset experiment (Sec.~\ref{sec:opmatch-mnist}) instantiates
-Cor.~\ref{cor:noadv}: in each combination regime, on all four public datasets, the matched
-blind operator recovers the true-law oracle within noise (e.g.\ MNIST partition $0.9014$ vs
-oracle $0.9072$; superposition $0.7650$ vs oracle $0.7650$), the empirically small residual
-TV expected when synthesis reproduces the domain's combination law.
+regime~(I) of Cor.~\ref{cor:trichotomy} (equivalently Cor.~\ref{cor:noadv}): in each combination
+regime, on all four public datasets, the matched blind operator recovers the true-law oracle
+within noise (e.g.\ MNIST partition $0.9014$ vs oracle $0.9072$; superposition $0.7650$ vs
+oracle $0.7650$), the empirically small residual expected when $\oplus$ is matched and the
+combination is appearance-preserving ($A_{\mathrm{raw}}\approx0$).
 \end{corollary}
 
 \section{Discussion and Limitations}\label{sec:discussion}
@@ -1433,9 +1560,10 @@ matched operator (overlay) is expected to win there, which does not contradict F
 winning where the true law is a partition --- as the chip head-to-head measures
 (Sec.~\ref{sec:crossover}). Density-faithfulness is a modeling property tied to the
 combination law, not a stand-alone performance lever. The excess-risk TV bound
-(Sec.~\ref{sec:theory}) is retained as a general, one-directional guarantee --- it
-explains \emph{when} synthesis can match the oracle --- and we do not use its
-density-mismatch lower bound to prefer any operator. The surviving contributions are
+(Sec.~\ref{sec:theory}) is one-directional and we do not use its density-mismatch lower
+bound to prefer any operator; its geometry/appearance decomposition instead quarantines this
+density gap to the support term, where it \emph{predicts} nothing about recovery
+(Cor.~\ref{cor:density}, Cor.~\ref{cor:trichotomy}). The surviving contributions are
 the single$\to$multi setting and objective, the operator-match law measured by the chip
 head-to-head, the FCM-PM method with its FAR levers, the annotation-free conformal FAR
 guarantee, the theory,
@@ -1567,12 +1695,44 @@ high-order interactions --- a boundary we quantify and leave open.
 \appendix
 \section{Additional theory and reliability statements}\label{app:theory}
 
-This appendix collects the formal statements that support the informal argument of
-Sec.~\ref{sec:theory}: the consistency/order-closure proposition, the operator-match
-minimality corollary, the density-gap looseness illustration, the matched-law risk
-equivalence, the zero-shift boundary, the finite-sample bound, and the label-fidelity and
-conformal-control statements. None of them is load-bearing for the empirical results; they
-formalize \emph{why} matched synthesis works and \emph{when} it reaches oracle-level risk.
+This appendix collects the formal statements behind the recovery decomposition of
+Sec.~\ref{sec:theory}: the proof of the appearance-floor non-identifiability lemma
+(Lemma~\ref{lem:floor}), the consistency/order-closure proposition, the operator-match
+minimality corollary, the density-gap looseness illustration and its quarantine to the
+support term, the matched-law risk equivalence, the zero-shift boundary, the finite-sample
+bound, and the label-fidelity and conformal-control statements. None of them is load-bearing
+for the empirical results; they formalize \emph{why} matched synthesis works and \emph{when}
+it recovers the oracle.
+
+\begin{proof}[Proof of Lemma~\ref{lem:floor}]
+\emph{(a)} $A(S)$ is an infimum over $\mathcal C(S)$, and every content-blind conditional
+$T_{\#}P_S$ lies in $\mathcal C(S)$ by construction, so
+$\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),T_{\#}P_S)\ge A(S)$; taking expectations over the
+matched prior and multiplying by $2B$ gives the bound-floor.
+\emph{(b)} The inequality $A(S)\le A_{\mathrm{raw}}(S)$ is Thm~\ref{thm:decomp} with $T=\oplus$
+(the matched arm attains $\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),\oplus_{\#}P_S)\le A_{\mathrm{raw}}(S)$),
+so $Q_S=P_S\Rightarrow A(S)=0$. For the converse, if $\oplus_{\#}$ is injective-in-law on the
+relevant support (does not merge distinct inputs into the same pushforward), then a
+data-processing map cannot reduce a positive TV to zero unless its inputs already agree, so
+$A(S)=0\Rightarrow Q_S=P_S$.
+\emph{(c)} By construction $\mathcal C(S)$ is contained in the set of laws expressible as
+measurable functionals of the marginal family $\{P_{\mathrm{solo}}(\cdot|c)\}_{c\in S}$; the
+marginal map $Q_S\mapsto(\text{its marginals})$ forgets the copula, so for $|S|\ge2$ and a
+non-degenerate appearance space there exist joints with identical marginals but distinct
+dependence, at least one of which is at TV-distance $>0$ from every element of $\mathcal C(S)$.
+Hence a $K_{\mathrm{real}}(\cdot|S)$ built from a non-marginal-determined dependence satisfies
+$A(S)>0$ for every content-blind synthesizer.
+\end{proof}
+
+\emph{Remark (floor on the bound, not yet on the risk).} $A_{\mathrm{raw}}(S)$ upper-bounds the
+projection residual, $A(S)\le A_{\mathrm{raw}}(S)$, so we keep $A_{\mathrm{raw}}$ as the
+interpretable quantity (the co-occurrence appearance dependence) while the floor of
+Lemma~\ref{lem:floor}a uses the smaller $A(S)$. The floor is on the excess-risk \emph{bound}
+$2B\,\mathrm{TV}$, not on the excess risk itself: a positive TV need not imply positive excess
+risk (Cor.~\ref{cor:boundary}). Promoting it to a risk floor is Conjecture~\ref{conj:riskfloor},
+which needs a discriminability/margin lemma we do not prove; its empirical support is the two
+direct tests (land-cover realistic-geometry arm; WM38 order-extrapolation) where geometry and
+support were closed yet the residual persisted (Sec.~\ref{sec:theory}).
 
 \begin{proposition}[Consistency and order closure]
 In a blind-combination domain with independently placed sources, synthesis using
@@ -1646,6 +1806,14 @@ superposition signature, and max-union is WM38's matched operator. We therefore 
 this corollary only as a general illustration of the bound's looseness; operator choice
 is set by the domain's combination law, and on the chip partition domain the
 density-matching FCM-PM beats overlay head-to-head (Sec.~\ref{sec:crossover}).
+\emph{Quarantine.} Under the decomposition of Thm~\ref{thm:decomp} this defect-die
+\emph{frequency} gap lives entirely in the support/geometry term
+($\mathrm{TV}(\pi_{\mathrm{real}},\pi_{\mathrm{syn}})+\mathbb{E}_S G$): it is a one-directional
+over-density artifact of $\pi$, not the appearance term $A_{\mathrm{raw}}$, and therefore
+\emph{never enters the recovery characterization} of Cor.~\ref{cor:trichotomy}. WM38 recovery
+at the evaluated mix orders is governed by $A_{\mathrm{raw}}$ (${\approx}0$ at pair level, where
+overlay $=\oplus$ and $Q_S=P_S$; growing at higher orders), so the $\mathrm{TV}\ge0.86$ vacuity
+is contained to a bucket that does not bear on whether the matched operator recovers the oracle.
 \end{corollary}
 
 \begin{corollary}[Matched-law risk equivalence]\label{cor:noadv}
