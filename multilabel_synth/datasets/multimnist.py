@@ -22,6 +22,47 @@ def load_mnist(root="E:/data/torchvision", train=True):
     return imgs, labels
 
 
+def load_torchvision(name, root="E:/data/torchvision", train=True, split=None):
+    """Generalized 28x28-grayscale torchvision loader.
+
+    Returns (imgs [N,28,28] uint8, labels [N] int in [0,n_classes), n_classes).
+    The operator-match builders are dataset-agnostic: they only need
+    (image, class-label) pairs plus the class count, so any of these public
+    single-object 28x28 grayscale sources is a drop-in source domain.
+
+    Supported names: mnist, fashionmnist, kmnist, emnist (split= letters /
+    balanced / digits / ...). EMNIST is stored transposed relative to display
+    orientation and 'letters' labels are 1..26, both corrected here.
+    """
+    import torchvision.datasets as D
+    key = name.lower()
+    if key == "mnist":
+        ds = D.MNIST(root, train=train, download=True)
+        return ds.data.numpy().astype(np.uint8), ds.targets.numpy().astype(int), 10
+    if key == "fashionmnist":
+        ds = D.FashionMNIST(root, train=train, download=True)
+        return ds.data.numpy().astype(np.uint8), ds.targets.numpy().astype(int), 10
+    if key == "kmnist":
+        ds = D.KMNIST(root, train=train, download=True)
+        return ds.data.numpy().astype(np.uint8), ds.targets.numpy().astype(int), 10
+    if key == "emnist":
+        sp = split or "letters"
+        ds = D.EMNIST(root, split=sp, train=train, download=True)
+        imgs = np.transpose(ds.data.numpy().astype(np.uint8), (0, 2, 1))
+        labels = ds.targets.numpy().astype(int)
+        if sp == "letters":
+            labels = labels - 1          # 1..26 -> 0..25
+            n_classes = 26
+        elif sp == "balanced":
+            n_classes = 47
+        elif sp in ("digits", "mnist"):
+            n_classes = 10
+        else:
+            n_classes = int(labels.max()) + 1
+        return imgs, labels, n_classes
+    raise ValueError("unknown torchvision dataset: %r" % name)
+
+
 def _index_by_class(labels, n_classes=10):
     return {c: np.where(labels == c)[0] for c in range(n_classes)}
 
