@@ -169,3 +169,58 @@ def prepare_landcover(base, subset=None, cell=64, canvas=128, n_eval=400,
         print(f"[cache] saved {cache}", flush=True)
     return (pool_imgs, pool_labels, oracle_imgs, oracle_Y, eval_imgs, eval_Y,
             list(subset), meta)
+
+
+def harvest_mask_templates(base, subset=None, canvas=128, n_eval=400,
+                           min_frac=0.01, seed=0):
+    """Real DLRSD pixel-mask LAYOUT templates for realistic partition synthesis.
+
+    Returns a list of [canvas, canvas] int16 arrays whose values are the subset
+    class id (0..n_classes-1) at each pixel, or -1 for a non-subset land-cover
+    class.  Only tiles NOT in the held-out eval split donate templates (same
+    seed=0 permutation as prepare_landcover -> identical eval split, no leakage).
+
+    The template carries REAL region geometry + area statistics + class
+    co-occurrence; the synthesis fills each class-region with that class's own
+    single-source crop content (appearance stays synthetic -- so this isolates
+    whether the sim-to-real gap is geometric or appearance-fundamental).
+
+    A template is kept only if >= 2 subset classes each occupy >= min_frac of the
+    tile (a genuine multi-label layout).
+    """
+    if subset is None:
+        subset = list(DEFAULT_SUBSET)
+    sub_pixval = [CLASS_NAMES_17.index(c) + 1 for c in subset]
+    n_classes = len(subset)
+    min_area = int(min_frac * canvas * canvas)
+
+    df = pd.read_csv(os.path.join(base, "multilabels.csv"))
+    Msub = df[subset].values.astype(np.int64)
+    multi_mask = Msub.sum(1) >= 2
+    multi_names = df['image'].values[multi_mask]
+
+    # reproduce prepare_landcover's eval split exactly (fresh rng, first draw)
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(len(multi_names))
+    eval_names = set(multi_names[perm[:n_eval]])
+
+    templates = []
+    for name in multi_names:
+        if name in eval_names:
+            continue
+        f = _folder(name)
+        mask = np.asarray(Image.open(
+            os.path.join(base, "Labels", f, name + ".png")).resize(
+            (canvas, canvas), Image.NEAREST))
+        tmpl = np.full((canvas, canvas), -1, dtype=np.int16)
+        present = 0
+        for ci, pv in enumerate(sub_pixval):
+            region = (mask == pv)
+            if region.sum() >= min_area:
+                tmpl[region] = ci
+                present += 1
+        if present >= 2:
+            templates.append(tmpl)
+    print(f"[templates] {len(templates)} real multi-label mask layouts "
+          f"(canvas={canvas}, min_frac={min_frac})", flush=True)
+    return templates

@@ -35,7 +35,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 
-from .datasets.dlrsd import prepare_landcover, DEFAULT_SUBSET
+from .datasets.dlrsd import (prepare_landcover, harvest_mask_templates,
+                             DEFAULT_SUBSET)
 from .synthesis import landcover_ops as ops
 from .models.resnet import build_resnet18
 from .metrics import bit_f1, far, compute_map, pos_neg_prob
@@ -43,7 +44,8 @@ from .metrics import bit_f1, far, compute_map, pos_neg_prob
 IMEAN = np.array([0.485, 0.456, 0.406], np.float32).reshape(1, 3, 1, 1)
 ISTD = np.array([0.229, 0.224, 0.225], np.float32).reshape(1, 3, 1, 1)
 
-ARMS = ["single_only", "partition", "overlay", "cutmix", "mixup", "oracle"]
+ARMS = ["single_only", "partition", "partition_realistic", "overlay", "cutmix",
+        "mixup", "oracle"]
 MATCHED = "partition"
 CONTENT_BLIND = ["overlay", "cutmix", "mixup"]
 FIELDS = ["dataset", "arm", "matched", "backbone", "seed", "bit_f1", "mAP",
@@ -83,7 +85,8 @@ def _predict(model, X, bs, device):
 
 def build_train_for_arm(arm, pool_imgs, pool_labels, oracle_imgs, oracle_Y,
                         per_class_single, n_train, seed, cell, grid, n_classes,
-                        k_choices):
+                        k_choices, templates=None, feather_sigma=3.0,
+                        min_frac=0.01):
     spX, spY = ops.build_singles(pool_imgs, pool_labels, per_class_single, seed,
                                  cell, grid, n_classes)
     if arm == "single_only":
@@ -95,6 +98,14 @@ def build_train_for_arm(arm, pool_imgs, pool_labels, oracle_imgs, oracle_Y,
         cX, cY = ops.build_multi_baseline(pool_imgs, pool_labels, n_train, seed,
                                           arm, cell, grid, n_classes)
         return np.concatenate([cX, spX]), np.concatenate([cY, spY])
+    if arm == "partition_realistic":
+        if not templates:
+            raise ValueError("partition_realistic requires mask templates")
+        cX, cY = ops.build_multi_realistic(templates, pool_imgs, pool_labels,
+                                           n_train, seed, cell * grid, n_classes,
+                                           min_frac=min_frac,
+                                           feather_sigma=feather_sigma)
+        return np.concatenate([cX, spX]), np.concatenate([cY, spY])
     law = "partition" if arm == "partition" else "superposition"
     cX, cY = ops.build_multi(pool_imgs, pool_labels, n_train, seed, law, cell,
                              grid, n_classes, k_choices=k_choices)
@@ -102,7 +113,8 @@ def build_train_for_arm(arm, pool_imgs, pool_labels, oracle_imgs, oracle_Y,
 
 
 def run(data, arms, seeds, per_class_single, n_train, n_normal, epochs, bs, lr,
-        device, cell, grid, k_choices, pretrained, out_csv, dataset="landcover"):
+        device, cell, grid, k_choices, pretrained, out_csv, dataset="landcover",
+        templates=None, feather_sigma=3.0, min_frac=0.01):
     pool_imgs, pool_labels, oracle_imgs, oracle_Y, eval_imgs, eval_Y, names, meta = data
     n_classes = len(names)
     evX = ops.real_to_chw(eval_imgs)
@@ -112,7 +124,9 @@ def run(data, arms, seeds, per_class_single, n_train, n_normal, epochs, bs, lr,
         for seed in seeds:
             trX, trY = build_train_for_arm(
                 arm, pool_imgs, pool_labels, oracle_imgs, oracle_Y,
-                per_class_single, n_train, seed, cell, grid, n_classes, k_choices)
+                per_class_single, n_train, seed, cell, grid, n_classes, k_choices,
+                templates=templates, feather_sigma=feather_sigma,
+                min_frac=min_frac)
             model = train_model(trX, trY, epochs, bs, lr, device, seed,
                                 n_classes, pretrained)
             P = _predict(model, evX, bs, device)
@@ -243,6 +257,59 @@ def print_verdict(rows, tol=0.02):
     return win
 
 
+def print_realistic_verdict(rows, tol=0.02):
+    """Dedicated gap-closure verdict for the NEW partition_realistic arm:
+    does REAL region-geometry synthesis close the rigid-partition -> oracle gap?"""
+    if not any(r["arm"] == "partition_realistic" for r in rows):
+        return
+    print("\n=== REALISTIC-SYNTHESIS VERDICT (rigid partition vs "
+          "partition_realistic vs oracle) ===")
+    rp_f1, rp_f1s = _agg(rows, "partition", "bit_f1")
+    pr_f1, pr_f1s = _agg(rows, "partition_realistic", "bit_f1")
+    oc_f1, oc_f1s = _agg(rows, "oracle", "bit_f1")
+    rp_m, rp_ms = _agg(rows, "partition", "mAP")
+    pr_m, pr_ms = _agg(rows, "partition_realistic", "mAP")
+    oc_m, oc_ms = _agg(rows, "oracle", "mAP")
+    ov_m, _ = _agg(rows, "overlay", "mAP")
+    cm_m, _ = _agg(rows, "cutmix", "mAP")
+    mx_m, _ = _agg(rows, "mixup", "mAP")
+    print(f"  bit_F1:  rigid_partition {rp_f1:.4f}+/-{rp_f1s:.4f}   "
+          f"partition_realistic {pr_f1:.4f}+/-{pr_f1s:.4f}   "
+          f"oracle {oc_f1:.4f}+/-{oc_f1s:.4f}")
+    print(f"  mAP   :  rigid_partition {rp_m:.4f}+/-{rp_ms:.4f}   "
+          f"partition_realistic {pr_m:.4f}+/-{pr_ms:.4f}   "
+          f"oracle {oc_m:.4f}+/-{oc_ms:.4f}")
+
+    # gap-closure fraction on threshold-free mAP (the ranking gap we target)
+    gap = oc_m - rp_m
+    closed = (pr_m - rp_m) / gap if abs(gap) > 1e-9 else float("nan")
+    beats_rigid_map = pr_m > rp_m + tol
+    beats_rigid_f1 = pr_f1 > rp_f1 + tol
+    recovers_map = pr_m >= oc_m - tol
+    recovers_f1 = pr_f1 >= oc_f1 - tol
+    beats_blind = (pr_m > ov_m + tol and pr_m > cm_m + tol and pr_m > mx_m + tol)
+    print(f"  mAP gap rigid->oracle = {gap:+.4f}; realistic closes "
+          f"{closed*100:.0f}% of it")
+    print(f"  beats_rigid(mAP)={beats_rigid_map} beats_rigid(bitF1)={beats_rigid_f1} "
+          f"recovers_oracle(mAP)={recovers_map} recovers_oracle(bitF1)={recovers_f1} "
+          f"still_beats_blind(mAP)={beats_blind}")
+
+    if recovers_map and beats_blind:
+        verdict = ("FULL-RECOVERY: partition_realistic recovers the oracle "
+                   "(within tol on mAP) while still beating overlay/cutmix/mixup "
+                   "-> real region geometry closes the sim-to-real gap")
+    elif beats_rigid_map or beats_rigid_f1:
+        verdict = (f"PARTIAL: partition_realistic beats rigid partition "
+                   f"(mAP {rp_m:.4f}->{pr_m:.4f}, closes {closed*100:.0f}% of the "
+                   f"oracle gap) but does NOT fully recover the oracle")
+    else:
+        verdict = ("FAIL: partition_realistic does NOT meaningfully beat rigid "
+                   "partition -> the sim-to-real gap is appearance-fundamental, "
+                   "not fixable by matching real region geometry")
+    print(f"\nREALISTIC VERDICT: {verdict}")
+    return verdict
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--arms", nargs="+", default=ARMS)
@@ -259,6 +326,10 @@ def main():
     ap.add_argument("--cell", type=int, default=64)
     ap.add_argument("--grid", type=int, default=2)
     ap.add_argument("--k-choices", nargs="+", type=int, default=[2])
+    ap.add_argument("--feather-sigma", type=float, default=3.0,
+                    help="Gaussian region-boundary feather for partition_realistic")
+    ap.add_argument("--min-frac", type=float, default=0.01,
+                    help="min region area frac for a class to count as present")
     ap.add_argument("--epochs", type=int, default=12)
     ap.add_argument("--bs", type=int, default=64)
     ap.add_argument("--lr", type=float, default=3e-4)
@@ -280,12 +351,19 @@ def main():
         n_eval=args.n_eval, n_oracle=args.n_oracle, per_class_cap=args.per_class_cap,
         min_side=args.min_side, purity=args.purity, seed=0, cache=args.cache)
     print(f"[meta] {data[-1]}", flush=True)
+    templates = None
+    if "partition_realistic" in args.arms:
+        templates = harvest_mask_templates(
+            args.base, subset=args.subset, canvas=canvas, n_eval=args.n_eval,
+            min_frac=args.min_frac, seed=0)
     rows = run(data, args.arms, args.seeds, args.per_class_single, args.n_train,
                args.n_normal, args.epochs, args.bs, args.lr, args.device,
                args.cell, args.grid, tuple(args.k_choices),
-               not args.no_pretrained, args.out_csv)
+               not args.no_pretrained, args.out_csv, templates=templates,
+               feather_sigma=args.feather_sigma, min_frac=args.min_frac)
     print_table(rows, data[6], data[7])
     print_verdict(rows)
+    print_realistic_verdict(rows)
     print(f"\n[OUT] {os.path.abspath(args.out_csv)}")
 
 

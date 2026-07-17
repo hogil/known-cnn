@@ -97,6 +97,74 @@ def build_multi(pool_imgs, pool_labels, n, seed, law, cell, grid, n_classes,
     return X, np.stack(Y)
 
 
+def _tile_crop(crop, H, W, rng):
+    """Tile a cell x cell crop to fill an HxW canvas, with a random roll offset
+    so the periodic seam does not always land at the same place (texture fill)."""
+    ch, cw = crop.shape[:2]
+    oy, ox = int(rng.integers(0, ch)), int(rng.integers(0, cw))
+    rolled = np.roll(np.roll(crop, oy, axis=0), ox, axis=1)
+    ry, rx = -(-H // ch), -(-W // cw)                    # ceil div
+    return np.tile(rolled, (ry, rx, 1))[:H, :W]
+
+
+def build_multi_realistic(templates, pool_imgs, pool_labels, n, seed, canvas,
+                          n_classes, min_frac=0.01, feather_sigma=3.0):
+    """REALISTIC partition synthesis: fill REAL land-cover region layouts with
+    single-class crop content, instead of rigid 2x2 quadrants.
+
+    For each synthetic tile:
+      1. sample a real DLRSD mask layout (region shapes/areas + class co-occurrence)
+      2. expand present-class regions to full coverage by nearest-region
+         assignment (~97% of the tile is already subset classes, so this is a
+         thin Voronoi fill of the non-subset gaps -- no black background)
+      3. tile each present class's own random crop into its region
+      4. feather region boundaries (Gaussian) and normalize -> soft blend
+      5. label = multi-hot of the classes actually placed (honest)
+
+    Matches real region geometry, area statistics, and co-occurrence while
+    keeping content 100% synthetic (appearance = same crop pool as every arm).
+    """
+    from scipy.ndimage import distance_transform_edt, gaussian_filter
+    H = W = canvas
+    rng = np.random.default_rng(seed)
+    by = _index_pool(pool_labels, n_classes)
+    min_area = int(min_frac * H * W)
+    T = len(templates)
+    X, Y = [], []
+    for _ in range(n):
+        present = []
+        for _try in range(10):
+            tmpl = templates[int(rng.integers(0, T))]
+            present = [c for c in range(n_classes)
+                       if len(by[c]) > 0 and int((tmpl == c).sum()) >= min_area]
+            if len(present) >= 2:
+                break
+        if len(present) < 2:
+            continue
+        pm = np.isin(tmpl, present)                       # pixels of a placeable class
+        if pm.all():
+            assign = tmpl.astype(np.int64)
+        else:
+            idx = distance_transform_edt(~pm, return_distances=False,
+                                         return_indices=True)
+            assign = tmpl[tuple(idx)].astype(np.int64)    # nearest present class / pixel
+        acc = np.zeros((H, W, 3), np.float32)
+        wsum = np.zeros((H, W), np.float32)
+        for c in present:
+            crop = pool_imgs[int(rng.choice(by[c]))].astype(np.float32)
+            tiled = _tile_crop(crop, H, W, rng)
+            alpha = gaussian_filter((assign == c).astype(np.float32), feather_sigma)
+            acc += alpha[..., None] * tiled
+            wsum += alpha
+        img = acc / np.maximum(wsum, 1e-6)[..., None]
+        t = np.zeros(n_classes, np.float32)
+        for c in present:
+            t[c] = 1.0
+        X.append(img); Y.append(t)
+    X = np.stack(X).transpose(0, 3, 1, 2).astype(np.float32) / 255.0
+    return X, np.stack(Y)
+
+
 def build_multi_baseline(pool_imgs, pool_labels, n, seed, mode, cell, grid,
                          n_classes):
     """Content-blind pair baselines (no partition/overlay law knowledge)."""
