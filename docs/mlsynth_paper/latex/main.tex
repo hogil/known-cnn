@@ -16,8 +16,10 @@
 % structured domains (each unit carries one condition; defects occupy distinct
 % regions: chip-internal maps). This is now MEASURED, not asserted: on the real chip
 % domain (a partition law) FCM-PM BEATS overlay decisively on BOTH axes under an
-% identical protocol (head-to-head, seed 99): FCM-PM eval bit_F1 0.9979 / Total-FAR
-% 0.06% vs overlay 0.9187 / 10.36% (bit_F1 +0.0792; Total-FAR ~170x lower). Both
+% identical protocol (head-to-head, 3 seeds s99/s7/s42): FCM-PM eval bit_F1
+% 0.9968+/-0.0008 / Total-FAR 0.68+/-0.63% vs overlay 0.8733+/-0.0338 / 16.20+/-5.53%
+% (bit_F1 +0.12; Total-FAR ~24x lower on average, holding for every seed with no
+% overlap -- worst FCM-PM seed 0.9960 beats best overlay seed 0.9187). Both
 % learn singles equally (train bit_F1 ~0.99); the entire gap is multi-defect eval,
 % because pixelwise-max mis-models a partition (overlay under-detects the second
 % defect in combos -> combo bit_F1 0.61-0.80; FCM-PM keeps combos crisp 0.99-1.00).
@@ -80,9 +82,11 @@ depends on the domain's \emph{true combination law} --- a summation/union join
 domains where evidence adds or saturates, and \textbf{FCM-PM} (a partition-complement
 operator) for \emph{partition-structured} domains where each unit carries one
 condition. We verify the crossover on the real chip domain, whose true law is a
-partition: under an \emph{identical} protocol FCM-PM beats overlay decisively on
-\emph{both} axes (eval bit-F1 $0.9979$ vs $0.9187$, $+0.079$; Total-FAR $0.06\%$ vs
-$10.36\%$, ${\sim}170\times$ lower), because pixelwise-max mis-models a partition and
+partition: under an \emph{identical} protocol, across three seeds, FCM-PM beats overlay
+decisively on \emph{both} axes (eval bit-F1 $0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$,
+$+0.12$; Total-FAR $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, ${\sim}24\times$ lower on
+average and holding for every seed with no distribution overlap --- the worst FCM-PM
+seed beats the best overlay seed), because pixelwise-max mis-models a partition and
 under-detects the second defect in combinations while FCM-PM keeps every combination
 crisp --- a head-to-head that converts operator-match from an assertion into a
 falsifiable, verified law;
@@ -223,9 +227,10 @@ Our contributions are:
   domains, while the partition-complement FCM-PM is right for
   \emph{partition-structured} domains. We convert this from an assertion into a
   \emph{verified} law with a matched head-to-head on the real chip domain (a partition
-  law, Sec.~\ref{sec:crossover}): FCM-PM beats overlay decisively on \emph{both} axes
-  (eval bit-F1 $0.9979$ vs $0.9187$; Total-FAR $0.06\%$ vs $10.36\%$, ${\sim}170\times$
-  lower), the two operators learning single defects equally (train bit-F1 ${\sim}0.99$)
+  law, Sec.~\ref{sec:crossover}): across three seeds FCM-PM beats overlay decisively on
+  \emph{both} axes (eval bit-F1 $0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$; Total-FAR
+  $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, ${\sim}24\times$ lower on average with no
+  per-seed overlap), the two operators learning single defects equally (train bit-F1 ${\sim}0.99$)
   so the entire gap is multi-defect eval, where pixelwise-max mis-models the partition
   and under-detects the second defect. On WM38 --- a superposition regime under the
   binary encoding --- overlay is instead the matched operator and is honestly strong
@@ -595,19 +600,26 @@ occupy \emph{distinct} spatial regions (each die belongs to one defect, not both
 run overlay and FCM-PM head-to-head on chip through an \emph{identical} pipeline ---
 same single-defect training data, epochs, backbone, val-margin selection, and
 naive-Bayes (I10) acceptor --- changing \emph{only} the multi-defect synthesis operator
-(seed 99; robustness seeds in progress). Table~\ref{tab:crossover}.
+(three seeds s99/s7/s42). Table~\ref{tab:crossover}.
 
-Both operators learn single defects equally well (train bit-F1 $0.9921$ FCM-PM vs
-$0.9906$ overlay), so training data and capacity are not the variable. \textbf{The
-entire gap is in multi-defect evaluation, and FCM-PM wins on \emph{both} axes: eval
-bit-F1 $0.9979$ vs $0.9187$ ($+0.0792$) and Total-FAR $0.06\%$ vs $10.36\%$
-(${\sim}170\times$ lower).} The mechanism is exactly operator--law mismatch: because
+Both operators learn single defects equally well (train bit-F1 ${\sim}0.99$ for both;
+eval singles bit-F1 $1.000$ for both), so training data and capacity are not the
+variable. \textbf{The entire gap is in multi-defect evaluation, and across three seeds
+(s99/s7/s42) FCM-PM wins on \emph{both} axes: eval bit-F1 $0.9968 \pm 0.0008$ vs
+$0.8733 \pm 0.0338$ ($+0.12$ on average) and Total-FAR $0.68 \pm 0.63\%$ vs
+$16.20 \pm 5.53\%$ (${\sim}24\times$ lower on average).} \textbf{The result holds for
+every seed with no distribution overlap:} the worst FCM-PM seed (bit-F1 $0.9960$) still
+beats the best overlay seed ($0.9187$) by $+0.077$, and the worst FCM-PM Total-FAR
+($1.54\%$) is ${\sim}7\times$ lower than the best overlay Total-FAR ($10.36\%$). Overlay
+is also far less stable --- its bit-F1 std is ${\sim}42\times$ larger and its FAR std
+${\sim}9\times$ larger than FCM-PM's --- so the partition operator is not merely better
+on average but more reliable. The mechanism is exactly operator--law mismatch: because
 chip combinations are partitions, pixelwise-max mis-models the join and
-\emph{under-detects the second defect} in each combination --- overlay's combination
-bit-F1 collapses to $0.61$--$0.80$ (bb+fork $0.618$, fork+scratch $0.610$,
-fork+scratch\_rot $0.629$) and it over-fires on negatives (NI-FAR $19.00\%$, OOD-FAR
-$7.66\%$). FCM-PM, whose synthesis reproduces the partition, keeps every combination
-crisp ($0.99$--$1.00$) with well-separated negatives (eval neg prob $0.1266$; NI-FAR
+\emph{under-detects the second defect} in each combination. As an illustrative single
+seed (s99), overlay's combination bit-F1 collapses to $0.61$--$0.80$ (bb+fork $0.618$,
+fork+scratch $0.610$, fork+scratch\_rot $0.629$) and it over-fires on negatives (NI-FAR
+$19.00\%$, OOD-FAR $7.66\%$), whereas FCM-PM keeps every combination crisp
+($0.99$--$1.00$) with well-separated negatives (eval neg prob $0.1266$; NI-FAR
 $0.00\%$). This is the crossover the paper's law predicts, and the piece WM38-only
 evidence could not supply: a real, multi-label, matched head-to-head in which overlay's
 superposition assumption \emph{loses}, converting operator-match from an assertion into
@@ -616,22 +628,25 @@ a verified law.
 \begin{table}[t]
 \centering
 \caption{Operator-match crossover on the chip partition domain (identical pipeline;
-only the multi-defect synthesis operator differs; seed 99). Both learn single defects
-equally (train bit-F1 ${\sim}0.99$); the entire gap is multi-defect eval, where FCM-PM
-beats overlay on both bit-F1 and FAR. FAR reported in \% (NI $=$ Normal/Invalid, OOD
-$=$ out-of-distribution wafer patterns).}
+only the multi-defect synthesis operator differs; three seeds s99/s7/s42, mean $\pm$
+std). Both learn single defects equally (train bit-F1 ${\sim}0.99$); the entire gap is
+multi-defect eval, where FCM-PM beats overlay on both bit-F1 and FAR across every seed
+with no distribution overlap. FAR reported in \% (NI $=$ Normal/Invalid, OOD $=$
+out-of-distribution wafer patterns).}
 \label{tab:crossover}
 \begin{tabular}{lccccc}
 \toprule
-Operator & Train bit-F1 (pos/neg) & Eval bit-F1 (pos/neg) & NI-FAR & OOD-FAR & Total-FAR \\
+Operator & Train bit-F1 & Eval bit-F1 (3 seeds) & NI-FAR$^{\ast}$ & OOD-FAR$^{\ast}$ & Total-FAR (3 seeds) \\
 \midrule
-FCM-PM (\textbf{ours}) & $0.9921$ ($0.8499$/$0.1476$) & $\mathbf{0.9979}$ ($0.8024$/$0.1266$) & $\mathbf{0.00}$ & $\mathbf{0.08}$ & $\mathbf{0.06}$ \\
-overlay ($=$ Shin 2022) & $0.9906$ ($0.8585$/$0.1511$) & $0.9187$ ($0.6267$/$0.1199$) & $19.00$ & $7.66$ & $10.36$ \\
+FCM-PM (\textbf{ours}) & ${\sim}0.992$ & $\mathbf{0.9968 \pm 0.0008}$ & $\mathbf{0.00}$ & $\mathbf{0.08}$ & $\mathbf{0.68 \pm 0.63}$ \\
+overlay ($=$ Shin 2022) & ${\sim}0.989$ & $0.8733 \pm 0.0338$ & $19.00$ & $7.66$ & $16.20 \pm 5.53$ \\
 \bottomrule
+\multicolumn{6}{l}{\footnotesize $^{\ast}$NI/OOD-FAR shown for the representative seed 99; the last column is the 3-seed Total-FAR mean.}\\
+\multicolumn{6}{l}{\footnotesize Per-seed eval bit-F1 / Total-FAR (s99/s7/s42): FCM-PM $0.9979$/$0.06$, $0.9964$/$1.54$, $0.9960$/$0.44$; overlay $0.9187$/$10.36$, $0.8635$/$14.61$, $0.8377$/$23.63$.}
 \end{tabular}
 \end{table}
 
-\textbf{Each of the three method components contributes} (Table~\ref{tab:chipablation}).
+\textbf{Each of the three method components contributes} (Table~\ref{tab:chipablation}; seed 99).
 From the FCM-PM base (the val-F1-selected checkpoint read out at the raw $0.5$
 threshold) the model already reaches eval bit-F1 $0.9948$ but is unusable --- Total-FAR
 $97.80\%$, because the raw partition logits leave the negative scratch bit above $0.5$.
@@ -643,8 +658,8 @@ $0.9979$ --- the full method. Neither stage is redundant.
 \begin{table}[t]
 \centering
 \caption{Three-component ablation of the chip champion recipe (preserved checkpoints;
-chip multi-defect eval). Each stage contributes: val-margin selection is the dominant
-FAR fixer, naive-Bayes reject closes the OOD tail. FAR in \%.}
+chip multi-defect eval, seed 99). Each stage contributes: val-margin selection is the
+dominant FAR fixer, naive-Bayes reject closes the OOD tail. FAR in \%.}
 \label{tab:chipablation}
 \begin{tabular}{lccc}
 \toprule
@@ -853,8 +868,8 @@ content-blind operators FCM-PM ($0.663$/$0.228$ at the common pick; $0.654$/$0.1
 its best pick) gives the best FAR-controlled tradeoff: it matches the real density,
 gives low FAR (CutMix $0.691$ but FAR $0.439$; removing Pair-Mask raises FCM's FAR to
 $0.384$; Pair-Mask is the lever). The decisive selection is on the chip partition
-domain, where FCM-PM beats overlay head-to-head (${\sim}0.998$ bit-F1 vs overlay
-$0.919$; Sec.~\ref{sec:crossover}). The framework's contribution is thus the
+domain, where FCM-PM beats overlay head-to-head across three seeds (${\sim}0.997$ bit-F1
+vs overlay ${\sim}0.873$; Sec.~\ref{sec:crossover}). The framework's contribution is thus the
 single$\to$multi setting and objective, the operator-match law (measured by the chip
 head-to-head), the FCM-PM method with its FAR levers, the criterion characterizing
 evidence-preservation per domain, the theory explaining when synthesis can match the
@@ -913,7 +928,7 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \bottomrule
 \multicolumn{5}{l}{\footnotesize $^{\dagger}$exceeds the oracle on held-out combinations ($+0.198$: overlay $0.883$ vs oracle $0.685$).}\\
 \multicolumn{5}{l}{\footnotesize $^{\ddagger}$WM38 is a superposition regime, so its matched content-blind operator is overlay $=$ Shin 2022 ($0.80$), reported honestly --- we do not claim to beat it. Our method FCM-PM is the best FAR-controlled content-blind arm ($0.663$ / FAR $0.228$, Table~\ref{tab:headline}) and the winner on the chip partition domain.}\\
-\multicolumn{5}{l}{\footnotesize $^{\natural}$chip is a partition domain: in a matched head-to-head FCM-PM beats overlay on both axes (eval bit-F1 $0.9979$ vs $0.9187$; Total-FAR $0.06\%$ vs $10.36\%$, Table~\ref{tab:crossover}). Internal data, no released floor/oracle.}\\
+\multicolumn{5}{l}{\footnotesize $^{\natural}$chip is a partition domain: in a matched head-to-head (3 seeds) FCM-PM beats overlay on both axes (eval bit-F1 $0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$; Total-FAR $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, Table~\ref{tab:crossover}). Internal data, no released floor/oracle.}\\
 \multicolumn{5}{l}{\footnotesize $^{\S}$audio is a superposition domain, so waveform summation is its matched content-blind operator; it has no real-multi oracle pool and wins raw bit-F1 $0.433$ vs $0.27$--$0.31$ but at higher FAR $0.21$, so on the performance--FAR tradeoff our FCM-PM ($0.312$/$0.102$ FAR) is the best FAR-controlled arm.}\\
 \multicolumn{5}{l}{\footnotesize $^{\P}$on VOC the content-\emph{blind} arms fall \emph{below} the floor (cutmix $0.226$, mixup $0.194$ $<$ $0.242$) --- blind synthesis fails on natural RGB; only content-\emph{aware} copy-paste (uses dataset bounding boxes; $0.350$, gap-recovery $41\%$) beats the floor, and it is not a content-blind operator.}
 \end{tabular}
@@ -1236,8 +1251,9 @@ honestly and \emph{do not claim to beat it}; among the content-blind operators o
 FCM-PM (with val-margin selection and naive-Bayes rejection) gives the best
 FAR-controlled tradeoff ($0.663$/$0.228$ at the common pick; $0.654$/$0.147$ at its
 best pick). The decisive test is the chip \emph{partition} domain: there, under an
-identical protocol, FCM-PM beats overlay on both axes (eval bit-F1 $0.9979$ vs
-$0.9187$; Total-FAR $0.06\%$ vs $10.36\%$, ${\sim}170\times$ lower), because
+identical protocol across three seeds, FCM-PM beats overlay on both axes (eval bit-F1
+$0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$; Total-FAR $0.68 \pm 0.63\%$ vs
+$16.20 \pm 5.53\%$, ${\sim}24\times$ lower on average with no per-seed overlap), because
 pixelwise-max mis-models a partition --- turning operator-match from an assertion into
 a verified law and, with it, FCM-PM into the method of choice for partition-structured
 inspection maps. Density is a modeling characterization consistent with the law (FCM-PM
