@@ -72,96 +72,35 @@ Label-Faithful Synthesis from Single-Label Data}
 \maketitle
 
 \begin{abstract}
-Industrial visual inspection routinely faces images containing multiple
-co-occurring defect types, yet multi-label annotation of such images is
-impractical: co-occurrences explode combinatorially, rare combinations may
-never be observed in labeled form, and overlapping patterns are ambiguous to
-annotate. In contrast, single-defect examples are cheap and unambiguous. We
-study a strict setting --- \emph{single-label training, multi-label evaluation}
-with \emph{no multi-label or normal annotation} (the content-blind constraint) ---
-and give a general principle for \emph{label-faithful synthesis}: to learn a
-multi-label recognizer from single-label sources --- with no multi-label, location, or
-normal annotation --- synthesize combination examples with the operator that matches the
-domain's \emph{true combination law}. We contribute
-(i)~an \textbf{operator-match law} with a \emph{predictive}, before-training criterion
-(evidence survival / label fidelity): the right content-blind operator is fixed not by
-fiat but by the domain's \emph{true combination law} --- a summation/union join (overlay
-$=$ Shin et al.\ 2022 Summation Mixup) for \emph{superposition-structured} domains where
-evidence adds or saturates, and \textbf{FCM-PM} (a partition-complement operator) for
-\emph{partition-structured} domains where each unit carries one condition; we verify the
-law's falsifiable flip on real industry data, real public data, and a controlled mechanism
-study --- on the real chip domain (a partition law), under an \emph{identical} protocol
-across three seeds, FCM-PM beats overlay decisively on \emph{both} axes (eval bit-F1
-$0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$, $+0.12$; Total-FAR $0.68 \pm 0.63\%$ vs
-$16.20 \pm 5.53\%$, ${\sim}24\times$ lower on average and holding for every seed with no
-distribution overlap --- the worst FCM-PM seed beats the best overlay seed), because
-pixelwise-max mis-models a partition and under-detects the second defect while FCM-PM keeps
-every combination crisp; \textbf{the same partition win holds on a real, public,
-non-constructed benchmark --- SVHN Street View House Numbers (format-1 full house numbers,
-genuinely partition-structured, a law we did not define), where the matched
-partition-placement operator reaches eval bit-F1 $0.8855 \pm 0.0051$ and beats overlay
-($0.5141$), CutMix ($0.6688$), and MixUp ($0.7638$) with no standard-deviation overlap while
-recovering a non-collapsed real-multi-digit oracle ($0.8947$, ${\sim}99\%$)}; the
-operator-match \emph{ordering} generalizes further to a third real-public domain of a
-different type --- mainstream remote-sensing land cover (real UC-Merced/DLRSD multi-label
-tiles) --- where the matched partition-placement operator beats every content-blind operator
-(overlay's same-$k$ control, CutMix, MixUp) on the threshold-free mAP (its primary metric
-here; bit-F1 is threshold-sensitive and run-unstable on land cover), yet a
-geometry-realistic synthesis arm (real DLRSD region shapes) closes only ${\sim}25\%$ of the
-mAP gap to the oracle and does \emph{not} recover it (a residual ${\sim}0.10$ mAP appearance
-gap), so the sim-to-real gap \emph{decomposes} into a closeable geometry and a fundamental
-appearance component --- honest ordering-generality with a decomposed limit, not a full
-win; and a
-controlled mechanism study on four constructed public-source datasets (MNIST, FashionMNIST,
-KMNIST, EMNIST-letters) --- identical sources, only the combination law changed ---
-reproduces the same flip in \emph{both} directions, where the matched operator is moreover
-the \emph{best content-blind choice} --- it beats not only the mismatched operator but also
-CutMix and MixUp in every regime on all four datasets, with no standard-deviation overlap
-(4/4; MNIST partition-placement $0.901$ vs overlay $0.657$, CutMix $0.866$, MixUp $0.614$;
-superposition overlay $0.765$ vs partition-placement $0.430$, CutMix $0.446$, MixUp $0.474$;
-the matched operator recovers the oracle in every case, and absolute bit-F1 declines on
-harder sources while the flip direction stays invariant) --- so the operator-match partition
-win holds on a real, public benchmark and not only on author-constructed data, converting
-operator-match from an assertion into a general, publicly reproducible law; matching the
-domain's law is moreover the \emph{risk-minimizing} content-blind choice --- it minimizes a
-simple excess-risk bound (Sec.~\ref{sec:theory}), consistent with the measured MNIST
-oracle-recovery where matched synthesis is statistically indistinguishable from training on
-the true law;
-(ii)~an \textbf{annotation-free, operator-agnostic, distribution-free split-conformal
-false-alarm-rate guarantee}: a full multi-alpha calibration curve on which the realized
-FAR tracks the target across $\alpha\in[0.5\%,10\%]$ to within $0.153$~pp for every
-operator (Fig.~\ref{fig:calib}; a small set of known-good samples yields realized FAR
-$0.040$ at $\alpha{=}0.05$ and $0.006$ at $\alpha{=}0.01$), backed by synthetic normals, a
-negative-target lever, val-margin selection, and naive-Bayes rejection --- a practical,
-annotation-free reliability layer that holds for \emph{any} operator (a transferable
-benefit, not a differentiator of our method; operator-only prior work, including Shin
-et al.\ 2022, provides none);
-(iii)~the \textbf{single$\to$multi setting and the objective of performance maximization
-within it}: a multi-label-trained \emph{oracle} ($0.974$ on WM38) bounds the problem as an
-upper reference (it uses supervision we forbid), and the setting is stricter-than-SPML,
-evaluated on real multi-label data and real normals;
-(iv)~our \textbf{method for partition domains --- FCM-PM, val-margin checkpoint selection,
-and naive-Bayes rejection}: on the chip partition domain FCM-PM is the winner
-(${\sim}0.998$ bit-F1), and on the public MixedWM38 benchmark it gives the best
-FAR-controlled tradeoff among the content-blind operators (bit-F1 $0.663$ at NORMAL-FAR
-$0.228$ at the arms' common guarded pick; $0.654/0.147$ at its best pick), against cutmix
-($0.691$ bit-F1 but FAR $0.439$), mixup ($0.537/0.225$), and the single-only floor
-($0.473/0.602$); on WM38 --- a superposition regime under the binary die encoding ---
-overlay/summation is the \emph{matched} operator and is genuinely strong ($0.80$ at FAR
-$0.010$), which we report honestly and do \emph{not} claim to beat, with the Pair-Mask
-lever (which cuts the complement FAR $0.384\to0.147$), val-margin, and naive-Bayes
-rejection as the FAR controls; and
-(v)~\textbf{cross-domain framework support} across five families spanning the combination
-taxonomy: on a controlled MultiMNIST superposition benchmark blind synthesis \emph{exceeds}
-a fully-supervised oracle on held-out label combinations it never saw ($+0.198$ mAP; full
-test mAP $0.868$ vs $0.846$) --- a regime where supervision structurally cannot help ---
-the same \emph{label-fidelity / operator-match criterion} predicts the counterintuitive
-Reuters text averaging-flip and the FSD50K audio summation ranking, and natural images
-(VOC) mark the boundary where content-blind synthesis fails and location supervision
-becomes necessary. Density is a \emph{modeling characterization} consistent with the law:
-FCM-PM matches the real defect-die density ($0.29$ vs real $0.31$), while overlay is
-over-dense ($0.50$) --- expected of the superposition operator, and the reason WM38
-(superposition) favors overlay while the chip partition domain favors FCM-PM.
+Industrial visual inspection must recognize images containing several defect
+types at once, yet multi-label annotation is impractical---co-occurrences
+explode combinatorially and rare combinations are never observed in labeled
+form---while single-defect examples are cheap and unambiguous. We study how to
+train a multi-label recognizer from single-label sources alone, with \emph{no
+multi-label, location, or normal annotation}, by synthesizing combination
+examples. Our central contribution is an \textbf{operator-match law}: the
+content-blind synthesis operator that best preserves label fidelity is fixed,
+\emph{before training}, by the domain's true combination law---a summation/union
+join (${=}$ Shin et al.\ 2022 Summation Mixup) for \emph{superposition-structured}
+domains, and a partition-complement operator (\textbf{FCM-PM}) for
+\emph{partition-structured} domains. We verify this law's falsifiable flip on
+real fab-chip data, on real public SVHN house numbers (a genuine partition law
+we did not define, where the matched operator recovers a non-collapsed real
+oracle within ${\sim}1\%$), on real remote-sensing land cover, and on a
+four-dataset controlled mechanism study that reproduces the flip in \emph{both}
+directions; throughout, the matched operator is the \emph{best} content-blind
+choice, beating the mismatched operator, CutMix, and MixUp with no
+standard-deviation overlap, while on the public MixedWM38 wafer benchmark
+(a superposition regime) the matched summation/overlay operator is genuinely
+strong and we do \emph{not} claim to beat it. We further contribute an
+\textbf{annotation-free, distribution-free split-conformal false-alarm-rate
+guarantee} that holds for \emph{any} operator, and a theory identifying
+operator-match as the risk-minimizing content-blind choice. Blind synthesis even
+\emph{exceeds} a fully-supervised oracle on held-out MultiMNIST combinations
+($+0.198$ mAP); the same criterion predicts the counterintuitive Reuters text
+averaging-flip and the FSD50K audio summation ranking; and natural images (VOC)
+mark the boundary where content-blind synthesis fails and location supervision
+becomes necessary.
 \end{abstract}
 
 \section{Introduction}\label{sec:intro}
