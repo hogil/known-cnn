@@ -95,22 +95,29 @@ operator is fixed not by fiat but by the domain's *true combination law* -- a
 summation/union join (overlay = Shin et al. 2022 Summation Mixup) for
 **superposition-structured** domains where evidence adds/saturates, and **FCM-PM** (a
 partition-complement operator) for **partition-structured** domains where each unit
-carries one condition; we verify the law's falsifiable flip on real industry data and
-public data -- on the real chip domain (a partition law), under an *identical* protocol
-across three seeds, FCM-PM beats overlay decisively on *both* axes (eval bit-F1
-0.9968 +-0.0008 vs 0.8733 +-0.0338, +0.12; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%, ~24x
-lower on average and holding for every seed with no distribution overlap -- worst FCM-PM
-seed beats best overlay seed), because pixelwise-max mis-models a partition and
-under-detects the second defect while FCM-PM keeps every combination crisp, and on four
-public datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters) we reproduce the same flip in
-**both** directions under one identical protocol, where the matched operator is moreover the
-*best content-blind choice* -- it beats not only the mismatched operator but also CutMix and
-MixUp in every regime on all four datasets, with no std overlap (4/4; MNIST
-partition-placement 0.901 vs overlay 0.657, CutMix 0.866, MixUp 0.614; superposition overlay
-0.765 vs partition-placement 0.430, CutMix 0.446, MixUp 0.474; the matched operator recovers
-the oracle in every case, and absolute bit-F1 declines on harder sources while the flip
-direction stays invariant) --
-converting operator-match from an assertion into a general, publicly reproducible law; (ii) an **annotation-free, operator-agnostic,
+carries one condition; we verify the law's falsifiable flip on real industry data, real
+public data, and a controlled mechanism study -- on the real chip domain (a partition law),
+under an *identical* protocol across three seeds, FCM-PM beats overlay decisively on *both*
+axes (eval bit-F1 0.9968 +-0.0008 vs 0.8733 +-0.0338, +0.12; Total-FAR 0.68 +-0.63% vs
+16.20 +-5.53%, ~24x lower on average and holding for every seed with no distribution overlap
+-- worst FCM-PM seed beats best overlay seed), because pixelwise-max mis-models a partition
+and under-detects the second defect while FCM-PM keeps every combination crisp; **the same
+partition win holds on a real, public, non-constructed benchmark -- SVHN Street View House
+Numbers (format-1 full house numbers, genuinely partition-structured, a law we did not
+define), where the matched partition-placement operator reaches eval bit-F1 0.8855 +-0.0051
+and beats overlay (0.5141), CutMix (0.6688), and MixUp (0.7638) with no std overlap while
+recovering a non-collapsed real-multi-digit oracle (0.8947, ~99%)**; and a controlled
+mechanism study on four constructed public-source datasets (MNIST, FashionMNIST, KMNIST,
+EMNIST-letters) -- identical sources, only the combination law changed -- reproduces the same
+flip in **both** directions, where the matched operator is moreover the *best content-blind
+choice* -- it beats not only the mismatched operator but also CutMix and MixUp in every regime
+on all four datasets, with no std overlap (4/4; MNIST partition-placement 0.901 vs overlay
+0.657, CutMix 0.866, MixUp 0.614; superposition overlay 0.765 vs partition-placement 0.430,
+CutMix 0.446, MixUp 0.474; the matched operator recovers the oracle in every case, and
+absolute bit-F1 declines on harder sources while the flip direction stays invariant) -- so
+the operator-match partition win holds on a real, public benchmark and not only on
+author-constructed data, converting operator-match from an assertion into a general, publicly
+reproducible law; (ii) an **annotation-free, operator-agnostic,
 distribution-free split-conformal false-alarm-rate guarantee**: a full multi-alpha
 calibration curve on which the realized FAR tracks the target across alpha in [0.5%, 10%]
 to within 0.153 pp for every operator (a small set of known-good samples yields realized
@@ -178,13 +185,21 @@ law**. This is the paper's central, and now *measured*, principle — the
 (inked digits, audio, and wafer maps under a binary die encoding), whereas a
 **partition-complement** (FCM-PM) is right for **partition-structured** domains, where
 each unit carries one condition and two defects occupy distinct spatial regions
-(chip-internal maps). We verify the crossover directly and in **both** directions: on the
-real chip domain, whose true law is a partition, FCM-PM beats overlay decisively on both
-bit-F1 and FAR under an identical protocol (Sec 5.2.1), because pixelwise-max mis-models a
-partition; and on four fully public datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters)
-we reproduce the same flip in both regimes — the matched operator wins each direction with
-no std overlap and recovers the oracle in every case (4/4; Sec 5.1.1) — so the law is
-general, publicly verifiable, and not reliant on internal data. The operator-match criterion is measured before any training via **label fidelity** (every
+(chip-internal maps). We verify the crossover directly and in **both** directions, on real
+data and under a controlled mechanism study. On the real chip domain, whose true law is a
+partition, FCM-PM beats overlay decisively on both bit-F1 and FAR under an identical protocol
+(Sec 5.2.1), because pixelwise-max mis-models a partition; and the same partition win
+reproduces on a *real, public, non-constructed* benchmark — SVHN Street View House Numbers,
+whose partition law we did not define — where the matched partition-placement operator
+(0.8855 bit-F1) beats overlay (0.5141), CutMix (0.6688), and MixUp (0.7638) with no std
+overlap and recovers a non-collapsed real-multi-digit oracle (0.8947, ~99%; Sec 5.1.2). A
+controlled mechanism study on four constructed public-source datasets (MNIST, FashionMNIST,
+KMNIST, EMNIST-letters) — identical sources, only the combination law changed — then isolates
+the same flip in both regimes, the matched operator winning each direction with no std overlap
+and recovering the oracle in every case (4/4; Sec 5.1.1) — so the operator-match partition win
+is established on real, public data (SVHN, chip) and cleanly isolated across four constructed
+datasets in both directions, general and not reliant on internal data. The operator-match
+criterion is measured before any training via **label fidelity** (every
 labeled source must retain detectable evidence after synthesis); operators that destroy
 evidence (rectangle patching, pixel averaging) train on false labels. The same
 criterion makes a falsifiable, pre-registered cross-regime call — vector averaging (not
@@ -241,23 +256,33 @@ Contributions:
    bit-F1 0.9968 +-0.0008 vs 0.8733 +-0.0338; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%,
    ~24x lower on average with no per-seed overlap), the two operators learning single
    defects equally (train bit-F1 ~0.99) so the entire gap is multi-defect eval, where
-   pixelwise-max mis-models the partition and under-detects the second defect. We
-   demonstrate the **same flip in both directions on four public datasets (MNIST,
-   FashionMNIST, KMNIST, EMNIST-letters)** (Sec 5.1.1), where the matched operator is the
-   *best content-blind choice*: in every regime on all four datasets it beats not only the
-   mismatched operator but also CutMix and MixUp, with no std overlap (4/4; e.g. MNIST
-   partition-placement 0.9014 +-0.014 vs overlay 0.6568 +-0.033, CutMix 0.8660 +-0.002,
-   MixUp 0.6142 +-0.050; superposition overlay 0.7650 +-0.004 vs partition-placement
-   0.4295 +-0.027, CutMix 0.4463 +-0.023, MixUp 0.4744 +-0.043) and recovers the oracle in
-   each direction (e.g. MNIST partition 0.9014 vs 0.9072; superposition 0.7650 vs 0.7650),
-   the matched-minus-mismatched gap 0.18-0.34 throughout (matched clears even the strongest
-   content-blind baseline by 0.035-0.29, tightest on MNIST partition where matched 0.9014
-   still clears CutMix 0.8660) with absolute bit-F1 declining on harder sources while the
-   flip direction stays invariant, so the law is measured on **four** public datasets (both
-   directions) and the real chip domain -- a general, publicly verifiable law, not a
-   dataset-specific artifact. On WM38 -- a superposition regime under the binary encoding -- overlay is
-   instead the matched operator and is honestly strong (0.80/0.010); we do *not* claim to
-   beat it there.
+   pixelwise-max mis-models the partition and under-detects the second defect. **The same
+   partition win reproduces on a real, public, non-constructed benchmark:** on SVHN Street
+   View House Numbers (format-1 full house numbers, a genuine partition law we did *not*
+   define -- multi-hot over the 10 digit classes, positions never used as labels; N=7566 real
+   test house numbers, single-digit pool 30,000 real crops, no leak) the matched
+   partition-placement operator reaches eval bit-F1 0.8855 +-0.0051 (mAP 0.9442), beats
+   overlay (0.5141), CutMix (0.6688), and MixUp (0.7638) with no std overlap, and recovers a
+   *non-collapsed* real-multi-digit oracle (0.8947 / mAP 0.9546, ~99%) -- an informative
+   recovery, not an undertrained tie (Sec 5.1.2). We further isolate the **same flip in both
+   directions** under a controlled mechanism study on four constructed public-source datasets
+   (MNIST, FashionMNIST, KMNIST, EMNIST-letters) -- identical sources, only the combination
+   law changed (Sec 5.1.1) -- where the matched operator is the *best content-blind choice*:
+   in every regime on all four datasets it beats not only the mismatched operator but also
+   CutMix and MixUp, with no std overlap (4/4; e.g. MNIST partition-placement 0.9014 +-0.014
+   vs overlay 0.6568 +-0.033, CutMix 0.8660 +-0.002, MixUp 0.6142 +-0.050; superposition
+   overlay 0.7650 +-0.004 vs partition-placement 0.4295 +-0.027, CutMix 0.4463 +-0.023, MixUp
+   0.4744 +-0.043) and recovers the oracle in each direction (e.g. MNIST partition 0.9014 vs
+   0.9072; superposition 0.7650 vs 0.7650), the matched-minus-mismatched gap 0.18-0.34
+   throughout (matched clears even the strongest content-blind baseline by 0.035-0.29,
+   tightest on MNIST partition where matched 0.9014 still clears CutMix 0.8660) with absolute
+   bit-F1 declining on harder sources while the flip direction stays invariant. So the
+   operator-match partition win is measured on the real chip partition domain **and** a real
+   public partition benchmark (SVHN), with the four constructed datasets supplying the clean
+   both-directions mechanism control -- a general, publicly verifiable law established on real,
+   public, non-constructed data, not a dataset-specific artifact. On WM38 -- a superposition
+   regime under the binary encoding -- overlay is instead the matched operator and is honestly
+   strong (0.80/0.010); we do *not* claim to beat it there.
 2. **An annotation-free FAR guarantee.** A strict source-only reliability pipeline --
    synthetic normals, negative-target control, synthetic validation margin for
    checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern likelihood
@@ -578,22 +603,25 @@ whole-object preservation > fragmentation, in survival-order; (iv) overlay
 also beats the mixup and cutmix augmentation baselines (0.868 vs 0.738 /
 0.606).
 
-#### 5.1.1 Operator-match law on four public datasets: the partition/superposition flip
+#### 5.1.1 Controlled mechanism isolation: the partition/superposition flip on four public sources
 
-The chip head-to-head (Sec 5.2.1) shows the partition-direction win on real fab data;
-here we show the operator-match law is **general, not dataset-specific** by reproducing the
-same flip, in **both** directions, on **four** fully public datasets — MNIST, FashionMNIST,
-KMNIST, and EMNIST-letters (26 classes) — under one identical controlled protocol, so the
-law is publicly verifiable **without internal data**. For each dataset two multi-label
-domains are built from the **same** public source on a 56x56 two-by-two-cell canvas, trained
-with the **same** shared SmallCNN (20 epochs, 3 seeds), changing **only** the domain's true
-two-glyph combination law: a **partition** domain (the two glyphs occupy disjoint cells) and
-a **superposition** domain (the two glyphs share one cell, combined by pixelwise max). In
+The chip head-to-head (Sec 5.2.1) and the SVHN house-number benchmark (Sec 5.1.2) establish
+the partition win on **real** data; this experiment complements them with a **controlled
+mechanism isolation** that cleanly separates the combination-law variable — same sources,
+only the combination law changed, in **both** directions — on **author-constructed**
+tiled-digit canvases built from four public sources (MNIST, FashionMNIST, KMNIST, and
+EMNIST-letters, 26 classes) under one identical protocol. For each source two multi-label
+domains are **constructed** from the **same** public glyphs on a 56x56 two-by-two-cell canvas,
+trained with the **same** shared SmallCNN (20 epochs, 3 seeds), changing **only** the domain's
+true two-glyph combination law: a **partition** domain (the two glyphs occupy disjoint cells)
+and a **superposition** domain (the two glyphs share one cell, combined by pixelwise max). In
 each domain the two content-blind operators run head-to-head — partition-placement (the
 FCM-PM analogue) and overlay/max-union — alongside two further content-blind baselines
 (CutMix and MixUp), the single-only floor, and an oracle trained on true-law combos (upper
-reference). Eval = held-out real multi-label test set for that dataset; matched = the operator
-whose combine matches the domain's true law.
+reference). Eval = held-out multi-label test set constructed from that source's own test
+split; matched = the operator whose combine matches the domain's true law. Because the
+canvases are constructed, this study is a clean mechanism control, not a real-data benchmark
+— that role is played by SVHN and chip.
 
 | dataset        | regime        | matched (mean +-std) | mismatched (mean +-std) | cutmix (mean +-std) | mixup (mean +-std) | single | oracle |
 |----------------|---------------|----------------------|-------------------------|---------------------|--------------------|--------|--------|
@@ -636,12 +664,57 @@ FashionMNIST -> KMNIST -> EMNIST), but the flip *direction* and the matched-vs-m
 are clean everywhere — the law is invariant even where absolute performance is not. CIFAR-10
 (color) was not run under this grayscale pipeline; we state this as a scope limit, not a
 result. This extends the (superposition-only) MultiMNIST study in 5.1 by adding the partition
-direction across four sources under one controlled protocol, and it is the **public,
-reproducible counterpart to the internal chip head-to-head** (Sec 5.2.1), which shows the
-same partition-direction win (FCM-PM beats overlay) on real fab data: the operator-match law
-is now measured on **four** public datasets (both directions, matched recovering the oracle)
-and the real chip partition domain — a general law, not a dataset-specific artifact. Runner:
-`multilabel_synth/run_operator_match_baselines.py` (committed).
+direction across four sources under one controlled protocol. **Framing (honest scope):**
+because the tiled canvases are **author-constructed**, this study is the clean **mechanism
+control** — it isolates the combination-law variable (identical sources, only the law changes)
+in both directions across four datasets — and it is **not** itself a real-data benchmark; the
+real-data partition evidence is the SVHN house-number benchmark (Sec 5.1.2, real public, a
+partition law we did not define) and the chip head-to-head (Sec 5.2.1, real fab). Together the
+evidence spans a controlled mechanism (four constructed tiled-digit datasets, both
+directions), a real **public** partition benchmark (SVHN), and a real chip partition domain —
+so the operator-match partition win is established on real, public, non-constructed data, not
+only on constructed canvases. Runner: `multilabel_synth/run_operator_match_baselines.py`
+(committed).
+
+#### 5.1.2 Real, public partition benchmark: SVHN house numbers
+
+The controlled four-dataset study above isolates the combination-law mechanism on
+author-constructed tiled-digit canvases; here we verify the partition-direction win on a
+**real, public, non-constructed** benchmark whose partition law we did **not** define — SVHN
+Street View House Numbers. We use the format-1 full house-number images, which are genuinely
+partition-structured: the digits sit side by side in disjoint image regions, a partition
+combination law fixed by the photographed scene rather than by us. The multi-hot target is
+over the 10 digit classes (*which* digits appear); digit *positions* are never used as
+labels, keeping the setting content-blind. The single-digit training pool is 30,000 real SVHN
+crops and the evaluation set is N=7566 *real* multi-digit house numbers, restricted to two
+distinct digits; there is no leak — the pool and the oracle are drawn from SVHN-*train*,
+evaluation from SVHN-*test*. We train a ResNet-18 from scratch (grayscale, 32x64 canvas, 3
+seeds) and run partition-placement (the FCM-PM analogue, matched to the house-number partition
+law), overlay/max-union (mismatched), CutMix, MixUp, the single-only floor, and an oracle
+trained on *real* multi-digit house numbers (upper reference):
+
+| arm (SVHN, 3 seeds)                     | eval bit_F1 (mean +-std) | mAP    |
+|-----------------------------------------|--------------------------|--------|
+| partition-placement (**matched, ours**) | **0.8855 +-0.0051**      | 0.9442 |
+| overlay / max-union (mismatched)        | 0.5141 +-0.0531          | 0.7837 |
+| cutmix                                  | 0.6688 +-0.0399          | 0.8451 |
+| mixup                                   | 0.7638 +-0.0071          | 0.8744 |
+| single_only (floor)                     | 0.5326 +-0.0242          | 0.8769 |
+| oracle (real multi-digit training)      | 0.8947 +-0.0156          | 0.9546 |
+
+**On real photographed partition data the matched operator wins decisively and recovers the
+oracle.** Partition-placement reaches eval bit_F1 0.8855 +-0.0051 (mAP 0.9442), beating the
+mismatched overlay (0.5141 +-0.0531, +0.371) and **both** other content-blind baselines —
+CutMix (0.6688 +-0.0399) and MixUp (0.7638 +-0.0071) — with **no** mean+-std overlap against
+any of the three, and it sits well above the single-only floor (0.5326 +-0.0242). Crucially it
+recovers the oracle within noise: 0.8855 vs the real-multi-digit oracle's 0.8947 +-0.0156 (~99%,
+overlapping std bands; mAP 0.9442 vs 0.9546). The oracle did **not** collapse — at 0.8947 / mAP
+0.9546 the real photographed task is clearly learnable — so the comparison is *informative*, not
+an undertrained tie: matched blind synthesis reaches oracle-level performance on a task the
+oracle solves well. This is the operator-match partition win on a **real, public** benchmark —
+the public counterpart to the internal chip head-to-head (Sec 5.2.1) and the direct answer to
+whether the win survives outside author-constructed data: it does, on genuine partition structure
+we did not impose. Runner: `multilabel_synth/run_operator_match_svhn.py` (committed).
 
 ### 5.2 MixedWM38 (public benchmark; real multi-label evaluation)
 
@@ -773,11 +846,17 @@ negatives (NI-FAR 19.00%, OOD-FAR 7.66%), whereas FCM-PM keeps every combination
 the crossover the paper's law predicts and the piece WM38-only evidence could not
 supply: a real, multi-label, matched head-to-head in which overlay's superposition
 assumption **loses**, converting operator-match from an assertion into a verified law.
-The same partition/superposition flip is reproduced in full on four public datasets (MNIST,
-FashionMNIST, KMNIST, EMNIST-letters; Sec 5.1.1), where the matched operator recovers the
-oracle in both directions on all four (4/4), so the operator-match law is measured on
-**both** the real chip partition domain and four public datasets — a general law, publicly
-verifiable and not reliant on internal data.
+The *same partition win reproduces on a real, public, non-constructed benchmark* — SVHN
+Street View House Numbers (format-1 house numbers, a partition law we did not define), where
+partition-placement reaches eval bit_F1 0.8855 +-0.0051, beats overlay (0.5141), CutMix
+(0.6688), and MixUp (0.7638) with no std overlap, and recovers a non-collapsed
+real-multi-digit oracle (0.8947, ~99%; Sec 5.1.2) — and the same flip is isolated in **both**
+directions under a controlled mechanism study on four constructed public-source datasets
+(MNIST, FashionMNIST, KMNIST, EMNIST-letters; Sec 5.1.1), where the matched operator recovers
+the oracle 4/4. So the operator-match partition win is measured on the real chip partition
+domain **and** a real public partition benchmark (SVHN), with the four-dataset study supplying
+the clean both-directions mechanism control — a general law, publicly verifiable and not
+reliant on internal data.
 
 **Three-component ablation (chip champion recipe, preserved checkpoints, seed 99).** Each of the
 three method stages contributes (chip multi-defect eval; FAR in %):
@@ -1203,7 +1282,12 @@ at the common pick; 0.654/0.147 at its best pick). The decisive test is the chip
 axes (eval bit-F1 0.9968 +-0.0008 vs 0.8733 +-0.0338; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%, ~24x lower on average with no per-seed overlap), because
 pixelwise-max mis-models a partition — turning operator-match from an assertion into a
 verified law and, with it, FCM-PM into the method of choice for partition-structured
-inspection maps. Density is a modeling characterization consistent with the law (FCM-PM
+inspection maps. The same partition win reproduces on a **real, public, non-constructed**
+benchmark — SVHN house numbers, whose partition law we did not define — where the matched
+partition-placement operator (0.8855 bit-F1) beats overlay, CutMix, and MixUp with no std
+overlap and recovers a non-collapsed real-multi-digit oracle (0.8947, ~99%; Sec 5.1.2), while
+a controlled mechanism study over four constructed public-source datasets isolates the flip in
+both directions. Density is a modeling characterization consistent with the law (FCM-PM
 matches the real 0.29; overlay's over-density 0.50 is the superposition signature). On
 a genuine superposition domain (MNIST) blind synthesis exceeds the oracle on unseen
 combinations. A margin-reject stage drives observed normal FAR to zero at a few-percent
