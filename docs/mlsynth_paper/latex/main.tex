@@ -36,16 +36,20 @@
 % matched operator (overlay) is expected to win there; FCM-PM wins where the law is a
 % partition (chip). Upper reference (multi-label-trained, a genuine supervision
 % distinction): the oracle = multi-label TRAINING (0.974). Contribution order
-% (broad-venue repositioning): (i) the operator-match LAW as a general principle
-% (predictive before-training evidence-survival criterion; falsifiable flip verified on
-% public MNIST both directions + real chip head-to-head; right operator per domain's
-% combination law; FCM-PM wins on partition domains); (ii) annotation-free
-% distribution-free split-conformal FAR guarantee (operator-agnostic; Shin22 lacks);
-% (iii) excess-risk theory TIED to operator-match (matched operator minimizes TV, hence
-% the 2B*TV bound; oracle-level risk up to residual TV); (iv) the single->multi setting +
-% performance-maximization objective (oracle upper reference); (v) method = FCM-PM +
-% val-margin + nb-reject (instantiation for partition/chip domains); (vi) cross-domain
-% framework support (MNIST/audio/text) + VOC location boundary.
+% (broad-venue repositioning; theory DEMOTED 2026-07-17 -- no longer a numbered
+% contribution, now a supporting informal subsection + Appendix A): (i) the operator-match
+% LAW as a general principle (predictive before-training evidence-survival criterion;
+% falsifiable flip verified on public MNIST both directions + real chip head-to-head; right
+% operator per domain's combination law; FCM-PM wins on partition domains; operator-match is
+% the risk-minimizing content-blind choice, tied to the measured oracle-recovery);
+% (ii) annotation-free distribution-free split-conformal FAR guarantee (operator-agnostic;
+% a practical transferable reliability layer, NOT a differentiator -- holds for any operator,
+% overlay in fact gets highest coverage; Shin22 provides none); (iii) the single->multi
+% setting + performance-maximization objective (oracle upper reference); (iv) method =
+% FCM-PM + val-margin + nb-reject (instantiation for partition/chip domains); (v) cross-domain
+% framework support (MNIST/audio/text) + VOC location boundary. The excess-risk theory
+% (matched operator minimizes TV, hence the 2B*TV bound; oracle-level risk up to residual TV)
+% is retained as support only (Sec. "Why matched synthesis works (informal)" + Appendix A).
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{booktabs}
@@ -108,26 +112,25 @@ superposition overlay $0.765$ vs partition-placement $0.430$, CutMix $0.446$, Mi
 the matched operator recovers the oracle in every case, and absolute bit-F1 declines on
 harder sources while the flip direction stays invariant) --- so the operator-match partition
 win holds on a real, public benchmark and not only on author-constructed data, converting
-operator-match from an assertion into a general, publicly reproducible law;
+operator-match from an assertion into a general, publicly reproducible law; matching the
+domain's law is moreover the \emph{risk-minimizing} content-blind choice --- it minimizes a
+simple excess-risk bound (Sec.~\ref{sec:theory}), consistent with the measured MNIST
+oracle-recovery where matched synthesis is statistically indistinguishable from training on
+the true law;
 (ii)~an \textbf{annotation-free, operator-agnostic, distribution-free split-conformal
 false-alarm-rate guarantee}: a full multi-alpha calibration curve on which the realized
 FAR tracks the target across $\alpha\in[0.5\%,10\%]$ to within $0.153$~pp for every
 operator (Fig.~\ref{fig:calib}; a small set of known-good samples yields realized FAR
 $0.040$ at $\alpha{=}0.05$ and $0.006$ at $\alpha{=}0.01$), backed by synthetic normals, a
-negative-target lever, val-margin selection, and naive-Bayes rejection --- the reliability
-layer operator-only prior work (including Shin et al.\ 2022) lacks;
-(iii)~an \textbf{excess-risk theory tied to operator-match}: a general, one-directional
-bound $2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$ under which, among
-content-blind operators, the one matching the domain's true combination law minimizes the
-total-variation distance to the real multi-label distribution and thereby minimizes the
-bound, so matched synthesis attains oracle-level risk up to the residual TV --- honestly
-loose and one-directional, and consistent with the measured MNIST oracle-recovery where
-matched synthesis is statistically indistinguishable from training on the true law;
-(iv)~the \textbf{single$\to$multi setting and the objective of performance maximization
+negative-target lever, val-margin selection, and naive-Bayes rejection --- a practical,
+annotation-free reliability layer that holds for \emph{any} operator (a transferable
+benefit, not a differentiator of our method; operator-only prior work, including Shin
+et al.\ 2022, provides none);
+(iii)~the \textbf{single$\to$multi setting and the objective of performance maximization
 within it}: a multi-label-trained \emph{oracle} ($0.974$ on WM38) bounds the problem as an
 upper reference (it uses supervision we forbid), and the setting is stricter-than-SPML,
 evaluated on real multi-label data and real normals;
-(v)~our \textbf{method for partition domains --- FCM-PM, val-margin checkpoint selection,
+(iv)~our \textbf{method for partition domains --- FCM-PM, val-margin checkpoint selection,
 and naive-Bayes rejection}: on the chip partition domain FCM-PM is the winner
 (${\sim}0.998$ bit-F1), and on the public MixedWM38 benchmark it gives the best
 FAR-controlled tradeoff among the content-blind operators (bit-F1 $0.663$ at NORMAL-FAR
@@ -138,7 +141,7 @@ overlay/summation is the \emph{matched} operator and is genuinely strong ($0.80$
 $0.010$), which we report honestly and do \emph{not} claim to beat, with the Pair-Mask
 lever (which cuts the complement FAR $0.384\to0.147$), val-margin, and naive-Bayes
 rejection as the FAR controls; and
-(vi)~\textbf{cross-domain framework support} across five families spanning the combination
+(v)~\textbf{cross-domain framework support} across five families spanning the combination
 taxonomy: on a controlled MultiMNIST superposition benchmark blind synthesis \emph{exceeds}
 a fully-supervised oracle on held-out label combinations it never saw ($+0.198$ mAP; full
 test mAP $0.868$ vs $0.846$) --- a regime where supervision structurally cannot help ---
@@ -290,29 +293,21 @@ Our contributions are:
   supplying the clean both-directions mechanism control --- a general, publicly verifiable law
   established on real, public, non-constructed data, not a dataset-specific artifact. On WM38 --- a superposition regime under the binary encoding
   --- overlay is instead the matched operator and is honestly strong ($0.80$/$0.010$); we
-  do \emph{not} claim to beat it there.
-\item \textbf{An annotation-free FAR guarantee.} A strict source-only reliability
-  pipeline --- synthetic normals, negative-target control, synthetic validation
-  margin for checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern
-  likelihood for rejection, and \textbf{split-conformal calibration} for a
-  finite-sample, distribution-free marginal FAR guarantee under exchangeability ---
-  that is \emph{operator-agnostic} and absent from prior operator-only work
-  (e.g.\ Shin et al.\ 2022). A full multi-alpha calibration curve shows the realized
-  FAR tracking the target across $\alpha\in[0.5\%,10\%]$ to within $0.153$~pp for
-  \emph{every} operator (Fig.~\ref{fig:calib}).
-\item \textbf{An excess-risk theory tied to operator-match.} A general,
-  one-directional excess-risk bound
-  $2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$ (Sec.~\ref{sec:theory}):
-  among content-blind operators, the one matching the domain's true combination law
-  minimizes the total-variation distance to the real multi-label law and thereby
-  minimizes the bound, so matched synthesis attains oracle-level risk up to the residual
-  TV --- and in the idealized independent-source limit is risk-equivalent to full
-  multi-label supervision (Cor.~\ref{cor:noadv}). The statement is honestly loose and
-  one-directional (a larger TV only weakens the \emph{upper} guarantee, so it does no
-  operator-preference work on WM38, where the matched max-union is over-dense yet
-  strong), and it is consistent with the measured MNIST oracle-recovery
-  (Cor.~\ref{cor:oraclerecover}), where matched synthesis is statistically
-  indistinguishable from training on the true law.
+  do \emph{not} claim to beat it there. A short excess-risk argument
+  (Sec.~\ref{sec:theory}) formalizes \emph{why}: among content-blind operators the one
+  matching the domain's combination law minimizes the excess-risk bound, so
+  \emph{operator-match is the risk-minimizing content-blind choice}, tied to the measured
+  oracle-recovery (Cor.~\ref{cor:oraclerecover}).
+\item \textbf{An annotation-free FAR guarantee (a practical reliability layer).} A strict
+  source-only reliability pipeline --- synthetic normals, negative-target control, synthetic
+  validation margin for checkpoint selection, class-conditional Gaussian (naive-Bayes)
+  pattern likelihood for rejection, and \textbf{split-conformal calibration} for a
+  finite-sample, distribution-free marginal FAR guarantee under exchangeability --- that is
+  \emph{operator-agnostic}: it holds for \emph{any} operator, so it is a transferable
+  practical benefit rather than a differentiator of our method, and it is absent from prior
+  operator-only work (e.g.\ Shin et al.\ 2022). A full multi-alpha calibration curve shows
+  the realized FAR tracking the target across $\alpha\in[0.5\%,10\%]$ to within $0.153$~pp
+  for \emph{every} operator (Fig.~\ref{fig:calib}).
 \item \textbf{The single$\to$multi setting and performance maximization within it.}
   We train multi-label recognizers with \emph{zero multi-label annotation} --- no
   multi-label image and no all-negative (normal) label --- by synthesizing
@@ -749,6 +744,18 @@ whether the win survives outside author-constructed data: it does, on genuine pa
 structure we did not impose. Runner:
 \texttt{multilabel\_synth/run\_operator\_match\_svhn.py} (committed).
 
+\textbf{Scope (honest).} SVHN here is a deliberately \emph{clean} real-public partition
+instance, \emph{not} a mainstream-scale multi-label benchmark: the task is restricted to two
+distinct digits, and digit \emph{positions} are discarded so the target is multi-hot
+\emph{presence} only --- a self-imposed content-blind framing that is natural in the fab but
+artificial on house numbers, where position is the usual supervised signal. One per-seed
+wrinkle (CutMix seed~0 over-alarms with normal-FAR $1.0$ on the blank-canvas arm) does
+\emph{not} touch the bit-F1 verdict, which holds across all three seeds with no
+mean$\pm$std overlap. We therefore read SVHN as \emph{one} real-public partition point in a
+multi-domain body of evidence (chip, four constructed datasets), and broader real-public
+partition benchmarks --- e.g.\ multi-region remote-sensing land-cover or document-layout
+multi-tag sets --- are the natural next step.
+
 \begin{table}[t]
 \centering
 \caption{Operator-match partition win on a \emph{real, public, non-constructed} benchmark:
@@ -869,7 +876,26 @@ seed (s99), overlay's combination bit-F1 collapses to $0.61$--$0.80$ (bb+fork $0
 fork+scratch $0.610$, fork+scratch\_rot $0.629$) and it over-fires on negatives (NI-FAR
 $19.00\%$, OOD-FAR $7.66\%$), whereas FCM-PM keeps every combination crisp
 ($0.99$--$1.00$) with well-separated negatives (eval neg prob $0.1266$; NI-FAR
-$0.00\%$). This is the crossover the paper's law predicts, and the piece WM38-only
+$0.00\%$).
+
+\textbf{Fairness of the head-to-head (limitation, addressed).} Both arms share \emph{one}
+recipe (T7/LS$0.295$/g3/grid9) and the \emph{same} naive-Bayes (I10) acceptor, and that
+recipe/acceptor was tuned on the FCM-PM champion, so a rigorous reader may ask whether
+overlay's higher FAR is partly an artifact of running it in FCM-PM's neighborhood. This is a
+deliberate single-variable design --- only the multi-defect synthesis operator changes, with
+every other factor held fixed --- and the result is not a tuning artifact: overlay's failure
+is \emph{structural}, not a mis-set threshold. Its combination bit-F1 collapses to
+$0.61$--$0.80$ because pixelwise-max under-detects the second defect (an error no acceptor
+threshold can recover), \emph{and} it simultaneously over-fires on negatives (NI-FAR
+$19.00\%$); a single shared acceptor cannot both raise a suppressed positive and suppress an
+over-fired negative, so retuning it toward overlay trades one failure for the other rather
+than closing the gap. Decisively, the \emph{same} partition win reproduces where overlay is
+under \emph{no} shared FCM-PM recipe: on real, public SVHN with per-arm ResNet-18 trained
+from scratch (Sec.~\ref{sec:svhn}) and across the four constructed datasets, each under its
+\emph{own} protocol (Sec.~\ref{sec:opmatch-mnist}). The shared-recipe caveat therefore bounds
+only the \emph{magnitude} of the chip gap, not its \emph{direction}.
+
+This is the crossover the paper's law predicts, and the piece WM38-only
 evidence could not supply: a real, multi-label, matched head-to-head in which overlay's
 superposition assumption \emph{loses}, converting operator-match from an assertion into
 a verified law. The \emph{same partition win reproduces on a real, public, non-constructed
@@ -956,10 +982,13 @@ supervision, which our setting forbids and which is exactly the resource the bou
 shows to be necessary.
 
 \subsection{Rejection, selection, and the conformal guarantee}
-The \emph{distribution-free, finite-sample conformal FAR guarantee is the
-framework's strongest reliability asset}, and it holds for \emph{any} operator ---
-every content-blind operator and the overlay/summation join alike --- so it is
-precisely what operator-only prior work (incl.\ Shin 2022) lacks. Margin rejection
+The distribution-free, finite-sample conformal FAR guarantee is a useful,
+annotation-free \emph{reliability layer}, and it holds for \emph{any} operator ---
+every content-blind operator and the overlay/summation join alike. It is a practical,
+transferable benefit that operator-only prior work (incl.\ Shin 2022) omits, \emph{not} a
+differentiating novelty of our method: it is textbook split-conformal, it favors no
+particular operator, and on this benchmark the overlay/summation join in fact retains the
+highest coverage (below). Margin rejection
 reproduces three times: at $\tau{=}0.9$, coverage $91.7$--$98.1\%$ with NORMAL-FAR
 driven to $0.000$ and accepted-set accuracy preserved; longer training makes rejection
 cheaper. Split-conformal calibration on 500 known-good normals realizes FAR $0.040$ at
@@ -974,8 +1003,9 @@ for the weaker arms (fcm $83.9$, cutmix $75.9$, mixup $73.7$, single $51.8$); th
 overlay/summation arm retains $99.5\%$. \emph{Honest:} the overlay/summation join
 (strong on this superposition benchmark) has the \emph{highest} coverage ($99.5\%$),
 consistent with it being WM38's matched operator; we therefore claim only that the
-guarantee itself is operator-agnostic, annotation-free, and novel (Shin~2022 provides
-none), that it is nearly free on our deployed FCM-PM, and that Pair-Mask helps among
+guarantee itself is operator-agnostic and annotation-free --- a practical, transferable
+reliability layer (Shin~2022 provides none), not a differentiator of our operator --- that
+it is nearly free on our deployed FCM-PM, and that Pair-Mask helps among
 the partition-regime arms. Extending the two operating points to a full calibration sweep,
 across target levels $\alpha\in[0.5\%,10\%]$ the realized NORMAL FAR tracks $\alpha$
 to within $0.153$~pp (maximum deviation over all seven operators and five levels) for
@@ -992,12 +1022,14 @@ val rises monotonically).
 \caption{Annotation-free split-conformal FAR guarantee: usable coverage retained at
 a guaranteed $1\%$ NORMAL-FAR (5 seeds $\times$ 50 splits, $n_{\mathrm{cal}}{=}500$).
 The distribution-free guarantee holds for \emph{every} operator (realized FAR
-$\approx\alpha$) --- this operator-agnostic, annotation-free reliability layer is
-precisely what operator-only prior work (incl.\ Shin 2022) lacks. Coverage at the
-guarantee is nearly free on our deployed method: FCM-PM retains $97.2\%$, then
-$52$--$84\%$ for the weaker content-blind arms; the overlay/summation join (WM38's
-matched superposition operator) retains $99.5\%$. We claim the guarantee is novel and
-nearly free on FCM-PM, and that Pair-Mask helps among the partition-regime arms.}
+$\approx\alpha$) --- an operator-agnostic, annotation-free reliability layer that
+operator-only prior work (incl.\ Shin 2022) omits, a practical transferable benefit rather
+than a differentiator of our operator. Coverage at the guarantee is nearly free on our
+deployed method: FCM-PM retains $97.2\%$, then $52$--$84\%$ for the weaker content-blind
+arms; the overlay/summation join (WM38's matched superposition operator) in fact retains the
+\emph{highest} coverage, $99.5\%$. We present the guarantee as a practical reliability layer
+that is nearly free on FCM-PM, and note that Pair-Mask helps among the partition-regime
+arms.}
 \label{fig:conformal}
 \end{figure}
 
@@ -1009,8 +1041,9 @@ $n_{\mathrm{cal}}{=}500$ known-good real normals). Across target levels
 $\alpha\in[0.5\%,10\%]$ the realized NORMAL FAR tracks the $y{=}x$ diagonal for
 \emph{every} synthesis operator (maximum deviation $0.153$~pp over all seven
 operators and five levels), the distribution-free finite-sample calibration that
-operator-only prior work --- including Shin~2022's Summation Mixup --- lacks. The
-guarantee is operator-agnostic and nearly free on our deployed FCM-PM (blue); the
+operator-only prior work --- including Shin~2022's Summation Mixup --- omits. The
+guarantee is operator-agnostic --- a practical, transferable reliability layer rather than a
+differentiator of our operator --- and nearly free on our deployed FCM-PM (blue); the
 max-union / summation curve (green) is WM38's matched superposition operator, shown
 for completeness. Error bars are bootstrap $95\%$ CIs.}
 \label{fig:calib}
@@ -1203,19 +1236,20 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \end{tabular}
 \end{table}
 
-\section{Theory: operator-match minimizes the excess-risk bound}\label{sec:theory}
+\subsection{Why matched synthesis works (informal)}\label{sec:theory}
 
-This section gives the theoretical backing of the operator-match law: a
-\emph{general, one-directional} excess-risk bound whose minimizer, among content-blind
-operators, is the operator matching the domain's true combination law. The bound is
-honestly loose --- it upper-bounds risk by $2B$ times a total-variation distance, so a
-\emph{larger} TV only weakens the \emph{upper} guarantee and never certifies larger
-risk; it therefore does \emph{no} operator-\emph{preference} work on the WM38 result
-(indeed the matched, over-dense max-union attains the best risk there). What it does
-establish is the sense in which ``match the domain's combination law'' is the
-risk-minimizing content-blind choice, and \emph{when} matched synthesis reaches
-oracle-level risk --- borne out by the measured MNIST oracle-recovery
-(Cor.~\ref{cor:oraclerecover}).
+The theory \emph{supports} the empirical results rather than driving them, so we keep only
+a brief, informal excess-risk argument here --- for \emph{why} matching the domain's
+combination law helps and \emph{when} blind synthesis reaches oracle-level performance ---
+and defer the operator-match minimality corollary, the density-gap looseness illustration,
+the finite-sample bound, and the conformal-control statement to Appendix~\ref{app:theory}.
+The bound below is a \emph{general, one-directional} upper bound: it upper-bounds risk by
+$2B$ times a total-variation distance, so a \emph{larger} TV only weakens the \emph{upper}
+guarantee and never certifies larger risk --- it therefore does \emph{no}
+operator-\emph{preference} work on WM38, where the matched, over-dense max-union attains the
+best risk. What it does establish is the sense in which matching the domain's combination
+law is the risk-minimizing content-blind choice, borne out by the measured MNIST
+oracle-recovery (Cor.~\ref{cor:oraclerecover}).
 
 \begin{definition}[Blind-combination domain]\label{def:blindcomb}
 A domain is a blind-combination domain if the observation of co-occurring
@@ -1237,28 +1271,6 @@ matched operator is FCM-PM, which beats overlay in a measured head-to-head
 (Sec.~\ref{sec:crossover}). Natural RGB scenes are not blind-combination domains ---
 opaque objects occlude.
 \end{definition}
-
-\begin{proposition}[Consistency and order closure]
-In a blind-combination domain with independently placed sources, synthesis using
-the domain's evidence-preserving operator $\oplus$ samples the real 2-mix
-distribution up to a residual shift, and when $\oplus$ is associative the synthesis
-family is closed under combination order. A summary statistic on which real and
-synthetic laws disagree lower-bounds the TV in Theorem~\ref{thm:excess}: e.g.\ on WM38
-the superposition operator (max-union) over-densifies to defect-die fraction $0.50$ vs
-real $0.31$, whereas the partition complement matches ($0.29$). This bound is
-one-directional --- a larger TV only weakens the \emph{upper} guarantee --- and on WM38
-(a superposition regime) the over-dense max-union operator incurs low measured risk
-(Sec.~\ref{sec:experiments}), consistent with over-density being the superposition
-signature rather than a defect; density is a modeling characterization tied to the
-combination law.
-\end{proposition}
-
-\emph{Empirical verdict.} With the summation join on WM38, bit-level
-closure holds (2/3/4-mix bit-F1 $0.784/0.671/0.628$ from pair-only training); joint
-prediction does not (exact $0.699/0.143/0.000$), and the deviation is not
-label-side: neither combination-support knowledge nor higher-order synthesis
-recovers it. The residual $\delta$ is the appearance interaction of real high-order
-mixes.
 
 \begin{theorem}[Excess risk of blind synthesis]\label{thm:excess}
 For a per-example loss in $[0,B]$ and a hypothesis class $\mathcal F$, write
@@ -1285,69 +1297,19 @@ The mixture chain rule $\mathrm{TV}(\pi\!\cdot\!K,\pi'\!\cdot\!K')\le
 \mathrm{TV}(\pi,\pi')+\mathbb{E}_{S\sim\pi'}\mathrm{TV}(K,K')$ finishes.
 \end{proof}
 
-\begin{corollary}[Operator-match minimizes the bound]\label{cor:opmatch}
-Theorem~\ref{thm:excess} holds for \emph{every} content-blind operator $T$,
-whose synthetic law $D_{\mathrm{syn}}^{T}$ is induced by applying $T$ to
-independent singles. Since the excess risk is nonnegative and its certificate
-depends on $T$ only through $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$,
-the tightest-guarantee operator is
-$T^\star=\arg\min_T \mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$ --- the
-operator whose synthetic-mix law is closest in total variation to the real-mix
-law. In a blind-combination domain (Definition~\ref{def:blindcomb}), $T^\star$ is the
-operator matching the domain's true combination law $\oplus$: matching $\oplus$ sets the
-observation conditional $K_{\mathrm{syn}}=K_{\mathrm{real}}$, driving the conditional
-(independence) term of the bound to its residual and thereby minimizing $2B\,\mathrm{TV}$
-among content-blind operators. Hence \emph{operator-match is the risk-minimizing
-content-blind choice}, and matched synthesis attains oracle-level risk up to the residual
-TV; when sources are conditionally independent and the subset prior matches, the
-certificate is zero (Cor.~\ref{cor:noadv}) and matched synthesis is risk-equivalent to
-full multi-label supervision within $\mathcal F$. This statement is about the bound only,
-and is honestly loose:
-because $T^\star$ minimizes an upper bound rather than the risk itself, a strictly
-larger TV need not mean strictly larger risk (Cor.~\ref{cor:boundary}) --- indeed on
-WM38 (a superposition regime) the higher-TV max-union operator attains low risk,
-which is exactly why it is WM38's matched operator. Because $T^\star$ depends on
-$D_{\mathrm{real}}$, the criterion characterizes the evidence-preserving operator per
-domain (superposition-structured wafer / digits / audio $\to$ summation;
-partition-structured chip $\to$ partition-complement; text $\to$ averaging); the
-measured selections --- including the chip head-to-head where the partition operator
-beats overlay (Sec.~\ref{sec:crossover}) --- are one criterion on different
+\emph{Operator-match minimizes this bound.} Theorem~\ref{thm:excess} holds for
+\emph{every} content-blind operator, and its certificate depends on the operator only
+through $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$; in a blind-combination
+domain (Def.~\ref{def:blindcomb}) the operator matching the true combination law sets
+$K_{\mathrm{syn}}=K_{\mathrm{real}}$, driving the conditional term to its residual, so
+among content-blind operators \emph{operator-match is the risk-minimizing choice} and
+matched synthesis attains oracle-level risk up to the residual TV. The full statement
+(Cor.~\ref{cor:opmatch}), the matched-law risk equivalence (Cor.~\ref{cor:noadv}), the
+one-directional density-gap looseness illustration (Cor.~\ref{cor:density}), and the
+finite-sample and conformal results are collected in Appendix~\ref{app:theory}; the bound
+does no operator-preference work, and the measured operator selections (including the chip
+head-to-head, Sec.~\ref{sec:crossover}) are one criterion on different
 $D_{\mathrm{real}}$, not a per-domain rule.
-\end{corollary}
-
-\begin{corollary}[Density gap lower-bounds the TV (a general bound, not a
-preference)]\label{cor:density}
-For any measurable statistic $g$, the data-processing inequality gives
-$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})\ge
-\mathrm{TV}(g_\#D_{\mathrm{real}},g_\#D_{\mathrm{syn}}^{T})$, so a measured
-distributional gap \emph{lower-bounds} the operator's excess-risk \emph{upper
-bound}. Taking $g=$ defect-die fraction on WM38, $91\%$ of max-union synthetics
-exceed the real-2-mix $95$th percentile, so with $A=\{g>q^{\mathrm{real}}_{.95}\}$,
-$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{\text{max-union}})\ge
-0.91-0.05=0.86$, making the guarantee vacuous ($2B\cdot0.86>B$); the density-matching
-complement's witness is $\approx0$. \textbf{Crucially, this does \emph{not} imply
-max-union is a worse operator, and we do not use it as a preference argument.} The
-bound is a one-directional \emph{upper} bound: a large TV only means the certificate is
-uninformative, never that the real risk is large (Cor.~\ref{cor:boundary}). Empirically
-on WM38 (a superposition regime) max-union attains high bit-F1 ($0.80$) and low FAR
-($0.010$) despite its over-density (Sec.~\ref{sec:experiments}) --- over-density is the
-superposition signature, and max-union is WM38's matched operator. We therefore retain
-this corollary only as a general illustration of the bound's looseness; operator choice
-is set by the domain's combination law, and on the chip partition domain the
-density-matching FCM-PM beats overlay head-to-head (Sec.~\ref{sec:crossover}).
-\end{corollary}
-
-\begin{corollary}[Matched-law risk equivalence]\label{cor:noadv}
-In a blind-combination domain with conditionally independent sources, if
-synthesis uses the domain's fidelity-maximizing operator $\oplus$ then
-$K_{\mathrm{real}}=K_{\mathrm{syn}}$ on every evaluated subset. If synthesis also
-matches the subset prior, the excess risk is zero and blind synthesis is
-risk-equivalent to full multi-label supervision within $\mathcal F$. This is the
-idealized regime; on WM38 a residual gap to the oracle remains (the appearance
-interaction of real high-order mixes, Sec.~\ref{sec:experiments}), so the
-zero-shift equivalence is approached, not attained. When all-negative samples are
-evaluated, this includes them only if the empty-set conditional is also matched.
-\end{corollary}
 
 \begin{corollary}[Measured oracle-recovery]\label{cor:oraclerecover}
 The controlled multi-dataset experiment (Sec.~\ref{sec:opmatch-mnist}) instantiates
@@ -1356,65 +1318,6 @@ blind operator recovers the true-law oracle within noise (e.g.\ MNIST partition 
 oracle $0.9072$; superposition $0.7650$ vs oracle $0.7650$), the empirically small residual
 TV expected when synthesis reproduces the domain's combination law.
 \end{corollary}
-
-\begin{corollary}[Limit of the zero-shift guarantee]\label{cor:boundary}
-Under matched subset priors,
-$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})=
-\mathbb E_{S\sim\pi_{\mathrm{real}}}\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),
-K_{\mathrm{syn}}(\cdot|S))$. Hence a non-join conditional on a positive-mass
-subset prevents distributional equivalence. Opaque occlusion can create this
-mismatch in natural RGB, as our VOC experiment illustrates. A positive TV
-does not alone imply positive excess classification risk; that stronger claim
-also requires Bayes-decision disagreement on a positive-mass region.
-\end{corollary}
-
-\begin{theorem}[Finite-sample]\label{thm:finite}
-Let $\mathcal G=\{z\mapsto\ell(f,z):f\in\mathcal F\}$ be the induced loss
-class. The empirical risk minimizer over $\mathcal{F}$ on $m$ i.i.d.\
-synthetic samples satisfies, w.p.\ $\ge 1-\delta$,
-\[
-R_{\mathrm{real}}(\hat f) - R_{\mathrm{real}}(f^\star) \le
-2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})
-+ 4\,\mathfrak{R}_m(\mathcal{G})
-+ 2B\sqrt{\tfrac{2\ln(2/\delta)}{m}}.
-\]
-If $\mathfrak R_m(\mathcal G)\to0$, the estimation terms vanish and the
-asymptotic excess risk has limsup at most
-$2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})$; it need not equal this
-upper bound. Full-scale runs probe finite-sample effects but do not estimate TV.
-\end{theorem}
-
-\begin{definition}[Label fidelity]
-For operator $T$, source survivals $S_a, S_b$ are the fractions of class
-evidence preserved in $\tilde{x}$; the fidelity is
-$\phi(T) = \mathbb{E}[\min(S_a,S_b)]$ and the catastrophe rate
-$\rho(T) = P(\min(S_a,S_b) < s_0)$.
-\end{definition}
-
-\begin{proposition}[Catastrophe implies label--content inconsistency]
-Let $h_k(x)$ indicate detectable class-$k$ evidence. If the synthesis target
-retains $y_k=1$ after source destruction, then
-$P(h_k(\tilde x)=0\mid y_k=1)=\rho_k$: a $\rho_k$ fraction of positive targets
-is unsupported by detectable evidence. Translating this identity into a
-monotonic risk or recall bound requires additional loss, margin, and
-hypothesis-class assumptions.
-\end{proposition}
-
-\emph{Empirical verdict.} Survival ordering equals performance ordering in
-all tested families; the two failure modes separate as predicted --- Mixup
-(uniform $S{\approx}1/2$) yields calibrated under-confidence, CutMix
-(bimodal $S$) yields confident false supervision and inflated false alarms.
-
-\begin{proposition}[Conformal FAR control]
-Let $k=\lceil(n{+}1)(1{-}\alpha)\rceil$ and $\tau$ be the $k$th order statistic
-of max-bit probabilities on $n$ calibration normals exchangeable with a test
-normal. Then $P(s_{\mathrm{test}}>\tau)\leq\alpha$ marginally. Using $\geq$
-requires continuous scores/no ties or randomized tie-breaking.
-\end{proposition}
-
-\emph{Empirical verdict.} Verified with 500 known-good samples (realized
-$0.040$ at $\alpha{=}0.05$; $0.006$ at $\alpha{=}0.01$); calibration on
-training-style synthetic normals violates exchangeability and fails.
 
 \section{Discussion and Limitations}\label{sec:discussion}
 
@@ -1563,6 +1466,161 @@ take the partition-complement, disjoint-coordinate text takes averaging, and nat
 RGB (VOC) marks the boundary where content-blind synthesis fails and location
 supervision becomes necessary. What remains with the oracle is the appearance of real
 high-order interactions --- a boundary we quantify and leave open.
+
+\appendix
+\section{Additional theory and reliability statements}\label{app:theory}
+
+This appendix collects the formal statements that support the informal argument of
+Sec.~\ref{sec:theory}: the consistency/order-closure proposition, the operator-match
+minimality corollary, the density-gap looseness illustration, the matched-law risk
+equivalence, the zero-shift boundary, the finite-sample bound, and the label-fidelity and
+conformal-control statements. None of them is load-bearing for the empirical results; they
+formalize \emph{why} matched synthesis works and \emph{when} it reaches oracle-level risk.
+
+\begin{proposition}[Consistency and order closure]
+In a blind-combination domain with independently placed sources, synthesis using
+the domain's evidence-preserving operator $\oplus$ samples the real 2-mix
+distribution up to a residual shift, and when $\oplus$ is associative the synthesis
+family is closed under combination order. A summary statistic on which real and
+synthetic laws disagree lower-bounds the TV in Theorem~\ref{thm:excess}: e.g.\ on WM38
+the superposition operator (max-union) over-densifies to defect-die fraction $0.50$ vs
+real $0.31$, whereas the partition complement matches ($0.29$). This bound is
+one-directional --- a larger TV only weakens the \emph{upper} guarantee --- and on WM38
+(a superposition regime) the over-dense max-union operator incurs low measured risk
+(Sec.~\ref{sec:experiments}), consistent with over-density being the superposition
+signature rather than a defect; density is a modeling characterization tied to the
+combination law.
+\end{proposition}
+
+\emph{Empirical verdict.} With the summation join on WM38, bit-level
+closure holds (2/3/4-mix bit-F1 $0.784/0.671/0.628$ from pair-only training); joint
+prediction does not (exact $0.699/0.143/0.000$), and the deviation is not
+label-side: neither combination-support knowledge nor higher-order synthesis
+recovers it. The residual $\delta$ is the appearance interaction of real high-order
+mixes.
+
+\begin{corollary}[Operator-match minimizes the bound]\label{cor:opmatch}
+Theorem~\ref{thm:excess} holds for \emph{every} content-blind operator $T$,
+whose synthetic law $D_{\mathrm{syn}}^{T}$ is induced by applying $T$ to
+independent singles. Since the excess risk is nonnegative and its certificate
+depends on $T$ only through $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$,
+the tightest-guarantee operator is
+$T^\star=\arg\min_T \mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})$ --- the
+operator whose synthetic-mix law is closest in total variation to the real-mix
+law. In a blind-combination domain (Definition~\ref{def:blindcomb}), $T^\star$ is the
+operator matching the domain's true combination law $\oplus$: matching $\oplus$ sets the
+observation conditional $K_{\mathrm{syn}}=K_{\mathrm{real}}$, driving the conditional
+(independence) term of the bound to its residual and thereby minimizing $2B\,\mathrm{TV}$
+among content-blind operators. Hence \emph{operator-match is the risk-minimizing
+content-blind choice}, and matched synthesis attains oracle-level risk up to the residual
+TV; when sources are conditionally independent and the subset prior matches, the
+certificate is zero (Cor.~\ref{cor:noadv}) and matched synthesis is risk-equivalent to
+full multi-label supervision within $\mathcal F$. This statement is about the bound only,
+and is honestly loose:
+because $T^\star$ minimizes an upper bound rather than the risk itself, a strictly
+larger TV need not mean strictly larger risk (Cor.~\ref{cor:boundary}) --- indeed on
+WM38 (a superposition regime) the higher-TV max-union operator attains low risk,
+which is exactly why it is WM38's matched operator. Because $T^\star$ depends on
+$D_{\mathrm{real}}$, the criterion characterizes the evidence-preserving operator per
+domain (superposition-structured wafer / digits / audio $\to$ summation;
+partition-structured chip $\to$ partition-complement; text $\to$ averaging); the
+measured selections --- including the chip head-to-head where the partition operator
+beats overlay (Sec.~\ref{sec:crossover}) --- are one criterion on different
+$D_{\mathrm{real}}$, not a per-domain rule.
+\end{corollary}
+
+\begin{corollary}[Density gap lower-bounds the TV (a general bound, not a
+preference)]\label{cor:density}
+For any measurable statistic $g$, the data-processing inequality gives
+$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{T})\ge
+\mathrm{TV}(g_\#D_{\mathrm{real}},g_\#D_{\mathrm{syn}}^{T})$, so a measured
+distributional gap \emph{lower-bounds} the operator's excess-risk \emph{upper
+bound}. Taking $g=$ defect-die fraction on WM38, $91\%$ of max-union synthetics
+exceed the real-2-mix $95$th percentile, so with $A=\{g>q^{\mathrm{real}}_{.95}\}$,
+$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}}^{\text{max-union}})\ge
+0.91-0.05=0.86$, making the guarantee vacuous ($2B\cdot0.86>B$); the density-matching
+complement's witness is $\approx0$. \textbf{Crucially, this does \emph{not} imply
+max-union is a worse operator, and we do not use it as a preference argument.} The
+bound is a one-directional \emph{upper} bound: a large TV only means the certificate is
+uninformative, never that the real risk is large (Cor.~\ref{cor:boundary}). Empirically
+on WM38 (a superposition regime) max-union attains high bit-F1 ($0.80$) and low FAR
+($0.010$) despite its over-density (Sec.~\ref{sec:experiments}) --- over-density is the
+superposition signature, and max-union is WM38's matched operator. We therefore retain
+this corollary only as a general illustration of the bound's looseness; operator choice
+is set by the domain's combination law, and on the chip partition domain the
+density-matching FCM-PM beats overlay head-to-head (Sec.~\ref{sec:crossover}).
+\end{corollary}
+
+\begin{corollary}[Matched-law risk equivalence]\label{cor:noadv}
+In a blind-combination domain with conditionally independent sources, if
+synthesis uses the domain's fidelity-maximizing operator $\oplus$ then
+$K_{\mathrm{real}}=K_{\mathrm{syn}}$ on every evaluated subset. If synthesis also
+matches the subset prior, the excess risk is zero and blind synthesis is
+risk-equivalent to full multi-label supervision within $\mathcal F$. This is the
+idealized regime; on WM38 a residual gap to the oracle remains (the appearance
+interaction of real high-order mixes, Sec.~\ref{sec:experiments}), so the
+zero-shift equivalence is approached, not attained. When all-negative samples are
+evaluated, this includes them only if the empty-set conditional is also matched.
+\end{corollary}
+
+\begin{corollary}[Limit of the zero-shift guarantee]\label{cor:boundary}
+Under matched subset priors,
+$\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})=
+\mathbb E_{S\sim\pi_{\mathrm{real}}}\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),
+K_{\mathrm{syn}}(\cdot|S))$. Hence a non-join conditional on a positive-mass
+subset prevents distributional equivalence. Opaque occlusion can create this
+mismatch in natural RGB, as our VOC experiment illustrates. A positive TV
+does not alone imply positive excess classification risk; that stronger claim
+also requires Bayes-decision disagreement on a positive-mass region.
+\end{corollary}
+
+\begin{theorem}[Finite-sample]\label{thm:finite}
+Let $\mathcal G=\{z\mapsto\ell(f,z):f\in\mathcal F\}$ be the induced loss
+class. The empirical risk minimizer over $\mathcal{F}$ on $m$ i.i.d.\
+synthetic samples satisfies, w.p.\ $\ge 1-\delta$,
+\[
+R_{\mathrm{real}}(\hat f) - R_{\mathrm{real}}(f^\star) \le
+2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})
++ 4\,\mathfrak{R}_m(\mathcal{G})
++ 2B\sqrt{\tfrac{2\ln(2/\delta)}{m}}.
+\]
+If $\mathfrak R_m(\mathcal G)\to0$, the estimation terms vanish and the
+asymptotic excess risk has limsup at most
+$2B\,\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})$; it need not equal this
+upper bound. Full-scale runs probe finite-sample effects but do not estimate TV.
+\end{theorem}
+
+\begin{definition}[Label fidelity]
+For operator $T$, source survivals $S_a, S_b$ are the fractions of class
+evidence preserved in $\tilde{x}$; the fidelity is
+$\phi(T) = \mathbb{E}[\min(S_a,S_b)]$ and the catastrophe rate
+$\rho(T) = P(\min(S_a,S_b) < s_0)$.
+\end{definition}
+
+\begin{proposition}[Catastrophe implies label--content inconsistency]
+Let $h_k(x)$ indicate detectable class-$k$ evidence. If the synthesis target
+retains $y_k=1$ after source destruction, then
+$P(h_k(\tilde x)=0\mid y_k=1)=\rho_k$: a $\rho_k$ fraction of positive targets
+is unsupported by detectable evidence. Translating this identity into a
+monotonic risk or recall bound requires additional loss, margin, and
+hypothesis-class assumptions.
+\end{proposition}
+
+\emph{Empirical verdict.} Survival ordering equals performance ordering in
+all tested families; the two failure modes separate as predicted --- Mixup
+(uniform $S{\approx}1/2$) yields calibrated under-confidence, CutMix
+(bimodal $S$) yields confident false supervision and inflated false alarms.
+
+\begin{proposition}[Conformal FAR control]
+Let $k=\lceil(n{+}1)(1{-}\alpha)\rceil$ and $\tau$ be the $k$th order statistic
+of max-bit probabilities on $n$ calibration normals exchangeable with a test
+normal. Then $P(s_{\mathrm{test}}>\tau)\leq\alpha$ marginally. Using $\geq$
+requires continuous scores/no ties or randomized tie-breaking.
+\end{proposition}
+
+\emph{Empirical verdict.} Verified with 500 known-good samples (realized
+$0.040$ at $\alpha{=}0.05$; $0.006$ at $\alpha{=}0.01$); calibration on
+training-style synthetic normals violates exchangeability and fails.
 
 \bibliographystyle{plainnat}
 \bibliography{refs}
