@@ -54,15 +54,19 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 > excluding overlay", "density-shift is moot".
 >
 > The paper is an **annotation-free, reliability-guaranteed, cross-domain FRAMEWORK**
-> whose contribution order is: (i) the single→multi **setting** + the objective of
-> **performance maximization** within it, with the oracle as a multi-label-trained
-> upper reference; (ii) the **operator-match LAW**, now MEASURED by the chip
-> head-to-head (right operator per domain's combination law; FCM-PM wins on partition
-> domains); (iii) the **method** = FCM-PM + val-margin + naive-Bayes reject, the winner
-> on the chip partition domain and the best FAR-controlled content-blind operator on
-> WM38; (iv) an **annotation-free, distribution-free split-conformal FAR guarantee**
-> (the reliability layer operator-only prior work, incl. Shin22, lacks); (v) an
-> **excess-risk theory** as a general, honestly loose / one-directional bound; (vi)
+> whose contribution order (broad-venue repositioning) is: (i) the **operator-match
+> LAW** as a general principle, with a predictive before-training criterion (evidence
+> survival) and a falsifiable flip MEASURED in both directions on public MNIST and by
+> the real chip head-to-head (right operator per domain's combination law; FCM-PM wins
+> on partition domains); (ii) an **annotation-free, distribution-free split-conformal
+> FAR guarantee** (operator-agnostic; the reliability layer operator-only prior work,
+> incl. Shin22, lacks); (iii) an **excess-risk theory TIED to operator-match** (the
+> matched operator minimizes TV, hence the 2B*TV bound; matched synthesis attains
+> oracle-level risk up to the residual TV); (iv) the single->multi **setting** + the
+> objective of **performance maximization** within it, with the oracle as a
+> multi-label-trained upper reference; (v) the **method** = FCM-PM + val-margin +
+> naive-Bayes reject (the partition-domain instantiation), the winner on the chip
+> partition domain and the best FAR-controlled content-blind operator on WM38; (vi)
 > **cross-domain framework support** (MNIST / audio / text) with an honest natural-image
 > boundary (VOC). A **label-fidelity / operator-match criterion** characterizes which
 > content-blind operator preserves evidence per domain (summation/union on
@@ -82,58 +86,64 @@ impractical: co-occurrences explode combinatorially, rare combinations may
 never be observed in labeled form, and overlapping patterns are ambiguous to
 annotate. In contrast, single-defect examples are cheap and unambiguous. We
 study a strict setting — **single-label training, multi-label evaluation** with
-**no multi-label or normal annotation** (the content-blind constraint) — and ask how
-to **maximize** multi-label performance in it by synthesizing combination examples from
-single-label sources. We contribute (i) the **single→multi setting and the objective
-of performance maximization within it**: a multi-label-trained **oracle** bounds the
-problem as an upper reference (it uses supervision we forbid); (ii) an **operator-match
-law, now a publicly reproducible law**: the right content-blind operator depends on the
-domain's *true combination law* — a summation/union join (overlay = Shin et al. 2022
-Summation Mixup) for **superposition-structured** domains where evidence adds/saturates,
-and **FCM-PM** (a partition-complement operator) for **partition-structured** domains
-where each unit carries one condition; we verify the crossover on the real chip domain (a
-partition law), where under an *identical* protocol, across three seeds, FCM-PM beats
-overlay decisively on *both* axes (eval bit-F1 0.9968 +-0.0008 vs 0.8733 +-0.0338, +0.12;
-Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%, ~24x lower on average and holding for every
-seed with no distribution overlap -- worst FCM-PM seed beats best overlay seed),
-because pixelwise-max mis-models a partition and under-detects the second defect while
-FCM-PM keeps every combination crisp — turning operator-match from an assertion into a
-falsifiable, verified law; and we reproduce the same flip in **both** directions on a
-controlled public MNIST benchmark (partition domain: partition-placement 0.876 vs overlay
-0.638; superposition domain: overlay 0.696 vs partition-placement 0.400; matched wins each
-direction with no std overlap and recovers the oracle), so the law is publicly verifiable
-and not reliant on internal data; (iii) our **method — FCM-PM, val-margin checkpoint
-selection, and naive-Bayes rejection**: on the public MixedWM38 benchmark it gives the
-best FAR-controlled tradeoff among the content-blind operators (bit-F1 0.663 at
-NORMAL-FAR 0.228 at the arms' common guarded pick; 0.654/0.147 at its best pick),
-against cutmix (0.691 bit-F1 but FAR 0.439), mixup (0.537/0.225), and the single-only
-floor (0.473/0.602); on WM38 — a superposition regime under the binary die encoding —
-overlay/summation is the *matched* operator and is genuinely strong (0.80 at FAR
-0.010), which we report honestly and do *not* claim to beat, while on the chip
-partition domain FCM-PM is the winner (~0.998 bit-F1), with the Pair-Mask lever (which
-cuts the complement FAR 0.384→0.147), val-margin, and naive-Bayes rejection as the FAR
-controls; (iv) an **annotation-free, operator-agnostic, distribution-free
-split-conformal false-alarm-rate guarantee**: a full multi-alpha calibration curve on
-which the realized FAR tracks the target across alpha in [0.5%, 10%] to within 0.153 pp
-for every operator, backed by synthetic normals, a negative-target lever, val-margin
-selection, and naive-Bayes rejection — the reliability layer operator-only prior work
-(incl. Shin22) lacks; (v) a general, one-directional excess-risk bound
-2B*TV(D_real, D_syn^T) (honestly loose) that explains *when* blind synthesis can
-match the oracle, retained as **supporting** analysis; and (vi) **cross-domain
-framework support** across five families: on a controlled MultiMNIST superposition
-benchmark blind synthesis **exceeds** a fully-supervised oracle on held-out label
-combinations it never saw (+0.198 mAP; full test mAP 0.868 vs 0.846) — a regime where
-supervision structurally cannot help — the same **label-fidelity / operator-match
+**no multi-label or normal annotation** (the content-blind constraint) — and give a general principle for **label-faithful synthesis**: to learn a multi-label
+recognizer from single-label sources -- with no multi-label, location, or normal
+annotation -- synthesize combination examples with the operator that matches the domain's
+*true combination law*. We contribute (i) an **operator-match law** with a *predictive*,
+before-training criterion (evidence survival / label fidelity): the right content-blind
+operator is fixed not by fiat but by the domain's *true combination law* -- a
+summation/union join (overlay = Shin et al. 2022 Summation Mixup) for
+**superposition-structured** domains where evidence adds/saturates, and **FCM-PM** (a
+partition-complement operator) for **partition-structured** domains where each unit
+carries one condition; we verify the law's falsifiable flip on real industry data and
+public data -- on the real chip domain (a partition law), under an *identical* protocol
+across three seeds, FCM-PM beats overlay decisively on *both* axes (eval bit-F1
+0.9968 +-0.0008 vs 0.8733 +-0.0338, +0.12; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%, ~24x
+lower on average and holding for every seed with no distribution overlap -- worst FCM-PM
+seed beats best overlay seed), because pixelwise-max mis-models a partition and
+under-detects the second defect while FCM-PM keeps every combination crisp, and on a
+controlled public MNIST benchmark we reproduce the same flip in **both** directions
+(partition domain: partition-placement 0.876 vs overlay 0.638; superposition domain:
+overlay 0.696 vs partition-placement 0.400; matched wins each direction with no std
+overlap and recovers the oracle) -- converting operator-match from an assertion into a
+falsifiable, publicly reproducible law; (ii) an **annotation-free, operator-agnostic,
+distribution-free split-conformal false-alarm-rate guarantee**: a full multi-alpha
+calibration curve on which the realized FAR tracks the target across alpha in [0.5%, 10%]
+to within 0.153 pp for every operator (a small set of known-good samples yields realized
+FAR 0.040 at alpha=0.05 and 0.006 at alpha=0.01), backed by synthetic normals, a
+negative-target lever, val-margin selection, and naive-Bayes rejection -- the reliability
+layer operator-only prior work (incl. Shin22) lacks; (iii) an **excess-risk theory tied
+to operator-match**: a general, one-directional bound 2B*TV(D_real, D_syn^T) under which,
+among content-blind operators, the one matching the domain's true combination law
+minimizes the total-variation distance to the real multi-label distribution and thereby
+minimizes the bound, so matched synthesis attains oracle-level risk up to the residual TV
+-- honestly loose and one-directional, and consistent with the measured MNIST
+oracle-recovery where matched synthesis is statistically indistinguishable from training
+on the true law; (iv) the **single->multi setting and the objective of performance
+maximization within it**: a multi-label-trained **oracle** (0.974 on WM38) bounds the
+problem as an upper reference (it uses supervision we forbid), and the setting is
+stricter-than-SPML, evaluated on real multi-label data and real normals; (v) our **method
+for partition domains -- FCM-PM, val-margin checkpoint selection, and naive-Bayes
+rejection**: on the chip partition domain FCM-PM is the winner (~0.998 bit-F1), and on the
+public MixedWM38 benchmark it gives the best FAR-controlled tradeoff among the
+content-blind operators (bit-F1 0.663 at NORMAL-FAR 0.228 at the arms' common guarded
+pick; 0.654/0.147 at its best pick), against cutmix (0.691 bit-F1 but FAR 0.439), mixup
+(0.537/0.225), and the single-only floor (0.473/0.602); on WM38 -- a superposition regime
+under the binary die encoding -- overlay/summation is the *matched* operator and is
+genuinely strong (0.80 at FAR 0.010), which we report honestly and do *not* claim to
+beat, with the Pair-Mask lever (which cuts the complement FAR 0.384->0.147), val-margin,
+and naive-Bayes rejection as the FAR controls; and (vi) **cross-domain framework support**
+across five families spanning the combination taxonomy: on a controlled MultiMNIST
+superposition benchmark blind synthesis **exceeds** a fully-supervised oracle on held-out
+label combinations it never saw (+0.198 mAP; full test mAP 0.868 vs 0.846) -- a regime
+where supervision structurally cannot help -- the same **label-fidelity / operator-match
 criterion** predicts the counterintuitive Reuters text averaging-flip and the FSD50K
 audio summation ranking, and natural images (PASCAL VOC) mark the boundary where
 content-blind synthesis fails and location supervision becomes necessary. Density is a
-**modeling characterization** consistent with the law: FCM-PM matches the real
-defect-die density (0.29 vs real 0.31), while overlay is over-dense (0.50) — expected
-of the superposition operator, and the reason WM38 (superposition) favors overlay while
-the chip partition domain favors FCM-PM. A small set of known-good samples yields a
-finite-sample conformal FAR guarantee (realized 0.040 at alpha=0.05, 0.006 at
-alpha=0.01) that holds for **any** operator — the reliability layer operator-only prior
-work (incl. Shin22) omits.
+**modeling characterization** consistent with the law: FCM-PM matches the real defect-die
+density (0.29 vs real 0.31), while overlay is over-dense (0.50) -- expected of the
+superposition operator, and the reason WM38 (superposition) favors overlay while the chip
+partition domain favors FCM-PM.
 
 ## 1 Introduction
 
@@ -215,69 +225,78 @@ operator and is the reliability asset Shin et al. (2022) and other operator-only
 methods do not provide. Real mixed and normal maps remain final test data.
 
 Contributions:
-1. **The single→multi setting and performance maximization within it.** We train
-   multi-label recognizers with **zero multi-label annotation** — no multi-label image
-   and no all-negative (normal) label — by synthesizing combinations from single-label
-   sources, and we make **maximizing** the multi-label performance–FAR tradeoff the
+1. **The operator-match law (a general principle for label-faithful synthesis).** The
+   right content-blind operator is selected *before any training* by a predictive
+   criterion (evidence survival / label fidelity), fixed not by fiat but by the domain's
+   *true combination law*: a summation/union join (overlay = Shin et al. 2022 Summation
+   Mixup, a pixelwise `np.maximum` of two single maps) is evidence-preserving for
+   **superposition-structured** domains, while the partition-complement FCM-PM is right
+   for **partition-structured** domains. We convert this from an assertion into a
+   *verified* law with a matched head-to-head on the real chip domain (a partition law,
+   Sec 5.2.1): across three seeds FCM-PM beats overlay decisively on *both* axes (eval
+   bit-F1 0.9968 +-0.0008 vs 0.8733 +-0.0338; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%,
+   ~24x lower on average with no per-seed overlap), the two operators learning single
+   defects equally (train bit-F1 ~0.99) so the entire gap is multi-defect eval, where
+   pixelwise-max mis-models the partition and under-detects the second defect. We
+   demonstrate the **same flip in both directions on a controlled public MNIST
+   benchmark** (Sec 5.1.1): the matched operator wins each regime with no std overlap
+   (partition domain: partition-placement 0.8763 +-0.0105 vs overlay 0.6382 +-0.0359;
+   superposition domain: overlay 0.6961 +-0.0250 vs partition-placement 0.4000 +-0.0078)
+   and recovers the oracle in each direction (partition 0.876 vs 0.880; superposition
+   0.696 vs 0.697), so the law is measured on **both** public data (MNIST, both
+   directions) and the real chip domain -- publicly verifiable without internal data. On
+   WM38 -- a superposition regime under the binary encoding -- overlay is instead the
+   matched operator and is honestly strong (0.80/0.010); we do *not* claim to beat it
+   there.
+2. **An annotation-free FAR guarantee.** A strict source-only reliability pipeline --
+   synthetic normals, negative-target control, synthetic validation margin for
+   checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern likelihood
+   for rejection, and **split-conformal calibration** for a finite-sample,
+   distribution-free marginal FAR guarantee under exchangeability -- that is
+   operator-agnostic and absent from prior operator-only work (e.g. Shin et al. 2022).
+   A full multi-alpha calibration curve shows the realized FAR tracking the target
+   across alpha in [0.5%, 10%] to within 0.153 pp for every operator.
+3. **An excess-risk theory tied to operator-match.** A general, one-directional
+   excess-risk bound 2B*TV(D_real, D_syn^T) (Sec Theory): among content-blind operators,
+   the one matching the domain's true combination law minimizes the total-variation
+   distance to the real multi-label law and thereby minimizes the bound, so matched
+   synthesis attains oracle-level risk up to the residual TV -- and in the idealized
+   independent-source limit is risk-equivalent to full multi-label supervision. The
+   statement is honestly loose and one-directional (a larger TV only weakens the *upper*
+   guarantee, so it does no operator-preference work on WM38, where the matched max-union
+   is over-dense yet strong), and is consistent with the measured MNIST oracle-recovery,
+   where matched synthesis is statistically indistinguishable from training on the true
+   law.
+4. **The single->multi setting and performance maximization within it.** We train
+   multi-label recognizers with **zero multi-label annotation** -- no multi-label image
+   and no all-negative (normal) label -- by synthesizing combinations from single-label
+   sources, and we make **maximizing** the multi-label performance-FAR tradeoff the
    objective. A multi-label-trained **oracle** bounds the problem as an upper reference
    (it trains on the real multi-label data we forbid). The setting is
    stricter-than-SPML (genuinely single-label training images), evaluated on real
    multi-label data and real normals.
-2. **The operator-match law, now a publicly reproducible law.** The right content-blind
-   operator is not fixed by fiat but by the domain's *true combination law*: a
-   summation/union join (overlay = Shin et al. 2022 Summation Mixup, a pixelwise
-   `np.maximum` of two single maps) is evidence-preserving for **superposition-structured**
-   domains, while the partition-complement FCM-PM is right for **partition-structured**
-   domains. We convert this from an assertion into a *verified* law with a matched
-   head-to-head on the real chip domain (a partition law, Sec 5.2.1): across three seeds
-   FCM-PM beats overlay decisively on *both* axes (eval bit-F1 0.9968 +-0.0008 vs
-   0.8733 +-0.0338; Total-FAR 0.68 +-0.63% vs 16.20 +-5.53%, ~24x lower on average with no
-   per-seed overlap), the two operators learning single defects equally (train bit-F1
-   ~0.99) so the entire gap is multi-defect eval, where pixelwise-max mis-models the
-   partition and under-detects the second defect. We demonstrate the **same flip in both
-   directions on a controlled public MNIST benchmark** (Sec 5.1.1): the matched operator
-   wins each regime with no std overlap (partition domain: partition-placement
-   0.8763 +-0.0105 vs overlay 0.6382 +-0.0359; superposition domain: overlay 0.6961 +-0.0250
-   vs partition-placement 0.4000 +-0.0078) and recovers the oracle in each direction
-   (partition 0.876 vs 0.880; superposition 0.696 vs 0.697), so the law is measured on
-   **both** public data (MNIST, both directions) and the real chip domain — publicly
-   verifiable without internal data. On WM38 — a superposition regime under the binary
-   encoding — overlay is instead the matched operator and is honestly strong (0.80/0.010);
-   we do *not* claim to beat it there.
-3. **The method: FCM-PM + val-margin + naive-Bayes rejection.** A partition-style
-   full-cover complement with a Pair-Mask view (FCM-PM), val-margin checkpoint
-   selection on a disjoint synthetic proxy, and a synthetic-only class-conditional
-   Gaussian (naive-Bayes) rejection stage. On the chip partition domain FCM-PM is the
-   winner (~0.998 bit-F1, Total-FAR 0.06%); on MixedWM38 it gives the best
+5. **The method (partition-domain instantiation): FCM-PM + val-margin + naive-Bayes
+   rejection.** A partition-style full-cover complement with a Pair-Mask view (FCM-PM),
+   val-margin checkpoint selection on a disjoint synthetic proxy, and a synthetic-only
+   class-conditional Gaussian (naive-Bayes) rejection stage. On the chip partition domain
+   FCM-PM is the winner (~0.998 bit-F1, Total-FAR 0.06%); on MixedWM38 it gives the best
    FAR-controlled tradeoff among the content-blind operators (bit-F1 0.663 at FAR 0.228
    at the arms' common guarded pick; 0.654/0.147 at its best pick), against cutmix
    (0.691 bit-F1 but FAR 0.439), mixup (0.537/0.225), and the single-only floor
-   (0.473/0.602); the Pair-Mask lever cuts the complement FAR 0.384→0.147, and
+   (0.473/0.602); the Pair-Mask lever cuts the complement FAR 0.384->0.147, and
    val-margin and naive-Bayes rejection are the further FAR controls. A 3-component
    ablation shows each stage contributes (val-margin is the dominant FAR fixer;
    naive-Bayes rejection closes the OOD tail, Sec 5.2.1).
-4. **An annotation-free FAR guarantee.** A strict source-only reliability pipeline —
-   synthetic normals, negative-target control, synthetic validation margin for
-   checkpoint selection, class-conditional Gaussian (naive-Bayes) pattern likelihood
-   for rejection, and **split-conformal calibration** for a finite-sample,
-   distribution-free marginal FAR guarantee under exchangeability — that is
-   operator-agnostic and absent from prior operator-only work (e.g. Shin et al. 2022).
-   A full multi-alpha calibration curve shows the realized FAR tracking the target
-   across alpha in [0.5%, 10%] to within 0.153 pp for every operator.
-5. **An excess-risk theory (supporting).** A general, one-directional excess-risk
-   bound 2B*TV(D_real, D_syn^T) (Sec Theory) that explains *when* blind synthesis can
-   match the oracle; honestly loose and one-directional, retained as supporting
-   analysis rather than a headline claim.
 6. **Cross-domain framework support.** The framework and its label-fidelity /
    operator-match criterion generalize across five families spanning two combination
    regimes. On a controlled MultiMNIST superposition benchmark blind synthesis
    **exceeds** a fully-supervised oracle on held-out label combinations the oracle
-   never observed (+0.198 mAP; full test mAP 0.868 vs 0.846) — a regime where
+   never observed (+0.198 mAP; full test mAP 0.868 vs 0.846) -- a regime where
    supervision structurally cannot help. The criterion characterizes which
    content-blind operator preserves evidence per domain and makes a falsifiable
-   cross-regime call — vector averaging (not summation) on disjoint-coordinate text
+   cross-regime call -- vector averaging (not summation) on disjoint-coordinate text
    (Reuters), a summation/union join on superposition-structured audio (FSD50K
-   waveform summation wins bit-F1 0.433 vs 0.27-0.31) — each a ranking image intuition
+   waveform summation wins bit-F1 0.433 vs 0.27-0.31) -- each a ranking image intuition
    gets wrong. Natural images (VOC) mark the boundary, where content-blind synthesis
    fails and location supervision becomes necessary.
 
