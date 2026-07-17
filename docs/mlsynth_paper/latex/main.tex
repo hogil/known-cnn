@@ -93,11 +93,14 @@ ${\sim}24\times$ lower on average and holding for every seed with no distributio
 --- the worst FCM-PM seed beats the best overlay seed), because pixelwise-max mis-models a
 partition and under-detects the second defect while FCM-PM keeps every combination crisp,
 and on four public datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters) we reproduce the
-same flip in \emph{both} directions under one identical protocol (4/4, no std overlap; MNIST
-partition-placement $0.906$ vs overlay $0.655$; superposition overlay $0.762$ vs
-partition-placement $0.425$; the matched operator recovers the oracle in every case, and
-absolute bit-F1 declines on harder sources while the flip direction stays invariant) ---
-converting operator-match from an assertion into a general, publicly reproducible law;
+same flip in \emph{both} directions under one identical protocol, where the matched operator
+is moreover the \emph{best content-blind choice} --- it beats not only the mismatched operator
+but also CutMix and MixUp in every regime on all four datasets, with no standard-deviation
+overlap (4/4; MNIST partition-placement $0.901$ vs overlay $0.657$, CutMix $0.866$, MixUp
+$0.614$; superposition overlay $0.765$ vs partition-placement $0.430$, CutMix $0.446$, MixUp
+$0.474$; the matched operator recovers the oracle in every case, and absolute bit-F1 declines
+on harder sources while the flip direction stays invariant) --- converting operator-match from
+an assertion into a general, publicly reproducible law;
 (ii)~an \textbf{annotation-free, operator-agnostic, distribution-free split-conformal
 false-alarm-rate guarantee}: a full multi-alpha calibration curve on which the realized
 FAR tracks the target across $\alpha\in[0.5\%,10\%]$ to within $0.153$~pp for every
@@ -176,8 +179,9 @@ whose true law is a partition, FCM-PM beats overlay decisively on both bit-F1 an
 under an identical protocol (Sec.~\ref{sec:crossover}), because pixelwise-max mis-models a
 partition; and on four fully public datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters)
 we reproduce the same flip in both regimes --- the matched operator wins each direction with
-no std overlap and recovers the oracle in every case (4/4; Sec.~\ref{sec:opmatch-mnist})
---- so the law is general, publicly verifiable, and not reliant on internal data. The
+no std overlap, beating not only the mismatched operator but also CutMix and MixUp, and
+recovers the oracle in every case (4/4; Sec.~\ref{sec:opmatch-mnist}) --- so the law is
+general, publicly verifiable, and not reliant on internal data. The
 operator-match criterion is measured before any training via \emph{label fidelity}
 (every labeled source must retain detectable evidence after synthesis); operators that
 destroy evidence (rectangle patching, pixel averaging) train on false labels. The same
@@ -244,15 +248,19 @@ Our contributions are:
   entire gap is multi-defect eval, where pixelwise-max mis-models the partition and
   under-detects the second defect. We demonstrate the \emph{same flip in both
   directions on four public datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters)}
-  (Sec.~\ref{sec:opmatch-mnist}): the matched operator wins every regime with no std
-  overlap (4/4; e.g.\ MNIST partition-placement $0.9064 \pm 0.016$ vs overlay
-  $0.6550 \pm 0.020$; superposition overlay $0.7616 \pm 0.007$ vs partition-placement
-  $0.4249 \pm 0.034$) and recovers the oracle in each direction (e.g.\ MNIST partition
-  $0.9064$ vs $0.9078$; superposition $0.7616$ vs $0.7631$), the matched-minus-mismatched
-  gap $0.17$--$0.34$ throughout with absolute bit-F1 declining on harder sources while the
-  flip direction stays invariant, so the law is measured on \emph{four} public datasets
-  (both directions) and the real chip domain --- a general, publicly verifiable law, not a
-  dataset-specific artifact. On WM38 --- a superposition regime under the binary encoding
+  (Sec.~\ref{sec:opmatch-mnist}), where the matched operator is the \emph{best content-blind
+  choice}: in every regime on all four datasets it beats not only the mismatched operator but
+  also CutMix and MixUp, with no standard-deviation overlap (4/4; e.g.\ MNIST
+  partition-placement $0.9014 \pm 0.014$ vs overlay $0.6568 \pm 0.033$, CutMix
+  $0.8660 \pm 0.002$, MixUp $0.6142 \pm 0.050$; superposition overlay $0.7650 \pm 0.004$ vs
+  partition-placement $0.4295 \pm 0.027$, CutMix $0.4463 \pm 0.023$, MixUp $0.4744 \pm 0.043$)
+  and recovers the oracle in each direction (e.g.\ MNIST partition $0.9014$ vs $0.9072$;
+  superposition $0.7650$ vs $0.7650$), the matched-minus-mismatched gap $0.18$--$0.34$
+  throughout (the matched operator clears even the strongest content-blind baseline by
+  $0.035$--$0.29$, tightest on MNIST partition where matched $0.9014$ still clears CutMix
+  $0.8660$) with absolute bit-F1 declining on harder sources while the flip direction stays
+  invariant, so the law is measured on \emph{four} public datasets (both directions) and the
+  real chip domain --- a general, publicly verifiable law, not a dataset-specific artifact. On WM38 --- a superposition regime under the binary encoding
   --- overlay is instead the matched operator and is honestly strong ($0.80$/$0.010$); we
   do \emph{not} claim to beat it there.
 \item \textbf{An annotation-free FAR guarantee.} A strict source-only reliability
@@ -586,26 +594,33 @@ from the \emph{same} public source on a $56{\times}56$ two-by-two-cell canvas, t
 true two-glyph combination law: a \emph{partition} domain (the two glyphs occupy disjoint
 cells) and a \emph{superposition} domain (the two glyphs share one cell, combined by
 pixelwise $\max$). In each domain we run the two content-blind operators head-to-head ---
-partition-placement (the FCM-PM analogue) and overlay/max-union --- alongside the
-single-only floor and an oracle trained on true-law combinations (upper reference).
-Evaluation is a held-out real multi-label test set for that dataset; the matched operator
-is the one whose combine matches the domain's true law. Table~\ref{tab:opmatch-mnist}.
+partition-placement (the FCM-PM analogue) and overlay/max-union --- alongside two further
+content-blind baselines (CutMix and MixUp), the single-only floor, and an oracle trained on
+true-law combinations (upper reference). Evaluation is a held-out real multi-label test set
+for that dataset; the matched operator is the one whose combine matches the domain's true
+law. Table~\ref{tab:opmatch-mnist}.
 
-\textbf{The flip holds 4/4, in both directions, with no std overlap.} In every dataset and
-regime the \emph{matched} blind operator wins and the mismatched one is clearly worse, the
-winner and loser trading places exactly as the domain's law changes; across all eight rows
-the matched-minus-mismatched bit-F1 gap is $0.17$--$0.34$ and no matched/mismatched
-standard-deviation bands overlap. On MNIST the partition domain gives partition-placement
-bit-F1 $0.9064 \pm 0.016$ vs overlay's $0.6550 \pm 0.020$ ($+0.251$), while the
-superposition domain gives overlay $0.7616 \pm 0.007$ vs partition-placement's
-$0.4249 \pm 0.034$ ($+0.337$); the same clean flip recurs on FashionMNIST
-($0.7187$/$0.5533$ partition, $0.5861$/$0.3188$ superposition), KMNIST ($0.6793$/$0.4803$;
-$0.5504$/$0.3373$), and EMNIST-letters ($0.6185$/$0.3471$; $0.4088$/$0.2303$).
+\textbf{The flip holds 4/4, in both directions, and the matched operator dominates every
+content-blind baseline with no std overlap.} In every dataset and regime the \emph{matched}
+blind operator wins and the mismatched one is clearly worse, the winner and loser trading
+places exactly as the domain's law changes; across all eight rows the matched-minus-mismatched
+bit-F1 gap is $0.18$--$0.34$ and no matched/mismatched standard-deviation bands overlap. On
+MNIST the partition domain gives partition-placement bit-F1 $0.9014 \pm 0.014$ vs overlay's
+$0.6568 \pm 0.033$ ($+0.245$), while the superposition domain gives overlay $0.7650 \pm 0.004$
+vs partition-placement's $0.4295 \pm 0.027$ ($+0.335$); the same clean flip recurs on
+FashionMNIST ($0.7136$/$0.5367$ partition, $0.5841$/$0.3099$ superposition), KMNIST
+($0.6811$/$0.4727$; $0.5549$/$0.3345$), and EMNIST-letters ($0.6146$/$0.3465$;
+$0.4045$/$0.2284$). \textbf{The matched operator is moreover the best content-blind choice,
+not merely better than the mismatched one:} in \emph{every} regime on all four datasets it
+also beats CutMix and MixUp with no standard-deviation overlap, clearing the strongest
+content-blind baseline in each row by $0.035$--$0.29$ (tightest on MNIST partition, where
+matched $0.9014$ still clears CutMix $0.8660$: $0.887 > 0.868$, no overlap); no content-blind
+baseline ever ties or beats the matched operator.
 \textbf{The matched operator recovers the oracle within noise in \emph{every} dataset and
-both directions} (e.g.\ MNIST partition $0.9064$ vs oracle $0.9078$, superposition $0.7616$
-vs oracle $0.7631$; FashionMNIST $0.7187$ vs $0.7131$, $0.5861$ vs $0.5857$; KMNIST
-$0.6793$ vs $0.6842$, $0.5504$ vs $0.5549$; EMNIST $0.6185$ vs $0.6145$, $0.4088$ vs
-$0.4075$), so matched blind synthesis is statistically indistinguishable from training on
+both directions} (e.g.\ MNIST partition $0.9014$ vs oracle $0.9072$, superposition $0.7650$
+vs oracle $0.7650$; FashionMNIST $0.7136$ vs $0.7106$, $0.5841$ vs $0.5843$; KMNIST
+$0.6811$ vs $0.6759$, $0.5549$ vs $0.5566$; EMNIST $0.6146$ vs $0.6119$, $0.4045$ vs
+$0.4027$), so matched blind synthesis is statistically indistinguishable from training on
 the true law, and every matched arm sits well above the single-only floor ($0.20$--$0.46$).
 \textbf{Honest scope note:} the \emph{absolute} bit-F1 declines monotonically as the source
 domain gets harder (MNIST $\to$ FashionMNIST $\to$ KMNIST $\to$ EMNIST), but the flip
@@ -618,41 +633,49 @@ counterpart to the internal chip head-to-head (Sec.~\ref{sec:crossover}), which 
 same partition-direction win (FCM-PM beats overlay) on real fab data: the operator-match
 law is now measured on \emph{four} public datasets (both directions, matched recovering the
 oracle) and the real chip partition domain --- a general law, not a dataset-specific
-artifact. Runner: \texttt{multilabel\_synth/run\_operator\_match\_multidataset.py}
+artifact. Runner: \texttt{multilabel\_synth/run\_operator\_match\_baselines.py}
 (committed).
 
 \begin{table}[t]
 \centering
 \caption{Operator-match law verified on \emph{four} public datasets (MNIST, FashionMNIST,
-KMNIST, EMNIST-letters, 26 classes) under one identical controlled protocol: same public
-source per dataset, $56{\times}56$ two-by-two-cell canvas, single-label training /
-multi-label evaluation on a held-out real multi-label test set, shared SmallCNN
-($20$ epochs, $3$ seeds); the only variable is the domain's true two-glyph combination law.
-``Matched'' is the blind operator whose join reproduces the regime's true law (partition
-regime: partition-placement; superposition regime: overlay / max-union); ``mismatched'' is
-the other. In \emph{every} row the matched operator wins with no std overlap and recovers
-the oracle within noise, all well above the single-only floor --- the partition/superposition
-flip holds 4/4 in both regimes. Absolute bit-F1 declines as the source gets harder while the
-flip direction stays invariant. bit-F1 mean $\pm$ std; the reproducible public counterpart
-to the internal chip head-to-head (Table~\ref{tab:crossover}).}
+KMNIST, EMNIST-letters, 26 classes) under one identical controlled protocol, now against the
+\emph{full} set of content-blind baselines: same public source per dataset, $56{\times}56$
+two-by-two-cell canvas, single-label training / multi-label evaluation on a held-out real
+multi-label test set, shared SmallCNN ($20$ epochs, $3$ seeds); the only variable is the
+domain's true two-glyph combination law. ``Matched'' is the blind operator whose join
+reproduces the regime's true law (partition regime: partition-placement; superposition
+regime: overlay / max-union); ``mismatched'' is the other; ``CutMix'' and ``MixUp'' are the
+further content-blind baselines; ``Single'' is the single-only floor; ``Oracle'' trains on
+true-law combinations (upper reference). In \emph{every} row the matched operator is the
+\emph{best content-blind choice} --- it beats \emph{all three} content-blind baselines
+(mismatched, CutMix, MixUp) with no standard-deviation overlap and recovers the oracle within
+noise --- so the partition/superposition flip holds 4/4 in both regimes and no baseline ever
+ties or beats matched. The tightest margin is MNIST partition, where matched $0.9014$ still
+clears the strongest baseline CutMix $0.8660$ with no overlap ($0.887 > 0.868$). Absolute
+bit-F1 declines as the source gets harder while the flip direction stays invariant. bit-F1
+mean $\pm$ std (Single/Oracle are single-run point estimates); the reproducible public
+counterpart to the internal chip head-to-head (Table~\ref{tab:crossover}).}
 \label{tab:opmatch-mnist}
-\begin{tabular}{llcccc c}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
 \toprule
-Dataset & Regime & Matched & Mismatched & Oracle & Floor & Flip \\
+Dataset & Regime & Matched & Mismatched & CutMix & MixUp & Single & Oracle \\
 \midrule
-MNIST          & partition     & $\mathbf{0.9064 \pm 0.016}$ & $0.6550 \pm 0.020$ & $0.9078$ & $0.458$ & yes \\
-               & superposition & $\mathbf{0.7616 \pm 0.007}$ & $0.4249 \pm 0.034$ & $0.7631$ & $0.365$ & yes \\
+MNIST          & partition     & $\mathbf{0.9014 \pm 0.014}$ & $0.6568 \pm 0.033$ & $0.8660 \pm 0.002$ & $0.6142 \pm 0.050$ & $0.4559$ & $0.9072$ \\
+               & superposition & $\mathbf{0.7650 \pm 0.004}$ & $0.4295 \pm 0.027$ & $0.4463 \pm 0.023$ & $0.4744 \pm 0.043$ & $0.3685$ & $0.7650$ \\
 \midrule
-FashionMNIST   & partition     & $\mathbf{0.7187 \pm 0.005}$ & $0.5533 \pm 0.035$ & $0.7131$ & $0.300$ & yes \\
-               & superposition & $\mathbf{0.5861 \pm 0.010}$ & $0.3188 \pm 0.026$ & $0.5857$ & $0.247$ & yes \\
+FashionMNIST   & partition     & $\mathbf{0.7136 \pm 0.011}$ & $0.5367 \pm 0.045$ & $0.6720 \pm 0.011$ & $0.6604 \pm 0.034$ & $0.3000$ & $0.7106$ \\
+               & superposition & $\mathbf{0.5841 \pm 0.024}$ & $0.3099 \pm 0.016$ & $0.3461 \pm 0.004$ & $0.4222 \pm 0.031$ & $0.2483$ & $0.5843$ \\
 \midrule
-KMNIST         & partition     & $\mathbf{0.6793 \pm 0.012}$ & $0.4803 \pm 0.043$ & $0.6842$ & $0.358$ & yes \\
-               & superposition & $\mathbf{0.5504 \pm 0.010}$ & $0.3373 \pm 0.010$ & $0.5549$ & $0.261$ & yes \\
+KMNIST         & partition     & $\mathbf{0.6811 \pm 0.013}$ & $0.4727 \pm 0.045$ & $0.6267 \pm 0.006$ & $0.6441 \pm 0.017$ & $0.3617$ & $0.6759$ \\
+               & superposition & $\mathbf{0.5549 \pm 0.011}$ & $0.3345 \pm 0.008$ & $0.3780 \pm 0.014$ & $0.4367 \pm 0.003$ & $0.2540$ & $0.5566$ \\
 \midrule
-EMNIST-letters & partition     & $\mathbf{0.6185 \pm 0.019}$ & $0.3471 \pm 0.012$ & $0.6145$ & $0.318$ & yes \\
-               & superposition & $\mathbf{0.4088 \pm 0.026}$ & $0.2303 \pm 0.015$ & $0.4075$ & $0.204$ & yes \\
+EMNIST-letters & partition     & $\mathbf{0.6146 \pm 0.011}$ & $0.3465 \pm 0.030$ & $0.5493 \pm 0.007$ & $0.5057 \pm 0.035$ & $0.3188$ & $0.6119$ \\
+               & superposition & $\mathbf{0.4045 \pm 0.017}$ & $0.2284 \pm 0.013$ & $0.2464 \pm 0.016$ & $0.3086 \pm 0.027$ & $0.2039$ & $0.4027$ \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \subsection{Real multi-label benchmark: MixedWM38 (a superposition regime)}
@@ -1216,8 +1239,8 @@ evaluated, this includes them only if the empty-set conditional is also matched.
 \begin{corollary}[Measured oracle-recovery]\label{cor:oraclerecover}
 The controlled multi-dataset experiment (Sec.~\ref{sec:opmatch-mnist}) instantiates
 Cor.~\ref{cor:noadv}: in each combination regime, on all four public datasets, the matched
-blind operator recovers the true-law oracle within noise (e.g.\ MNIST partition $0.9064$ vs
-oracle $0.9078$; superposition $0.7616$ vs oracle $0.7631$), the empirically small residual
+blind operator recovers the true-law oracle within noise (e.g.\ MNIST partition $0.9014$ vs
+oracle $0.9072$; superposition $0.7650$ vs oracle $0.7650$), the empirically small residual
 TV expected when synthesis reproduces the domain's combination law.
 \end{corollary}
 
