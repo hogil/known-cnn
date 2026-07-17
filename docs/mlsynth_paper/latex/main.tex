@@ -458,13 +458,20 @@ maximal-survival, evidence-preserving join is max-union / summation, and it is t
 \emph{matched} operator there --- consistent with its strong raw performance. But
 survival on \emph{one} domain does not name a universal operator: the criterion earns
 its keep \emph{across regimes}, selecting the operator whose join reproduces the
-domain's true combination law. It makes a non-obvious cross-regime call --- averaging
-wins on disjoint-coordinate text, a summation join preserves evidence on superposition
-domains, and a partition-complement preserves it on partition domains --- so that the
-text averaging-flip (Sec.~\ref{sec:experiments}), the FSD50K audio summation ranking,
-and the chip head-to-head (where FCM-PM beats overlay, Sec.~\ref{sec:crossover}) are
-\emph{out-of-sample confirmations}, each a ranking a practitioner extrapolating
-``overlay always wins'' from images would get wrong.
+domain's true combination law. \emph{Pre-registration --- the criterion is falsifiable,
+not a survival${=}$ranking tautology.} Because label fidelity is evaluated \emph{before
+any multi-label training}, it fixes \emph{in advance} which content-blind operator
+should maximize per-domain fidelity and therefore win: a summation/union join on
+superposition-structured domains (wafer, inked digits, audio) and vector averaging on
+disjoint-coordinate text. This call is non-obvious and falsifiable --- on
+disjoint-coordinate text it predicts that \emph{averaging beats summation}, the opposite
+of what one gets by generalizing ``overlay always wins'' from images --- and it was
+borne out (the Reuters averaging-flip, Sec.~\ref{sec:experiments}), alongside the FSD50K
+audio summation ranking and the chip head-to-head where the partition-complement beats
+overlay (Sec.~\ref{sec:crossover}). These are therefore \emph{out-of-sample confirmations
+of a rule fixed in advance}, not post-hoc rankings: a mere re-description of the survival
+ordering could not have predicted the text flip, so the criterion carries predictive, not
+tautological, content.
 \emph{Density as characterization, consistent with the law:} FCM matches the real
 density ($0.293$ vs real $0.305$) while overlay is over-dense ($0.501$) --- the
 signature of the superposition operator; a density-shift analysis
@@ -910,7 +917,13 @@ Shin22-style Summation Mixup + BCE & $0.936$ & $\mathbf{0.607}$ & $0.555/0.019$ 
 \caption{Generality across domain families spanning the combination regimes: the best
 content-blind synthesis (its matched operator) vs.\ the single-only floor and the
 fully-supervised oracle (bit-F1 / mAP as noted). Recovery is best-content-blind over
-oracle. The matched content-blind operator per domain is set by its combination law:
+oracle and is reported for \emph{content-blind} arms only; VOC's Recovery is
+intentionally blank because its content-blind arms fall \emph{below} the floor (the
+boundary), so no content-blind recovery exists to report, and the copy-paste figure in
+the VOC footnote is a content-\emph{aware} probe reported as gap-recovery ($41\%$),
+\emph{not} comparable to the content-blind recoveries above --- VOC does \emph{not}
+out-recover the real domains. The matched content-blind operator per domain is set by its
+combination law:
 summation/union on superposition domains (MNIST, WM38, audio), the partition-complement
 FCM-PM on partition domains (chip), and averaging on disjoint-coordinate text; the
 multi-label oracle is an upper reference, noted in footnotes, not scored as synthesis.}

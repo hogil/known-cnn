@@ -465,12 +465,19 @@ maximal-survival, evidence-preserving join is max-union / summation, and it is t
 *matched* operator there — consistent with its strong raw performance. But survival on
 one domain does not name a universal operator: the criterion earns its keep *across
 regimes*, selecting the operator whose join reproduces the domain's true combination
-law. It makes a non-obvious cross-regime call — averaging wins on disjoint-coordinate
-text (Sec 5.9), a summation join preserves evidence on superposition domains, and a
-partition-complement preserves it on partition domains — so that the text averaging-flip
-(Sec 5.9), the FSD50K audio summation ranking, and the chip head-to-head (where FCM-PM
-beats overlay, Sec 5.2.1) are out-of-sample confirmations. The criterion is thus a
-per-domain characterization of evidence-preservation, not a fixed operator.
+law. **Pre-registration -- the criterion is falsifiable, not a survival=ranking
+tautology.** Because label fidelity is evaluated *before any multi-label training*, it
+fixes *in advance* which content-blind operator should maximize per-domain fidelity and
+therefore win: a summation/union join on superposition-structured domains (wafer, inked
+digits, audio) and vector averaging on disjoint-coordinate text. This call is non-obvious
+and falsifiable -- on disjoint-coordinate text it predicts that *averaging beats
+summation*, the opposite of what one gets by generalizing "overlay always wins" from
+images -- and it was borne out (the Reuters averaging-flip, Sec 5.9), alongside the FSD50K
+audio summation ranking and the chip head-to-head where the partition-complement beats
+overlay (Sec 5.2.1). These are therefore *out-of-sample confirmations of a rule fixed in
+advance*, not post-hoc rankings: a mere re-description of the survival ordering could not
+have predicted the text flip, so the criterion carries predictive, not tautological,
+content.
 
 **Density as a characterization, consistent with the law.** The complement matches the
 real density (0.293 vs real 0.305), while overlay is over-dense (0.501) — the signature
