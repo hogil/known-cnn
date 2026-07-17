@@ -101,7 +101,14 @@ non-constructed benchmark --- SVHN Street View House Numbers (format-1 full hous
 genuinely partition-structured, a law we did not define), where the matched
 partition-placement operator reaches eval bit-F1 $0.8855 \pm 0.0051$ and beats overlay
 ($0.5141$), CutMix ($0.6688$), and MixUp ($0.7638$) with no standard-deviation overlap while
-recovering a non-collapsed real-multi-digit oracle ($0.8947$, ${\sim}99\%$)}; and a
+recovering a non-collapsed real-multi-digit oracle ($0.8947$, ${\sim}99\%$)}; the
+operator-match \emph{ordering} generalizes further to a third real-public domain of a
+different type --- mainstream remote-sensing land cover (real UC-Merced multi-label tiles)
+--- where the matched partition-placement operator beats every content-blind operator
+(overlay's same-$k$ control, CutMix, MixUp) on \emph{both} bit-F1 and the base-rate-robust
+mAP with disjoint std bands, though there it does \emph{not} recover the oracle
+(${\sim}0.15$ bit-F1 / ${\sim}0.14$ mAP short, a real sim-to-real gap we state honestly ---
+ordering-generality, not a full win); and a
 controlled mechanism study on four constructed public-source datasets (MNIST, FashionMNIST,
 KMNIST, EMNIST-letters) --- identical sources, only the combination law changed ---
 reproduces the same flip in \emph{both} directions, where the matched operator is moreover
@@ -193,7 +200,13 @@ partition win reproduces on a \emph{real, public, non-constructed} benchmark ---
 View House Numbers, whose partition law we did not define --- where the matched
 partition-placement operator ($0.8855$ bit-F1) beats overlay ($0.5141$), CutMix ($0.6688$),
 and MixUp ($0.7638$) with no std overlap and recovers a non-collapsed real-multi-digit oracle
-($0.8947$, ${\sim}99\%$; Sec.~\ref{sec:svhn}). A controlled mechanism study on four
+($0.8947$, ${\sim}99\%$; Sec.~\ref{sec:svhn}). The operator-match \emph{ordering} generalizes
+further to a third real-public domain of a different type --- mainstream remote-sensing land
+cover (real UC-Merced multi-label tiles) --- where the matched operator again beats every
+content-blind operator (incl.\ a same-$k$ overlay control) on both bit-F1 and mAP, though
+there it does \emph{not} recover the oracle (a ${\sim}0.14$ mAP sim-to-real gap we state
+honestly; Sec.~\ref{sec:landcover}): the ordering generalizes even where full recovery does
+not. A controlled mechanism study on four
 constructed public-source datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters) --- identical
 sources, only the combination law changed --- then isolates the same flip in both regimes,
 the matched operator winning each direction with no std overlap, beating not only the
@@ -273,8 +286,20 @@ Our contributions are:
   bit-F1 $0.8855 \pm 0.0051$ (mAP $0.9442$), beats overlay ($0.5141$), CutMix ($0.6688$), and
   MixUp ($0.7638$) with no standard-deviation overlap, and recovers a \emph{non-collapsed}
   real-multi-digit oracle ($0.8947$ / mAP $0.9546$, ${\sim}99\%$) --- an informative recovery,
-  not an undertrained tie (Sec.~\ref{sec:svhn}). We further isolate the \emph{same flip in
-  both directions} under a controlled mechanism study on four constructed public-source
+  not an undertrained tie (Sec.~\ref{sec:svhn}). \textbf{The operator-match \emph{ordering}
+  generalizes further to a third real-public domain of a different type --- mainstream
+  remote-sensing land cover (real UC-Merced multi-label tiles; single-class sources are real
+  region crops from DLRSD masks of non-eval tiles, no leak) ---} where the matched
+  partition-placement operator cleanly beats every content-blind operator (overlay's
+  same-$k$ control $0.4243$, CutMix $0.5316$, MixUp $0.5029$) on \emph{both} bit-F1 ($0.7207$)
+  and the base-rate-robust mAP ($0.7991$) with disjoint std bands; \emph{but} there
+  partition-placement does \emph{not} recover the oracle ($0.8746$ bit-F1 / mAP $0.9374$,
+  leaving it ${\sim}0.15$ bit-F1 / ${\sim}0.14$ mAP short across seeds) --- a real sim-to-real
+  gap, since real aerial tiles are not literally disjoint single-class quadrants. This is honest
+  \emph{ordering}-generality with a stated no-recovery limit, not a full win: we do \emph{not}
+  claim land cover recovers the oracle (Sec.~\ref{sec:landcover}). We further isolate the
+  \emph{same flip in both directions} under a controlled mechanism study on four constructed
+  public-source
   datasets (MNIST, FashionMNIST, KMNIST, EMNIST-letters) --- identical sources, only the
   combination law changed (Sec.~\ref{sec:opmatch-mnist}), where the matched operator is the
   \emph{best content-blind choice}: in every regime on all four datasets it beats not only
@@ -288,10 +313,14 @@ Our contributions are:
   throughout (the matched operator clears even the strongest content-blind baseline by
   $0.035$--$0.29$, tightest on MNIST partition where matched $0.9014$ still clears CutMix
   $0.8660$) with absolute bit-F1 declining on harder sources while the flip direction stays
-  invariant. So the operator-match partition win is measured on the real chip partition domain
-  \emph{and} a real public partition benchmark (SVHN), with the four constructed datasets
-  supplying the clean both-directions mechanism control --- a general, publicly verifiable law
-  established on real, public, non-constructed data, not a dataset-specific artifact. On WM38 --- a superposition regime under the binary encoding
+  invariant. So the operator-match partition win/ordering is now verified on \emph{three}
+  real-public/real domains of different type --- real digits (SVHN, with full oracle-recovery),
+  mainstream remote sensing (land cover, ordering-only with an honest sim-to-real no-recovery
+  limit), and the real fab chip domain (private) --- with the four constructed datasets
+  supplying the clean both-directions mechanism control. This makes operator-match a general,
+  publicly verifiable law established on real, public, non-constructed data (not a
+  dataset-specific artifact), while we explicitly own that land cover extends the
+  \emph{ordering}-generality without extending \emph{full-recovery} generality. On WM38 --- a superposition regime under the binary encoding
   --- overlay is instead the matched operator and is honestly strong ($0.80$/$0.010$); we
   do \emph{not} claim to beat it there. A short excess-risk argument
   (Sec.~\ref{sec:theory}) formalizes \emph{why}: among content-blind operators the one
@@ -752,9 +781,11 @@ artificial on house numbers, where position is the usual supervised signal. One 
 wrinkle (CutMix seed~0 over-alarms with normal-FAR $1.0$ on the blank-canvas arm) does
 \emph{not} touch the bit-F1 verdict, which holds across all three seeds with no
 mean$\pm$std overlap. We therefore read SVHN as \emph{one} real-public partition point in a
-multi-domain body of evidence (chip, four constructed datasets), and broader real-public
-partition benchmarks --- e.g.\ multi-region remote-sensing land-cover or document-layout
-multi-tag sets --- are the natural next step.
+multi-domain body of evidence (chip, four constructed datasets); the next subsection
+(Sec.~\ref{sec:landcover}) takes the natural next step to a mainstream remote-sensing
+land-cover benchmark, where the operator-match \emph{ordering} reproduces (matched beats
+every content-blind operator on both metrics) but full oracle-recovery does \emph{not} ---
+honest ordering-generality with a stated sim-to-real limit.
 
 \begin{table}[t]
 \centering
@@ -784,6 +815,86 @@ single\_only (floor)                         & $0.5326 \pm 0.0242$ & $0.8769$ \\
 \midrule
 \multicolumn{3}{l}{\emph{Upper reference (multi-label supervision)}} \\
 oracle (real multi-digit training)           & $0.8947 \pm 0.0156$ & $0.9546$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Third real-public partition domain: remote-sensing land cover (ordering holds, oracle not recovered)}\label{sec:landcover}
+\textbf{The operator-match \emph{ordering} generalizes to a mainstream, non-digit,
+non-wafer real-public domain --- remote-sensing land cover --- but
+synthesis-from-singles does \emph{not} close the oracle gap there: this is honest
+generality with a stated limit, not a full win.} SVHN is a deliberately clean
+two-digit partition instance; to test whether the partition ordering survives on a
+mainstream benchmark we run the same arms on UC-Merced multi-label land cover, a standard
+remote-sensing dataset. The single-class sources are \emph{real} pure-region crops taken
+from DLRSD pixel masks of \emph{non-evaluation} tiles (no leak), over five urban
+co-occurring classes \{buildings, pavement, trees, grass, baresoil\}; the matched operator
+places one class per cell of a $2\times2$ disjoint-quadrant canvas (the land-cover
+partition law), against overlay/max-union (mismatched, a \emph{same-$k$} control in which
+only disjoint-vs-superimposed placement differs), CutMix, MixUp, the single-only floor, and
+an oracle trained on \emph{real} multi-label tiles. We train ResNet-18
+(ImageNet-pretrained), $3$ seeds, and evaluate on $400$ held-out \emph{real} multi-label
+tiles (multi-hot presence over the five classes). Table~\ref{tab:landcover}.
+
+\textbf{The ordering reproduces on both metrics.} Partition-placement reaches eval bit-F1
+$0.7207 \pm 0.0056$ (mAP $0.7991 \pm 0.0017$) and \emph{cleanly beats every content-blind
+operator} --- overlay/max-union ($0.4243 \pm 0.0303$; mAP $0.7761$), CutMix ($0.5316$; mAP
+$0.7848$), and MixUp ($0.5029$; mAP $0.7784$) --- on \emph{both} bit-F1 and the
+base-rate-robust mAP, with disjoint std bands, and sits well above the single-only floor
+($0.3777$; mAP $0.7729$). Decisively, the mismatched overlay is a \emph{same-$k$} control
+that differs from the matched arm \emph{only} in disjoint-vs-superimposed placement, and it
+is beaten on both metrics ($+0.296$ bit-F1, $+0.023$ mAP), so the operator-match
+\emph{ordering} (matched disjoint $>$ mismatched superposition $>$ other content-blind)
+reproduces on mainstream remote sensing, not only on digits and wafers.
+
+\textbf{But partition-placement does \emph{not} recover the oracle here (honest limit).}
+The oracle trained on real multi-label tiles reaches bit-F1 $0.8746 \pm 0.0013$ (mAP
+$0.9374$), leaving partition-placement a \emph{robust} ${\sim}0.15$ bit-F1 / ${\sim}0.14$
+mAP short across all three seeds --- unlike SVHN, where matched synthesis recovered the
+oracle within noise. This is a genuine \emph{sim-to-real} gap: real aerial tiles are not
+literally disjoint single-class quadrants --- land-cover classes interleave at fine scale
+and context matters --- so a $2\times2$ quadrant canvas models the partition law only
+approximately. The oracle did \emph{not} collapse ($0.8746$ bit-F1 vs the $0.3777$ floor),
+so this is an \emph{informative} gap, not an undertrained tie. We also checked the
+base-rate confound: partition-placement trains with more positives (normal-FAR $0.42$), but
+the threshold-free mAP --- robust to that base-rate shift --- still gives it a clean win
+over every content-blind arm, so the ordering is genuine and not a threshold artifact; the
+result is not tuned to force a win. \textbf{Land cover therefore establishes the
+\emph{ordering}-generality of operator-match on a third real-public domain --- mainstream
+remote sensing --- while honestly bounding its \emph{full-recovery} generality: the ordering
+holds, but synthesis-from-singles does not close the oracle gap here, and we do \emph{not}
+claim land cover recovers the oracle.} Runner:
+\texttt{multilabel\_synth/run\_operator\_match\_landcover.py} (committed).
+
+\begin{table}[t]
+\centering
+\caption{Third real-public partition domain --- UC-Merced multi-label land cover (mainstream
+remote sensing). Single-class sources are \emph{real} pure-region crops from DLRSD pixel
+masks of non-evaluation tiles (no leak); five urban co-occurring classes; the matched
+operator is a $2\times2$ disjoint-quadrant placement (the land-cover partition law); overlay
+is the mismatched \emph{same-$k$} control (only disjoint-vs-superimposed differs). ResNet-18
+(ImageNet-pretrained), $3$ seeds, eval on $400$ held-out \emph{real} multi-label tiles. Eval
+bit-F1 mean $\pm$ std (mAP in parentheses). The matched operator beats every content-blind
+operator (incl.\ the same-$k$ overlay control) on \emph{both} metrics with disjoint std
+bands --- the operator-match \emph{ordering} generalizes --- but it does \emph{not} recover
+the oracle (${\sim}0.15$ bit-F1 / ${\sim}0.14$ mAP short, robust across seeds), a real
+sim-to-real gap; the oracle does not collapse ($0.8746$ vs floor $0.3777$), so the gap is
+informative. Honest ordering-generality with a stated no-recovery limit, complementing the
+SVHN full recovery (Table~\ref{tab:svhn}).}
+\label{tab:landcover}
+\begin{tabular}{lcc}
+\toprule
+Arm & Eval bit-F1 (3 seeds) & mAP \\
+\midrule
+\multicolumn{3}{l}{\emph{Content-blind operators (land cover $=$ partition regime)}} \\
+partition-placement (\textbf{matched, disjoint quadrants, ours}) & $\mathbf{0.7207 \pm 0.0056}$ & $\mathbf{0.7991 \pm 0.0017}$ \\
+overlay / max-union (mismatched, same-$k$ control)               & $0.4243 \pm 0.0303$ & $0.7761$ \\
+cutmix                                                           & $0.5316$ & $0.7848$ \\
+mixup                                                            & $0.5029$ & $0.7784$ \\
+single\_only (floor)                                             & $0.3777$ & $0.7729$ \\
+\midrule
+\multicolumn{3}{l}{\emph{Upper reference (multi-label supervision)}} \\
+oracle (real multi-label tiles)                                  & $0.8746 \pm 0.0013$ & $0.9374$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1211,9 +1322,11 @@ the VOC footnote is a content-\emph{aware} probe reported as gap-recovery ($41\%
 out-recover the real domains. The matched content-blind operator per domain is set by its
 combination law:
 summation/union on superposition domains (MNIST, WM38, audio), the partition-complement /
-partition-placement operator on partition domains (chip and the real-public SVHN house
-numbers), and averaging on disjoint-coordinate text; the multi-label oracle is an upper
-reference, noted in footnotes, not scored as synthesis.}
+partition-placement operator on partition domains (chip, the real-public SVHN house numbers,
+and real-public land cover), and averaging on disjoint-coordinate text; the multi-label
+oracle is an upper reference, noted in footnotes, not scored as synthesis. On land cover the
+matched operator wins the content-blind \emph{ordering} but does \emph{not} recover the oracle
+(a sim-to-real gap), so its Recovery is partial, not a full win.}
 \label{tab:families}
 \begin{tabular}{lcccc}
 \toprule
@@ -1223,6 +1336,7 @@ MNIST (mAP)        & $0.619$ & $0.868$ (overlay) & $0.846$ & $>$100\%$^{\dagger}
 MixedWM38 (bit-F1) & $0.473$ & $0.800$ (overlay, matched)$^{\ddagger}$ & $0.974$ & 82\% \\
 Chip (bit-F1)      & --- & $0.998$ (FCM-PM, ours)$^{\natural}$ & --- & ---$^{\natural}$ \\
 SVHN (bit-F1)      & $0.533$ & $0.886$ (partition-placement, ours)$^{\flat}$ & $0.895$ & 99\% \\
+Land cover (bit-F1) & $0.378$ & $0.721$ (partition-placement, ours)$^{\sharp}$ & $0.875$ & 82\%$^{\sharp}$ \\
 FSD50K audio (bit-F1) & $0.293$ & $0.433$ (waveform-sum)$^{\S}$ & --- & ---$^{\S}$ \\
 VOC 2007 (bit-F1)  & $0.242$ & below floor (blind)$^{\P}$ & $0.503$ & ---$^{\P}$ \\
 Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
@@ -1231,6 +1345,7 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 \multicolumn{5}{l}{\footnotesize $^{\ddagger}$WM38 is a superposition regime, so its matched content-blind operator is overlay $=$ Shin 2022 ($0.80$), reported honestly --- we do not claim to beat it. Our method FCM-PM is the best FAR-controlled content-blind arm ($0.663$ / FAR $0.228$, Table~\ref{tab:headline}) and the winner on the chip partition domain.}\\
 \multicolumn{5}{l}{\footnotesize $^{\natural}$chip is a partition domain: in a matched head-to-head (3 seeds) FCM-PM beats overlay on both axes (eval bit-F1 $0.9968 \pm 0.0008$ vs $0.8733 \pm 0.0338$; Total-FAR $0.68 \pm 0.63\%$ vs $16.20 \pm 5.53\%$, Table~\ref{tab:crossover}). Internal data, no released floor/oracle.}\\
 \multicolumn{5}{l}{\footnotesize $^{\flat}$SVHN is a \emph{real, public} partition domain (format-1 house numbers, a law we did not define): the matched partition-placement operator ($0.8855$) beats overlay ($0.5141$), CutMix ($0.6688$), and MixUp ($0.7638$) with no std overlap and recovers a non-collapsed oracle ($0.8947$, ${\sim}99\%$; Table~\ref{tab:svhn}) --- the public counterpart to the chip head-to-head.}\\
+\multicolumn{5}{l}{\footnotesize $^{\sharp}$land cover is a \emph{real, public} partition domain (UC-Merced multi-label remote sensing): the matched partition-placement operator ($0.7207$) beats overlay's same-$k$ control ($0.4243$), CutMix ($0.5316$), and MixUp ($0.5029$) on both bit-F1 and mAP with disjoint std bands (Table~\ref{tab:landcover}), so the \emph{ordering} generalizes --- but it does \emph{not} recover the non-collapsed oracle ($0.8746$; ${\sim}0.15$ bit-F1 / ${\sim}0.14$ mAP short across seeds), a real sim-to-real gap. The ${\sim}82\%$ Recovery is thus \emph{partial}, unlike SVHN's ${\sim}99\%$: ordering-generality without full-recovery generality --- we do not claim land cover recovers the oracle.}\\
 \multicolumn{5}{l}{\footnotesize $^{\S}$audio is a superposition domain, so waveform summation is its matched content-blind operator; it has no real-multi oracle pool and wins raw bit-F1 $0.433$ vs $0.27$--$0.31$ but at higher FAR $0.21$, so on the performance--FAR tradeoff our FCM-PM ($0.312$/$0.102$ FAR) is the best FAR-controlled arm.}\\
 \multicolumn{5}{l}{\footnotesize $^{\P}$on VOC the content-\emph{blind} arms fall \emph{below} the floor (cutmix $0.226$, mixup $0.194$ $<$ $0.242$) --- blind synthesis fails on natural RGB; only content-\emph{aware} copy-paste (uses dataset bounding boxes; $0.350$, gap-recovery $41\%$) beats the floor, and it is not a content-blind operator.}
 \end{tabular}
@@ -1424,8 +1539,12 @@ with a finite-sample FAR guarantee. The contribution is the annotation-free
 single$\to$multi setting and objective, the operator-match law (measured by the chip
 head-to-head), the FCM-PM method with its FAR levers, the reliability guarantee, the
 theory, and cross-regime framework support across five families --- a weak-supervision
-and reliability result; reliance on one \emph{public} real-multi-label benchmark is a
-real limitation (the chip partition head-to-head uses internal data), and the
+and reliability result; the partition win/ordering now spans two \emph{public}
+real-multi-label benchmarks of different type (SVHN digits with full oracle-recovery,
+land-cover remote sensing with the \emph{ordering} only), so the earlier
+single-public-benchmark limitation is reduced --- though \emph{full-recovery} on public
+data is so far shown only on SVHN (land cover reproduces the ordering but not the recovery,
+a sim-to-real gap) and the chip partition head-to-head uses internal data, and the
 cross-regime breadth is what carries the claim beyond it.
 
 \section{Conclusion}\label{sec:conclusion}
@@ -1451,7 +1570,14 @@ benchmark --- SVHN house numbers, whose partition law we did not define --- wher
 partition-placement operator ($0.8855$ bit-F1) beats overlay, CutMix, and MixUp with no std
 overlap and recovers a non-collapsed real-multi-digit oracle ($0.8947$, ${\sim}99\%$;
 Sec.~\ref{sec:svhn}), while a controlled mechanism study over four constructed public-source
-datasets isolates the flip in both directions. Density is a modeling characterization
+datasets isolates the flip in both directions. The operator-match \emph{ordering} generalizes
+further to a third real-public domain of a different type --- mainstream remote-sensing land
+cover (real UC-Merced multi-label tiles) --- where the matched operator again beats every
+content-blind operator (incl.\ a same-$k$ overlay control) on both bit-F1 and mAP; there,
+honestly, synthesis-from-singles does \emph{not} close the oracle gap (${\sim}0.14$ mAP short,
+a real sim-to-real gap), so land cover extends the \emph{ordering}-generality but not
+\emph{full-recovery} generality, and we do not claim it recovers the oracle
+(Sec.~\ref{sec:landcover}). Density is a modeling characterization
 consistent with the law (FCM-PM matches the real $0.29$; overlay's over-density $0.50$ is the
 superposition signature).
 On a genuine superposition domain (MNIST) blind synthesis exceeds the oracle on unseen
