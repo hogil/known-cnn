@@ -121,9 +121,10 @@ strong and we do \emph{not} claim to beat it. We further contribute an
 guarantee} that holds for \emph{any} operator, and a theory that---decomposing the
 excess-risk bound into a \emph{geometry} term closed by operator-match and an
 \emph{appearance} term equal to the co-occurrence dependence single-label marginals
-cannot identify---\emph{proves} that appearance term a minimax \emph{impossibility}
-(no content-blind synthesizer beats the appearance floor, which independent-source
-synthesis attains) and thereby delivers a two-sided \emph{characterization}: a recovery
+cannot identify---\emph{proves} the latter a minimax \emph{impossibility}
+(no content-blind synthesizer beats the appearance floor $A^\star(S)$, which independent-source
+synthesis attains up to a factor two, exactly in the canonical case) and thereby delivers a
+two-sided \emph{characterization}: a recovery
 trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured
 outcome. Blind synthesis even
 \emph{exceeds} a fully-supervised oracle on held-out MultiMNIST combinations
@@ -1527,7 +1528,7 @@ impossibility, not a technical tour de force. The \emph{excess-risk upper} bound
 one-directional and does \emph{no} operator-\emph{preference} work: a larger geometry or density
 term only weakens the guarantee and never certifies larger risk, so the vacuous density gap of
 Cor.~\ref{cor:density} ($\mathrm{TV}\ge0.86$ on WM38) is \emph{quarantined} to the
-support/frequency term, where it never touches recovery. The operator-match minimality
+support/geometry term, where it never touches recovery. The operator-match minimality
 (Cor.~\ref{cor:opmatch}), matched-law risk equivalence (Cor.~\ref{cor:noadv}), the density-gap
 looseness illustration (Cor.~\ref{cor:density}), the zero-shift boundary (Cor.~\ref{cor:boundary}),
 the proofs of Thm~\ref{thm:l1floor}/\ref{thm:l2char} with a hand-computable witness, the
