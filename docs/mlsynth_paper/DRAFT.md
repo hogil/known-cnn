@@ -87,7 +87,7 @@ are assessed in `D:/project/known-cnn/docs/mlsynth_paper/SUBMISSION_READINESS_26
 
 ## Abstract
 
-Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is an **operator-match law**: the content-blind synthesis operator that best preserves label fidelity is fixed, *before training*, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; this operator choice is moreover *learnable end-to-end* -- from a neutral initialization a one-step hypergradient gate recovers the domain's matched operator in 4/4 regimes with no domain label, *matching* (not beating) hand-selection. Throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory that -- decomposing the excess-risk bound into a *geometry* term closed by operator-match and an *appearance* term equal to the co-occurrence dependence, which single-label marginals do not identify and no content-blind synthesizer can cross -- now *predicts* a recovery trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured outcome. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
+Industrial visual inspection must recognize images containing several defect types at once, yet multi-label annotation is impractical -- co-occurrences explode combinatorially and rare combinations are never observed in labeled form -- while single-defect examples are cheap and unambiguous. We study how to train a multi-label recognizer from single-label sources alone, with **no multi-label, location, or normal annotation**, by synthesizing combination examples. Our central contribution is a **characterization of what content-blind synthesis can and cannot recover** from single-label data -- delineating the achievable frontier of this setting, rather than merely selecting an operator. On the recoverable side, a predictive **operator-match law** fixes, *before training*, the content-blind synthesis operator that best preserves label fidelity, by the domain's true combination law -- a summation/union join (= Shin et al. 2022 Summation Mixup) for *superposition-structured* domains, and a partition-complement operator (**FCM-PM**) for *partition-structured* domains. We verify this law's falsifiable flip on real fab-chip data, on real public SVHN house numbers (a genuine partition law we did not define, where the matched operator recovers a non-collapsed real oracle within ~1%), on real remote-sensing land cover, and on a four-dataset controlled mechanism study that reproduces the flip in *both* directions; this operator choice is moreover *learnable end-to-end* -- from a neutral initialization a one-step hypergradient gate recovers the domain's matched operator in 4/4 regimes with no domain label, *matching* (not beating) hand-selection. Throughout, the matched operator is the *best* content-blind choice, beating the mismatched operator, CutMix, and MixUp with no standard-deviation overlap, while on the public MixedWM38 wafer benchmark (a superposition regime) the matched summation/overlay operator is genuinely strong and we do *not* claim to beat it. We further contribute an **annotation-free, distribution-free split-conformal false-alarm-rate guarantee** that holds for *any* operator, and a theory that -- decomposing the excess-risk bound into a *geometry* term closed by operator-match and an *appearance* term equal to the co-occurrence dependence, which single-label marginals do not identify and no content-blind synthesizer can cross -- now *predicts* a recovery trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured outcome. Blind synthesis even *exceeds* a fully-supervised oracle on held-out MultiMNIST combinations (+0.198 mAP); the same criterion predicts the counterintuitive Reuters text averaging-flip and the FSD50K audio summation ranking; and natural images (VOC) mark the boundary where content-blind synthesis fails and location supervision becomes necessary.
 
 ## 1 Introduction
 
@@ -100,7 +100,11 @@ single-defect examples. This inverts the usual weak-supervision setting:
 rather than multi-label images with missing labels (single-positive
 multi-label, SPML), the training images themselves contain one category —
 and the question is whether multi-label competence can be manufactured from
-them.
+them. Our answer is a *characterization of the achievable frontier* of this
+setting: we delineate what single-label supervision lets a content-blind
+synthesizer recover, what it provably cannot, and why -- and turn the
+recoverable part into a method that learns multi-label recognizers end to end,
+with an annotation-free reliability certificate.
 
 We work under a strict **content-blind** constraint — training images each carry a
 single-defect label, with no multi-label or normal annotation — and answer by
@@ -112,7 +116,8 @@ uses supervision the setting forbids). The content-blind operators — summation
 single-defect maps), the partition-style full-cover complement, cutmix, and pixel
 averaging — all consume the same two single maps and none uses any location annotation,
 so **which one is right is not fixed by fiat but by the domain's true combination
-law**. This is the paper's central, and now *measured*, principle — the
+law**. This is the criterion for the *recoverable* half of that frontier, now a
+*measured* principle — the
 **operator-match law**: a summation/union join is the evidence-preserving operator for
 **superposition-structured** domains, where each source's evidence adds or saturates
 (inked digits, audio, and wafer maps under a binary die encoding), whereas a
@@ -182,7 +187,13 @@ finite-sample, distribution-free FAR guarantee**. This guarantee holds for *any*
 operator and is the reliability asset Shin et al. (2022) and other operator-only
 methods do not provide. Real mixed and normal maps remain final test data.
 
-Contributions:
+Taken together, our contributions *characterize the achievable frontier* of
+content-blind multi-label synthesis -- what single-label supervision can recover (a
+predictive operator-match criterion), what it provably cannot (an appearance-floor
+impossibility), how to certify the result (an annotation-free reliability guarantee),
+and that the operator choice is itself learnable -- rather than merely choosing between
+two operators:
+
 1. **The operator-match law (a general principle for label-faithful synthesis).** The
    right content-blind operator is selected *before any training* by a predictive
    criterion (evidence survival / label fidelity), fixed not by fiat but by the domain's
@@ -295,6 +306,15 @@ Contributions:
 
 ## 2 Related Work
 
+Our work draws on four literatures -- combination-style data augmentation, weak
+multi-label supervision, single-to-mixed defect synthesis, and reliability (selective
+and conformal prediction, and label noise) -- but reduces to none of them. Each supplies
+one ingredient; our contribution is the framework that **unifies** operator choice
+(which content-blind synthesizer to trust, decided before training), reliability (an
+annotation-free false-alarm guarantee), and a recoverability characterization (what
+single-label data can and cannot recover) -- none of which any single family provides.
+We review each below and mark the distinction.
+
 - **Mixing augmentations.** Mixup (Zhang et al., 2018): convex image/label
   blending — designed as a regularizer for single-label training, not as a
   combination synthesizer; we show averaging ghosts both objects (MNIST mixup
@@ -363,6 +383,26 @@ Contributions:
 - **Open-set / false-alarm control.** Relation to OOD rejection; our pair-mask
   and synthetic-normal are training-side mechanisms (inference-side selection
   and rejection are a separate paper).
+- **Synthetic data and sim-to-real.** The single-to-mixed methods above are all
+  sim-to-real in disguise -- they train on synthesized combinations and test on real
+  ones -- so their reliability hinges on how faithfully synthesis reproduces real
+  co-occurrence appearance. We make this sim-to-real gap explicit on remote-sensing land
+  cover (Sec 5.1.3), decomposing it into a closeable *geometry* component (matched real
+  region shape) and an irreducible *appearance* component -- the same appearance floor
+  our theory (Sec Theory) shows single-label marginals cannot cross -- which is what
+  separates the domains where blind synthesis recovers the oracle from those where it
+  can only close part of the gap.
+- **Selective prediction, conformal calibration, and label noise.** Our reliability
+  layer builds on selective prediction (abstaining below a confidence threshold to trade
+  coverage for reliability) and makes its false-alarm control *distribution-free* via
+  split-conformal calibration (Lei et al., 2018), turning a finite known-good set into a
+  finite-sample marginal FAR guarantee under exchangeability, with *no* real-normal
+  training label. Separately, our label-fidelity-to-risk argument is an instance of
+  learning under class-conditional label noise (Natarajan et al., 2013): an
+  evidence-destroying operator (CutMix at high patch fraction) manufactures label noise
+  *at synthesis time*, so its downstream risk follows the same class-conditional-noise
+  mechanics. Neither line, however, decides *which* synthesizer to trust in the first
+  place; our operator-match criterion supplies that, upstream of both.
 
 ## 3 Problem Setting
 
@@ -1403,9 +1443,11 @@ what carries the claim beyond it.
 
 From single-label training data alone — no multi-label or real-normal annotation —
 label-faithful synthesis trains multi-label recognizers and we maximize the
-multi-label performance–FAR tradeoff. The central, now **measured**, principle is
-operator-match: the right content-blind synthesis operator is set by the domain's true
-combination law. On WM38 — a superposition regime under the binary encoding, where the
+multi-label performance–FAR tradeoff. Our result is a **characterization of the
+achievable frontier** of this setting -- what single-label supervision lets
+content-blind synthesis recover, what it provably cannot, and why. The recoverable side
+is governed by a now-**measured** operator-match principle: the right content-blind
+synthesis operator is set by the domain's true combination law. On WM38 — a superposition regime under the binary encoding, where the
 matched join is whole-image summation/union (= Shin et al. 2022 Summation Mixup) —
 overlay is genuinely strong (bit-F1 0.80 at FAR 0.010), and we report it honestly and
 **do not claim to beat it**; among the content-blind operators our FCM-PM (with
@@ -1441,6 +1483,26 @@ disjoint-coordinate text takes averaging, and natural RGB (VOC) marks the bounda
 content-blind synthesis fails and location supervision becomes necessary. What remains
 with the oracle is the appearance of real high-order interactions — a boundary we
 quantify and leave as the open problem.
+
+## Reproducibility
+
+All experiments use public datasets or a synthesizable source, fixed seeds, and released
+runner scripts. The controlled four-source mechanism study runs through
+`multilabel_synth/run_operator_match*.py` (MNIST, FashionMNIST, KMNIST, EMNIST-letters),
+and its end-to-end learnable-gate variant through
+`multilabel_synth/run_operator_match_learned.py`; the real-public partition benchmarks
+run through `multilabel_synth/run_operator_match_svhn.py` (SVHN format-1 house numbers)
+and `multilabel_synth/run_operator_match_landcover.py` (UC-Merced/DLRSD land cover), with
+the few-shot real-tile sweep in `multilabel_synth/run_fewshot_ksweep_landcover.py`; the
+wafer and chip results use the MixedWM38/chip synthesis-and-training pipeline. All
+evaluation datasets are public -- MNIST, FashionMNIST, KMNIST, EMNIST, SVHN,
+UC-Merced/DLRSD, and MixedWM38 -- and the chip-internal maps are synthetic and releasable
+(the real fab-chip maps are internal, but the chip *synthesis* recipe -- FCM-PM,
+complement grid, Pair-Mask, synthetic normals -- is fully specified in Sec 4). Seeds are
+fixed and reported: the chip head-to-head uses three seeds (s99/s7/s42), and multi-seed
+means and standard deviations accompany every headline comparison. Metrics (bit-F1 at
+threshold 0.5, NORMAL-FAR, mAP, exact-match) and the split-conformal calibration
+procedure are defined in Sec 3 and the reliability results of Sec 5.
 
 ---
 

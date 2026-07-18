@@ -89,12 +89,14 @@ explode combinatorially and rare combinations are never observed in labeled
 form---while single-defect examples are cheap and unambiguous. We study how to
 train a multi-label recognizer from single-label sources alone, with \emph{no
 multi-label, location, or normal annotation}, by synthesizing combination
-examples. Our central contribution is an \textbf{operator-match law}: the
-content-blind synthesis operator that best preserves label fidelity is fixed,
-\emph{before training}, by the domain's true combination law---a summation/union
-join (${=}$ Shin et al.\ 2022 Summation Mixup) for \emph{superposition-structured}
-domains, and a partition-complement operator (\textbf{FCM-PM}) for
-\emph{partition-structured} domains. We verify this law's falsifiable flip on
+examples. Our central contribution is a \textbf{characterization of what
+content-blind synthesis can and cannot recover} from single-label data---delineating
+the achievable frontier of this setting, rather than merely selecting an operator. On
+the recoverable side, a predictive \textbf{operator-match law} fixes, \emph{before
+training}, the content-blind synthesis operator that best preserves label fidelity, by
+the domain's true combination law---a summation/union join (${=}$ Shin et al.\ 2022
+Summation Mixup) for \emph{superposition-structured} domains, and a partition-complement
+operator (\textbf{FCM-PM}) for \emph{partition-structured} domains. We verify this law's falsifiable flip on
 real fab-chip data, on real public SVHN house numbers (a genuine partition law
 we did not define, where the matched operator recovers a non-collapsed real
 oracle within ${\sim}1\%$), on real remote-sensing land cover, and on a
@@ -132,7 +134,11 @@ unambiguously, are single-defect examples. This inverts the usual
 weak-supervision setting: rather than multi-label images with missing labels
 (single-positive multi-label, SPML~\cite{cole2021spml,kim2022largeloss}),
 the training images themselves contain one category --- and the question is
-whether multi-label competence can be manufactured from them.
+whether multi-label competence can be manufactured from them. Our answer is a
+\emph{characterization of the achievable frontier} of this setting: we delineate what
+single-label supervision lets a content-blind synthesizer recover, what it provably
+cannot, and why --- and turn the recoverable part into a method that learns multi-label
+recognizers end to end, with an annotation-free reliability certificate.
 
 We work under a strict \emph{content-blind} constraint --- training images each carry
 a single-defect label, with no multi-label or normal annotation --- and answer by
@@ -145,8 +151,9 @@ Mixup~\cite{shin2022summation}, a pixelwise $\max$ of two single-defect maps), t
 partition-style full-cover complement, cutmix~\cite{yun2019cutmix}, and pixel
 averaging~\cite{zhang2018mixup} --- all consume the same two single maps and none uses
 any location annotation, so \emph{which one is right is not fixed by fiat but by the
-domain's true combination law}. This is the paper's central, and now \emph{measured},
-principle --- the \textbf{operator-match law}: a summation/union join is the
+domain's true combination law}. This is the criterion for the \emph{recoverable} half
+of that frontier, now a \emph{measured} principle --- the \textbf{operator-match law}:
+a summation/union join is the
 evidence-preserving operator for \emph{superposition-structured} domains, where each
 source's evidence adds or saturates (inked digits, audio, and wafer maps under a
 binary die encoding), whereas a \emph{partition-complement} (FCM-PM) is the right
@@ -223,7 +230,12 @@ finite-sample, distribution-free FAR guarantee}. This guarantee holds for
 operator-only methods do not provide. Real mixed and normal maps remain final test
 data.
 
-Our contributions are:
+Taken together, our contributions \emph{characterize the achievable frontier} of
+content-blind multi-label synthesis --- what single-label supervision can recover (a
+predictive operator-match criterion), what it provably cannot (an appearance-floor
+impossibility), how to certify the result (an annotation-free reliability guarantee),
+and that the operator choice is itself learnable --- rather than merely choosing between
+two operators:
 \begin{enumerate}
 \item \textbf{The operator-match law (a general principle for label-faithful synthesis).}
   The right content-blind operator is selected \emph{before any training} by a
@@ -349,6 +361,15 @@ Our contributions are:
 
 \section{Related Work}\label{sec:related}
 
+Our work draws on four literatures --- combination-style data augmentation, weak
+multi-label supervision, single-to-mixed defect synthesis, and reliability (selective
+and conformal prediction, and label noise) --- but reduces to none of them. Each
+supplies one ingredient; our contribution is the framework that \emph{unifies} operator
+choice (which content-blind synthesizer to trust, decided before training), reliability
+(an annotation-free false-alarm guarantee), and a recoverability characterization (what
+single-label data can and cannot recover) --- none of which any single family provides.
+We review each below and mark the distinction.
+
 \textbf{Mixing augmentations.} Mixup~\cite{zhang2018mixup} blends images
 and labels convexly --- designed as a regularizer for single-label
 training, not as a combination synthesizer; we show averaging ghosts both
@@ -415,10 +436,28 @@ diffusion pipelines~\cite{thuan2025adaptive,li2025separation,yang2026diffusion} 
 to future work, as their exact operators are not recoverable from the published
 descriptions, and we report their native numbers and the protocol gap instead.
 
-\textbf{Selective prediction and noisy labels.} Our rejection stage uses
-split-conformal calibration~\cite{lei2018conformal}; the fidelity-to-risk
-argument connects to learning with class-conditional label
-noise~\cite{natarajan2013noisy}.
+\textbf{Synthetic data and sim-to-real.} The single-to-mixed methods above are all
+sim-to-real in disguise --- they train on synthesized combinations and test on real
+ones --- so their reliability hinges on how faithfully synthesis reproduces real
+co-occurrence appearance. We make this sim-to-real gap explicit on remote-sensing land
+cover (Sec.~\ref{sec:landcover}), decomposing it into a closeable \emph{geometry}
+component (matched real region shape) and an irreducible \emph{appearance} component ---
+the same appearance floor our theory (Sec.~\ref{sec:theory}) shows single-label
+marginals cannot cross --- which is what separates the domains where blind synthesis
+recovers the oracle from those where it can only close part of the gap.
+
+\textbf{Selective prediction, conformal calibration, and label noise.} Our reliability
+layer builds on selective prediction --- abstaining below a confidence threshold to
+trade coverage for reliability --- and makes its false-alarm control
+\emph{distribution-free} via split-conformal calibration~\cite{lei2018conformal},
+turning a finite known-good set into a finite-sample marginal FAR guarantee under
+exchangeability, with \emph{no} real-normal training label. Separately, our
+label-fidelity-to-risk argument is an instance of learning under class-conditional label
+noise~\cite{natarajan2013noisy}: an evidence-destroying operator (CutMix at high patch
+fraction) manufactures label noise \emph{at synthesis time}, so its downstream risk
+follows the same class-conditional-noise mechanics. Neither line, however, decides
+\emph{which} synthesizer to trust in the first place; our operator-match criterion
+supplies that, upstream of both.
 
 \section{Problem Setting}\label{sec:setting}
 
@@ -1763,9 +1802,11 @@ cross-regime breadth is what carries the claim beyond it.
 
 From single-label training data alone --- no multi-label or real-normal annotation ---
 label-faithful synthesis trains multi-label recognizers and we maximize the
-multi-label performance--FAR tradeoff. The central, now \emph{measured}, principle is
-operator-match: the right content-blind synthesis operator is set by the domain's true
-combination law. On WM38 --- a superposition regime under the binary encoding, where
+multi-label performance--FAR tradeoff. Our result is a \emph{characterization of the
+achievable frontier} of this setting --- what single-label supervision lets
+content-blind synthesis recover, what it provably cannot, and why. The recoverable side
+is governed by a now-\emph{measured} operator-match principle: the right content-blind
+synthesis operator is set by the domain's true combination law. On WM38 --- a superposition regime under the binary encoding, where
 the matched join is whole-image summation/union ($=$ Shin et al.\ 2022 Summation
 Mixup) --- overlay is genuinely strong (bit-F1 $0.80$ at FAR $0.010$), and we report it
 honestly and \emph{do not claim to beat it}; among the content-blind operators our
@@ -1805,6 +1846,26 @@ take the partition-complement, disjoint-coordinate text takes averaging, and nat
 RGB (VOC) marks the boundary where content-blind synthesis fails and location
 supervision becomes necessary. What remains with the oracle is the appearance of real
 high-order interactions --- a boundary we quantify and leave open.
+
+\section*{Reproducibility Statement}
+
+All experiments use public datasets or a synthesizable source, fixed seeds, and released
+runner scripts. The controlled four-source mechanism study runs through
+\texttt{run\_operator\_match*.py} (MNIST, FashionMNIST, KMNIST, EMNIST-letters), and its
+end-to-end learnable-gate variant through \texttt{run\_operator\_match\_learned.py}; the
+real-public partition benchmarks run through \texttt{run\_operator\_match\_svhn.py} (SVHN
+format-1 house numbers) and \texttt{run\_operator\_match\_landcover.py}
+(UC-Merced/DLRSD land cover), with the few-shot real-tile sweep in
+\texttt{run\_fewshot\_ksweep\_landcover.py}; the wafer and chip results use the
+MixedWM38/chip synthesis-and-training pipeline. All evaluation datasets are public ---
+MNIST, FashionMNIST, KMNIST, EMNIST, SVHN, UC-Merced/DLRSD, and MixedWM38 --- and the
+chip-internal maps are synthetic and releasable (the real fab-chip maps are internal,
+but the chip \emph{synthesis} recipe --- FCM-PM, complement grid, Pair-Mask, synthetic
+normals --- is fully specified in Sec.~\ref{sec:method}). Seeds are fixed and reported:
+the chip head-to-head uses three seeds (s99/s7/s42), and multi-seed means and standard
+deviations accompany every headline comparison. Metrics (bit-F1 at threshold $0.5$,
+NORMAL-FAR, mAP, exact-match) and the split-conformal calibration procedure are defined
+in Sec.~\ref{sec:setting} and the reliability results of Sec.~\ref{sec:experiments}.
 
 \appendix
 \section{Additional theory and reliability statements}\label{app:theory}
