@@ -49,13 +49,20 @@
 % setting + performance-maximization objective (oracle upper reference); (iv) method =
 % FCM-PM + val-margin + nb-reject (instantiation for partition/chip domains); (v) cross-domain
 % framework support (MNIST/audio/text) + VOC location boundary. The excess-risk theory now
-% PREDICTS a recovery trichotomy: the 2B*TV bound's conditional term splits (Thm decomp) into
-% a GEOMETRY term G (=0 under operator-match) and an APPEARANCE term A_raw = TV(Q_S,P_S) = the
-% co-occurrence appearance dependence, which is NON-IDENTIFIABLE from single-label marginals
-% (Lemma floor) and hence an irreducible floor under content-blindness. Trichotomy (Cor):
-% op-matchable + appearance-preserving -> full recovery (can beat oracle); op-matchable +
-% appearance-interacting -> partial, floored ~2B*E[A]; non-op-matchable (occlusion) -> fail.
-% Risk-floor step is a labeled CONJECTURE (needs a margin lemma), NOT a theorem. This predicts
+% PREDICTS a recovery trichotomy AND proves a matching IMPOSSIBILITY: the 2B*TV bound's
+% conditional term splits (Thm decomp) into a GEOMETRY term G (=0 under operator-match) and an
+% APPEARANCE term A_raw = TV(Q_S,P_S) = the co-occurrence appearance dependence, NON-IDENTIFIABLE
+% from single-label marginals. The tautological inf-floor is REPLACED by a minimax LOWER BOUND
+% (Thm L1 = thm:l1floor): any content-blind synthesizer, committing before seeing the true copula,
+% has worst-case conditional TV >= A*(S) = (1/2) diam_TV of the copula-reachable real appearances
+% (Le Cam two-point); A*(S)>0 iff copula variation survives the operator. Matching upper bound
+% (Thm L2 = thm:l2char): A* <= V <= 2A*, exact in the canonical case where independent-source
+% synthesis is minimax-optimal -> a two-sided CHARACTERIZATION. Trichotomy (Cor): op-matchable +
+% appearance-preserving (A*=0) -> full recovery (can beat oracle); op-matchable + appearance-
+% interacting (A*>0) -> partial, floored ~2B*E[A*]; non-op-matchable (occlusion) -> fail.
+% Risk-floor is now a THEOREM UNDER a named margin (Assumption M = ass:margin, Thm L3 =
+% thm:l3risk: excess risk >= beta*gamma; + Thm L3' proper-loss Bregman/Pinsker); the UNCONDITIONAL
+% c*A* risk floor is FALSE without a margin (cor:boundary) and is NOT claimed. This predicts
 % every measured outcome (MNIST +0.198 beat, SVHN/chip/WM38-pair full, land-cover ~0.10 mAP
 % floor, VOC fail) and quarantines the vacuous cor:density (TV>=0.86) into the support term.
 % Sec. "When does recovery happen? A geometry/appearance decomposition" + Appendix A.
@@ -72,6 +79,7 @@
 \newtheorem{lemma}{Lemma}
 \newtheorem{corollary}{Corollary}
 \newtheorem{conjecture}{Conjecture}
+\newtheorem{assumption}{Assumption}
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 
 \title{Multi-Label Recognition Without Multi-Label Annotation:\\
@@ -112,10 +120,12 @@ strong and we do \emph{not} claim to beat it. We further contribute an
 \textbf{annotation-free, distribution-free split-conformal false-alarm-rate
 guarantee} that holds for \emph{any} operator, and a theory that---decomposing the
 excess-risk bound into a \emph{geometry} term closed by operator-match and an
-\emph{appearance} term equal to the co-occurrence dependence, which single-label
-marginals do not identify and no content-blind synthesizer can cross---now
-\emph{predicts} a recovery trichotomy (full / partial-up-to-an-appearance-floor /
-fail) matching every measured outcome. Blind synthesis even
+\emph{appearance} term equal to the co-occurrence dependence single-label marginals
+cannot identify---\emph{proves} that appearance term a minimax \emph{impossibility}
+(no content-blind synthesizer beats the appearance floor, which independent-source
+synthesis attains) and thereby delivers a two-sided \emph{characterization}: a recovery
+trichotomy (full / partial-up-to-an-appearance-floor / fail) matching every measured
+outcome. Blind synthesis even
 \emph{exceeds} a fully-supervised oracle on held-out MultiMNIST combinations
 ($+0.198$ mAP); the same criterion predicts the counterintuitive Reuters text
 averaging-flip and the FSD50K audio summation ranking; and natural images (VOC)
@@ -300,13 +310,15 @@ two operators:
   \emph{ordering}-generality without extending \emph{full-recovery} generality. On WM38 --- a superposition regime under the binary encoding
   --- overlay is instead the matched operator and is honestly strong ($0.80$/$0.010$); we
   do \emph{not} claim to beat it there. A short excess-risk argument
-  (Sec.~\ref{sec:theory}) makes this \emph{predictive}: it decomposes the bound into a
-  \emph{geometry} term closed by operator-match and an \emph{appearance} term equal to the
-  co-occurrence dependence---non-identifiable from single-label marginals and hence
-  irreducible under content-blindness (Lemma~\ref{lem:floor})---yielding a recovery
-  trichotomy (Cor.~\ref{cor:trichotomy}) that predicts full recovery, partial recovery up to
-  the appearance floor, or outright failure, and calls the measured pattern across our
-  domains (including the measured oracle-recovery, Cor.~\ref{cor:oraclerecover}).
+  (Sec.~\ref{sec:theory}) makes this \emph{predictive} and two-sided: it decomposes the bound
+  into a \emph{geometry} term closed by operator-match and an \emph{appearance} term equal to the
+  co-occurrence dependence---non-identifiable from single-label marginals---and \emph{proves} the
+  latter a minimax \emph{impossibility}: no content-blind synthesizer beats the appearance floor
+  $A^\star(S)$ (Thm~\ref{thm:l1floor}), which independent-source synthesis attains up to a factor
+  two, exactly in the canonical case (Thm~\ref{thm:l2char}). This upper-meets-lower pair yields a
+  recovery trichotomy (Cor.~\ref{cor:trichotomy}) that predicts full recovery, partial recovery up
+  to the appearance floor, or outright failure, and calls the measured pattern across our domains
+  (including the measured oracle-recovery, Cor.~\ref{cor:oraclerecover}).
   \textbf{The operator choice is moreover learnable end-to-end (Sec.~\ref{sec:opmatch-learned}):}
   a neutral-initialized one-step-hypergradient soft-gate over a convex overlay/partition blend
   recovers the domain's matched operator in $4/4$ regimes with no domain label (learned
@@ -1488,26 +1500,40 @@ Reuters (bit-F1)   & $0.254$ & $0.433$ (vec-avg) & $0.603$ & 72\% \\
 
 \subsection{When does recovery happen? A geometry/appearance decomposition}\label{sec:theory}
 
-The theory here does \emph{predictive} work: from two structural properties of a domain,
-fixed \emph{before any training}, it calls whether content-blind synthesis recovers the
-oracle fully, recovers it partially up to a floor, or fails. The mechanism is an
-operator-explicit decomposition of the excess-risk bound (Thm~\ref{thm:excess}) into a
-\emph{geometry} term that vanishes when the synthesizer matches the domain's combination law
-and an \emph{appearance} term equal to the co-occurrence appearance \emph{dependence} of the
-sources --- a joint statistic that single-label marginals do not identify and that no
-content-blind synthesizer can cross (Lemma~\ref{lem:floor}). The resulting trichotomy
-(Cor.~\ref{cor:trichotomy}) predicts, rather than merely fits, the measured pattern across
-our domains. We are explicit about depth: the decomposition is \emph{elementary} --- one
-triangle inequality and one data-processing inequality on top of Thm~\ref{thm:excess} --- and
-its value is predictive and organizing, not technical. The bound stays
-\emph{one-directional}: a larger geometry or appearance term only weakens the \emph{upper}
-guarantee and never certifies larger risk, so it does \emph{no} operator-\emph{preference}
-work, and the vacuous density gap of Cor.~\ref{cor:density} ($\mathrm{TV}\ge0.86$ on WM38) is
-\emph{quarantined} to the support/frequency term, where it never touches recovery. The
-operator-match minimality (Cor.~\ref{cor:opmatch}), matched-law risk equivalence
-(Cor.~\ref{cor:noadv}), the density-gap looseness illustration (Cor.~\ref{cor:density}), the
-zero-shift boundary (Cor.~\ref{cor:boundary}), Lemma~\ref{lem:floor}'s proof, and the
-finite-sample and conformal results are collected in Appendix~\ref{app:theory}.
+The theory here does \emph{predictive} work and is two-sided: from two structural properties of
+a domain, fixed \emph{before any training}, it calls whether content-blind synthesis recovers the
+oracle fully, recovers it partially up to a floor, or fails, and it proves that floor is
+\emph{unbeatable}. The mechanism is an operator-explicit decomposition of the excess-risk bound
+(Thm~\ref{thm:excess}) into a \emph{geometry} term that vanishes when the synthesizer matches the
+domain's combination law and an \emph{appearance} term equal to the co-occurrence appearance
+\emph{dependence} of the sources --- a joint statistic that single-label marginals do not
+identify. This gives the \emph{upper} direction (matched synthesis reaches the oracle up to the
+appearance term). The new content is the matching \emph{lower} direction: because single-label
+data reveal only the sources' marginals, a content-blind synthesizer must commit its output
+\emph{before, and without seeing,} the true co-occurrence copula, so a Le Cam two-point argument
+floors its worst-case conditional error at $A^\star(S)$, half the total-variation diameter of the
+copula-reachable real appearances (Thm~\ref{thm:l1floor}) --- a strictly positive, computable
+quantity no content-blind method can cross. A matching upper bound pins the content-blind minimax
+value to within a factor two of $A^\star(S)$ (exactly, in the canonical case) and identifies
+\emph{independent-source synthesis} as the minimax-optimal content-blind synthesizer
+(Thm~\ref{thm:l2char}). The pair is thus a \emph{characterization}, not a decorative bound:
+recoverable $=$ operator-match closes geometry, provably-not-recoverable $=$ $A^\star(S)>0$
+impossibility. The resulting trichotomy (Cor.~\ref{cor:trichotomy}) predicts, rather than merely
+fits, the measured pattern across our domains. We are explicit about depth: the machinery is
+\emph{elementary but load-bearing} --- a triangle/data-processing inequality for the
+decomposition, a Le Cam two-point bound and Frechet--Hoeffding geometry for the impossibility,
+and a standard margin condition for the risk floor --- correct and doing the work of an
+impossibility, not a technical tour de force. The \emph{excess-risk upper} bound remains
+one-directional and does \emph{no} operator-\emph{preference} work: a larger geometry or density
+term only weakens the guarantee and never certifies larger risk, so the vacuous density gap of
+Cor.~\ref{cor:density} ($\mathrm{TV}\ge0.86$ on WM38) is \emph{quarantined} to the
+support/frequency term, where it never touches recovery. The operator-match minimality
+(Cor.~\ref{cor:opmatch}), matched-law risk equivalence (Cor.~\ref{cor:noadv}), the density-gap
+looseness illustration (Cor.~\ref{cor:density}), the zero-shift boundary (Cor.~\ref{cor:boundary}),
+the proofs of Thm~\ref{thm:l1floor}/\ref{thm:l2char} with a hand-computable witness, the
+non-identifiability lemma (Lemma~\ref{lem:floor}), the risk floor under a named margin condition
+(Thm~\ref{thm:l3risk}, Thm~\ref{thm:l3prime}), and the finite-sample and conformal results are
+collected in Appendix~\ref{app:theory}.
 
 \begin{definition}[Blind-combination domain]\label{def:blindcomb}
 A domain is a blind-combination domain if the observation of co-occurring
@@ -1596,27 +1622,86 @@ $G(S,\oplus)=0$.
 \end{proof}
 
 The geometry term $G$ closes under operator-match; the appearance term is a floor, and the
-reason it is irreducible --- not merely hard --- is an identifiability fact.
+reason it is irreducible --- not merely hard --- is an information constraint with the correct
+quantifier order. Single-label data reveal only the sources' marginals, so a content-blind
+synthesizer must fix its output \emph{before, and without seeing}, the true co-occurrence copula.
+We make this the minimax model of the setting.
 
-\begin{lemma}[Appearance floor and non-identifiability]\label{lem:floor}
-Let $\mathcal C(S)$ be the set of conditionals a content-blind synthesizer can produce for
-subset $S$ --- the closure of laws constructible from the solo marginals
-$\{P_{\mathrm{solo}}(\cdot|c)\}_{c\in S}$ alone, using no joint sample of $S$ --- and let
-$A(S):=\inf_{D\in\mathcal C(S)}\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),D)$.
-\emph{(a) Floor.} Every content-blind $T$ has $T_{\#}P_S\in\mathcal C(S)$, so
-$\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),K_{\mathrm{syn}}(\cdot|S))\ge A(S)$; once the prior is
-matched, the bound of Thm~\ref{thm:decomp} cannot be driven below $2B\,\mathbb{E}_S[A(S)]$ by
-any content-blind operator.
-\emph{(b) Zero iff appearance-preserving.} Under operator-match $A(S)\le A_{\mathrm{raw}}(S)=\mathrm{TV}(Q_S,P_S)$,
-so conditionally independent sources ($Q_S=P_S$) give $A(S)=0$; if $\oplus$ does not collapse
-the difference on the relevant support, the converse holds and $A(S)=0$ iff appearance-preserving.
-\emph{(c) Non-identifiability.} Every element of $\mathcal C(S)$ is a functional of the solo
-\emph{marginals} only, whereas $A_{\mathrm{raw}}(S)$ is a property of the \emph{joint} $Q_S$:
-two joints with identical marginals differ exactly in their dependence (copula). Hence whenever
-the co-occurrence dependence of $Q_S$ is not marginal-determined,
-$K_{\mathrm{real}}(\cdot|S)\notin\mathcal C(S)$ and $A(S)>0$ for \emph{every} content-blind
-synthesizer. The appearance residual is thus irreducible by \emph{identifiability}, not by
-optimization difficulty. (Proof in Appendix~\ref{app:theory}.)
+\begin{definition}[Copula-ambiguity set and appearance floor]\label{def:ambiguity}
+Fix a co-occurring subset $S$ ($|S|\ge2$). Single-label data reveal only the tuple of solo
+marginals $M=(P_{\mathrm{solo}}(\cdot|c))_{c\in S}$. Let $\mathrm{Fr}(M)$ be the Frechet class of
+couplings (joint appearance laws on $Y_S=\prod_{c\in S}Y_c$ with marginals $M$; nonempty, since it
+contains the product $P_S$), and let $\mathcal U(M)\subseteq\mathrm{Fr}(M)$ be the
+\emph{copula-ambiguity set} --- the couplings single-label data cannot rule out (default
+$\mathcal U(M)=\mathrm{Fr}(M)$, i.e.\ single-label data rules out no coupling; a smaller
+$\mathcal U(M)$ encodes structural knowledge genuinely available without joint samples). The
+reachable real conditionals are $\mathcal R(M):=\{\oplus_{\#}Q:Q\in\mathcal U(M)\}$, and the
+\emph{appearance floor} is
+\[
+A^\star(S)\;:=\;\tfrac12\,\operatorname{diam}_{\mathrm{TV}}\!\big(\mathcal R(M)\big)
+\;=\;\tfrac12\sup_{Q,Q'\in\mathcal U(M)}\mathrm{TV}\big(\oplus_{\#}Q,\,\oplus_{\#}Q'\big).
+\]
+A content-blind synthesizer is any procedure whose output law $\Phi$ is a functional of $M$ alone;
+equivalently, its output is \emph{constant in} the true copula $Q$. This subsumes every mechanism
+we call content-blind (independent-draw-plus-operator such as overlay/max, placement, cutmix,
+mixup, FCM-PM, waveform-sum, averaging; and any fixed marginal-measurable re-coupling): all lack
+the joint sample needed to identify the copula.
+\end{definition}
+
+\begin{theorem}[Content-blind appearance floor; impossibility]\label{thm:l1floor}
+For \emph{every} content-blind synthesizer $\Phi$ (Def.~\ref{def:ambiguity}),
+\[
+\sup_{Q\in\mathcal U(M)}\mathrm{TV}\big(K_{\mathrm{real}}(\cdot|S;Q),\Phi\big)\;\ge\;A^\star(S),
+\qquad K_{\mathrm{real}}(\cdot|S;Q)=\oplus_{\#}Q,
+\]
+so the content-blind minimax conditional error
+$V(S):=\inf_{\Phi}\sup_{Q\in\mathcal U(M)}\mathrm{TV}(\oplus_{\#}Q,\Phi)\ge A^\star(S)$. Once the
+subset prior is matched, the conditional term of Thm~\ref{thm:excess}/Thm~\ref{thm:decomp} cannot
+be driven below $2B\,\mathbb{E}_{S\sim\pi}[A^\star(S)]$ by any content-blind synthesizer, present
+or future. Moreover $A^\star(S)>0$ iff $\oplus$ does not collapse $\mathcal U(M)$ to a single
+pushforward, i.e.\ iff some co-occurrence-copula variation \emph{survives} the operator; in
+particular, if $\mathcal U(M)=\mathrm{Fr}(M)$ and $\oplus_{\#}$ is injective-in-law on the copula,
+then $A^\star(S)>0$ whenever $|S|\ge2$ on a non-degenerate appearance space. This is a two-point
+(Le Cam) minimax bound with the operating quantifier order --- $\Phi$ is committed first, the
+adversary then picks the worst $Q$ --- not the value of a self-referential infimum. (Proof and a
+hand-computable witness in Appendix~\ref{app:theory}.)
+\end{theorem}
+
+\begin{theorem}[Characterization: factor-two value and the optimality of independence]\label{thm:l2char}
+With $V(S)$ and $A^\star(S)$ as above,
+\[
+A^\star(S)\;\le\;V(S)\;\le\;2\,A^\star(S),
+\]
+so the appearance floor pins the best achievable content-blind conditional error to within a
+constant factor. In the \emph{canonical} case --- when a content-blind-reachable law is
+TV-equidistant, at distance $\tfrac12\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))$, from the two
+extremal reachable conditionals (a Chebyshev center of $\mathcal R(M)$ attained in the class) ---
+$V(S)=A^\star(S)$ exactly, and that center is minimax-optimal. Whenever the independent-source law
+$\oplus_{\#}P_S$ is that center (e.g.\ the two-point superposition case of
+Appendix~\ref{app:theory}), \emph{independent-source synthesis} attains $V(S)=A^\star(S)$ and is
+the minimax-optimal content-blind synthesizer. With Thm~\ref{thm:l1floor} this is a
+characterization: matched synthesis reaches the oracle up to $A^\star(S)$ per subset (upper), and
+no content-blind method beats $A^\star(S)$ (lower). The factor two is not improvable in general TV
+(an $L^1$-type) geometry, so we state $V=A^\star$ only for the canonical case; the empirically
+relevant superposition regimes are canonical. (Proof in Appendix~\ref{app:theory}.)
+\end{theorem}
+
+The floor $A^\star(S)$ is positive precisely when the co-occurrence dependence is not
+marginal-determined and is not erased by the operator --- an identifiability fact, not an
+optimization difficulty.
+
+\begin{lemma}[Non-identifiability of the appearance floor]\label{lem:floor}
+Every content-blind output is a functional of the solo \emph{marginals} $M$ only, whereas the
+copula that distinguishes members of $\mathcal U(M)$ is a property of the \emph{joint}: two joints
+with identical marginals differ exactly in their dependence. Hence for $|S|\ge2$ on a
+non-degenerate appearance space, $\mathcal U(M)$ contains couplings whose pushforwards through a
+non-collapsing $\oplus$ differ, so $A^\star(S)>0$: the appearance residual is irreducible by
+\emph{identifiability}. The paper's per-world appearance quantity anchors the floor below: since
+the true copula $Q_S$ and the product $P_S$ both lie in $\mathcal U(M)$,
+$A^\star(S)\ge\tfrac12\,\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)$, and by the data-processing
+inequality $\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)\le A_{\mathrm{raw}}(S)=\mathrm{TV}(Q_S,P_S)$.
+When $\oplus$ erases all copula variation in $\mathcal U(M)$ (the appearance-preserving/collapse
+limit), $A^\star(S)=0$ and content-blind synthesis is unconstrained by appearance.
 \end{lemma}
 
 \begin{corollary}[Recovery trichotomy]\label{cor:trichotomy}
@@ -1624,15 +1709,17 @@ Assume the synthesizer matches the evaluated co-occurrence support ($\mathrm{TV}
 on the evaluated subsets, achievable content-blind by generating the eval's subsets from
 singles). Two before-training properties then fix the regime.
 \emph{(I) Operator-matchable and appearance-preserving} ($A_{\mathrm{raw}}(S)=0$ on all
-evaluated $S$): the matched operator gives $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})=0$
-and $R_{\mathrm{real}}(f_{\mathrm{syn}})=R_{\mathrm{real}}(f^\star)$ --- \emph{full} oracle
+evaluated $S$, equivalently $A^\star(S)=0$: $\oplus$ erases the copula variation): the matched
+operator gives $\mathrm{TV}(D_{\mathrm{real}},D_{\mathrm{syn}})=0$ and
+$R_{\mathrm{real}}(f_{\mathrm{syn}})=R_{\mathrm{real}}(f^\star)$ --- \emph{full} oracle
 recovery; where $\pi_{\mathrm{syn}}$ covers subsets the oracle's own training prior missed,
 synthesis can \emph{exceed} the oracle on those subsets.
-\emph{(II) Operator-matchable but appearance-interacting} ($A_{\mathrm{raw}}(S)>0$ on a
+\emph{(II) Operator-matchable but appearance-interacting} ($A^\star(S)>0$ on a
 positive-mass set): geometry and support close, but the bound is floored at
-$2B\,\mathbb{E}_S[A(S)]>0$ (Lemma~\ref{lem:floor}a) --- \emph{partial} recovery; matching real
-geometry lowers $G$ but leaves $\mathbb{E}_S[A(S)]$ untouched, so the residual after
-geometry-matching estimates the appearance floor.
+$2B\,\mathbb{E}_S[A^\star(S)]>0$ (Thm~\ref{thm:l1floor}, an impossibility no content-blind method
+can cross) --- \emph{partial} recovery; matching real geometry lowers $G$ but leaves
+$\mathbb{E}_S[A^\star(S)]$ untouched, so the residual after geometry-matching estimates the
+appearance floor.
 \emph{(III) Not operator-matchable} ($\oplus$ not in the content-blind class, e.g.\ opaque
 occlusion): $G(S,T)$ is bounded away from $0$ for every content-blind $T$, and content-blind
 synthesis need not even beat the single-only floor; closing the gap requires location/mask
@@ -1652,22 +1739,42 @@ exact-match residual grows with order. Regime (III) predicts VOC failure (conten
 $0.226$, mixup $0.194$, both below the single-only floor $0.242$; only content-aware copy-paste
 $0.350$ clears it). The two \emph{direct} tests --- land cover's realistic-geometry arm and
 WM38's order-extrapolation --- are the strongest evidence that the appearance term is a real
-floor: in both, geometry/support was explicitly closed and the residual persisted, exactly as
-Lemma~\ref{lem:floor} predicts for a co-occurrence dependence no content-blind manipulation can
-reach.
+floor: in both, geometry/support was explicitly closed and the residual persisted, exactly as the
+minimax floor $A^\star(S)$ (Thm~\ref{thm:l1floor}) predicts for a co-occurrence dependence no
+content-blind manipulation can reach.
 
-The floor of Lemma~\ref{lem:floor} is a floor on the \emph{bound}; whether it forces a positive
-\emph{risk} floor needs one further step, which we state honestly as a conjecture, not a theorem.
+The floor of Thm~\ref{thm:l1floor} is a floor on the \emph{bound} ($2B\,\mathrm{TV}$); whether it
+forces a positive \emph{risk} floor needs one further step. A positive TV need not imply positive
+excess risk (Cor.~\ref{cor:boundary}), so we state the risk floor as a theorem \emph{under an
+explicit, standard margin condition} --- exactly the Bayes-decision disagreement
+Cor.~\ref{cor:boundary} names as required --- and decline the unconditional version.
 
-\begin{conjecture}[Appearance-limited risk floor]\label{conj:riskfloor}
-If the co-occurrence appearance dependence is \emph{label-informative} --- on a positive-mass
-region the Bayes-optimal multi-label decision under $K_{\mathrm{real}}$ differs from that under
-every $D\in\mathcal C(S)$ --- then $\mathbb{E}_S[A(S)]>0$ induces a strictly positive
-excess-\emph{risk} floor $c\,\mathbb{E}_S[A(S)]$ for a domain/loss-dependent $c>0$, for every
-content-blind synthesizer. A proof requires a discriminability/margin lemma linking the TV
-projection residual to a Bayes-risk gap on a positive-mass region, which we do not supply; the
-two direct tests above are its empirical support.
-\end{conjecture}
+\begin{assumption}[Informative-copula margin]\label{ass:margin}
+There is a measurable region $R\subseteq X$, a worst-case copula $Q^\#\in\mathcal U(M)$ (the
+adversary of Thm~\ref{thm:l1floor} against the synthesizer's output), and constants
+$\beta,\gamma>0$ such that, with $D_{\mathrm{real}}$ the real law under $Q^\#$ and
+$D_{\mathrm{syn}}$ the content-blind synthetic law: \emph{(M1)} $D_{\mathrm{real}}(R)\ge\beta$;
+\emph{(M2)} on $R$ the $D_{\mathrm{real}}$-Bayes action differs from the $D_{\mathrm{syn}}$-Bayes
+action; \emph{(M3)} on $R$ the real conditional-risk gap of the synthetic action over the
+real-Bayes action is $\ge\gamma$. That is, the unresolved copula ambiguity actually flips the
+optimal decision on a positive-mass region, and getting it wrong costs at least $\gamma$ --- a
+Massart-type margin specialized to the copula ambiguity.
+\end{assumption}
+
+\begin{theorem}[Appearance-limited risk floor under a margin]\label{thm:l3risk}
+Let the per-example loss lie in $[0,B]$ and let $\mathcal F$ be rich enough to contain both Bayes
+actions. Under Assumption~\ref{ass:margin}, every content-blind synthesizer incurs
+\[
+R_{\mathrm{real}}(f_{\mathrm{syn}})-R_{\mathrm{real}}(f^\star)\;\ge\;\beta\,\gamma\;>\;0,
+\]
+with $Q^\#$ the copula worst for that synthesizer. Thus the appearance floor is a strictly
+positive excess-\emph{risk} floor, not merely a bound-floor. For a strictly proper loss a
+margin-free variant holds (Thm~\ref{thm:l3prime}, Appendix~\ref{app:theory}): the excess risk
+equals $\mathbb{E}_x[D_\ell(\eta_{\mathrm{real}}\Vert\eta_{\mathrm{syn}})]>0$ under a posterior
+shift, and for log loss is $\ge 2\,\mathbb{E}_x[\mathrm{TV}(\eta_{\mathrm{real}},\eta_{\mathrm{syn}})^2]$
+by Pinsker. We do \emph{not} claim an unconditional $c\,\mathbb{E}_S[A^\star(S)]$ floor: without a
+margin it is false (Cor.~\ref{cor:boundary}). (Proof in Appendix~\ref{app:theory}.)
+\end{theorem}
 
 \begin{corollary}[Measured oracle-recovery]\label{cor:oraclerecover}
 The controlled multi-dataset experiment (Sec.~\ref{sec:opmatch-mnist}) instantiates
@@ -1804,7 +1911,11 @@ From single-label training data alone --- no multi-label or real-normal annotati
 label-faithful synthesis trains multi-label recognizers and we maximize the
 multi-label performance--FAR tradeoff. Our result is a \emph{characterization of the
 achievable frontier} of this setting --- what single-label supervision lets
-content-blind synthesis recover, what it provably cannot, and why. The recoverable side
+content-blind synthesis recover, what it provably cannot, and why. The
+provably-not-recoverable side is a minimax \emph{impossibility}: no content-blind
+synthesizer beats the appearance floor $A^\star(S)$ (Thm~\ref{thm:l1floor}), which
+independent-source synthesis attains up to a factor two, exactly in the canonical case
+(Thm~\ref{thm:l2char}). The recoverable side
 is governed by a now-\emph{measured} operator-match principle: the right content-blind
 synthesis operator is set by the domain's true combination law. On WM38 --- a superposition regime under the binary encoding, where
 the matched join is whole-image summation/union ($=$ Shin et al.\ 2022 Summation
@@ -1871,43 +1982,125 @@ in Sec.~\ref{sec:setting} and the reliability results of Sec.~\ref{sec:experimen
 \section{Additional theory and reliability statements}\label{app:theory}
 
 This appendix collects the formal statements behind the recovery decomposition of
-Sec.~\ref{sec:theory}: the proof of the appearance-floor non-identifiability lemma
-(Lemma~\ref{lem:floor}), the consistency/order-closure proposition, the operator-match
-minimality corollary, the density-gap looseness illustration and its quarantine to the
-support term, the matched-law risk equivalence, the zero-shift boundary, the finite-sample
-bound, and the label-fidelity and conformal-control statements. None of them is load-bearing
-for the empirical results; they formalize \emph{why} matched synthesis works and \emph{when}
-it recovers the oracle.
+Sec.~\ref{sec:theory}: the Le Cam two-point proof of the impossibility floor
+(Thm~\ref{thm:l1floor}) with a hand-computable witness, the proof of the factor-two
+characterization and independence-optimality (Thm~\ref{thm:l2char}), the non-identifiability
+lemma (Lemma~\ref{lem:floor}), the risk floor under the informative-copula margin
+(Thm~\ref{thm:l3risk}) and its margin-free strictly-proper-loss variant (Thm~\ref{thm:l3prime}),
+the consistency/order-closure proposition, the operator-match minimality corollary, the
+density-gap looseness illustration and its quarantine to the support term, the matched-law risk
+equivalence, the zero-shift boundary, the finite-sample bound, and the label-fidelity and
+conformal-control statements. The impossibility (Thm~\ref{thm:l1floor}) and characterization
+(Thm~\ref{thm:l2char}) are the load-bearing lower-bound content; the remaining statements
+formalize \emph{why} matched synthesis works and \emph{when} it recovers the oracle.
 
-\begin{proof}[Proof of Lemma~\ref{lem:floor}]
-\emph{(a)} $A(S)$ is an infimum over $\mathcal C(S)$, and every content-blind conditional
-$T_{\#}P_S$ lies in $\mathcal C(S)$ by construction, so
-$\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),T_{\#}P_S)\ge A(S)$; taking expectations over the
-matched prior and multiplying by $2B$ gives the bound-floor.
-\emph{(b)} The inequality $A(S)\le A_{\mathrm{raw}}(S)$ is Thm~\ref{thm:decomp} with $T=\oplus$
-(the matched arm attains $\mathrm{TV}(K_{\mathrm{real}}(\cdot|S),\oplus_{\#}P_S)\le A_{\mathrm{raw}}(S)$),
-so $Q_S=P_S\Rightarrow A(S)=0$. For the converse, if $\oplus_{\#}$ is injective-in-law on the
-relevant support (does not merge distinct inputs into the same pushforward), then a
-data-processing map cannot reduce a positive TV to zero unless its inputs already agree, so
-$A(S)=0\Rightarrow Q_S=P_S$.
-\emph{(c)} By construction $\mathcal C(S)$ is contained in the set of laws expressible as
-measurable functionals of the marginal family $\{P_{\mathrm{solo}}(\cdot|c)\}_{c\in S}$; the
-marginal map $Q_S\mapsto(\text{its marginals})$ forgets the copula, so for $|S|\ge2$ and a
-non-degenerate appearance space there exist joints with identical marginals but distinct
-dependence, at least one of which is at TV-distance $>0$ from every element of $\mathcal C(S)$.
-Hence a $K_{\mathrm{real}}(\cdot|S)$ built from a non-marginal-determined dependence satisfies
-$A(S)>0$ for every content-blind synthesizer.
+\begin{proof}[Proof of Theorem~\ref{thm:l1floor}]
+Fix any content-blind $\Phi$. For any $Q,Q'\in\mathcal U(M)$ the TV triangle inequality gives
+$\mathrm{TV}(\oplus_{\#}Q,\Phi)+\mathrm{TV}(\oplus_{\#}Q',\Phi)\ge\mathrm{TV}(\oplus_{\#}Q,\oplus_{\#}Q')$,
+hence
+$\max\!\big(\mathrm{TV}(\oplus_{\#}Q,\Phi),\mathrm{TV}(\oplus_{\#}Q',\Phi)\big)\ge\tfrac12\mathrm{TV}(\oplus_{\#}Q,\oplus_{\#}Q')$.
+Because $\Phi$ does not depend on $Q$ (Def.~\ref{def:ambiguity}), the \emph{same} $\Phi$ faces both
+worlds, so $\sup_{P\in\mathcal U(M)}\mathrm{TV}(\oplus_{\#}P,\Phi)\ge\tfrac12\mathrm{TV}(\oplus_{\#}Q,\oplus_{\#}Q')$.
+Taking the supremum over pairs $Q,Q'$ yields
+$\sup_{P\in\mathcal U(M)}\mathrm{TV}(\oplus_{\#}P,\Phi)\ge\tfrac12\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))=A^\star(S)$.
+This holds for every $\Phi$, so $V(S)\ge A^\star(S)$; multiplying by $2B$ and averaging over the
+matched prior floors the conditional term. Positivity: $A^\star(S)=0$ iff
+$\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))=0$ iff $\oplus_{\#}$ is constant on $\mathcal U(M)$;
+injectivity-in-law plus two distinct couplings in $\mathrm{Fr}(M)$ (which exist for $|S|\ge2$ on a
+non-degenerate space) forces the diameter, hence $A^\star(S)$, to be positive. This is Le Cam's
+two-point method: the two copula-compatible worlds are indistinguishable to a content-blind method
+by construction, so any single committed output is at least half their separation from one of them.
+Unlike a self-referential infimum, the quantifier order is that of the operating condition ($\Phi$
+committed first, adversary picks $Q$ second).
 \end{proof}
 
-\emph{Remark (floor on the bound, not yet on the risk).} $A_{\mathrm{raw}}(S)$ upper-bounds the
-projection residual, $A(S)\le A_{\mathrm{raw}}(S)$, so we keep $A_{\mathrm{raw}}$ as the
-interpretable quantity (the co-occurrence appearance dependence) while the floor of
-Lemma~\ref{lem:floor}a uses the smaller $A(S)$. The floor is on the excess-risk \emph{bound}
-$2B\,\mathrm{TV}$, not on the excess risk itself: a positive TV need not imply positive excess
-risk (Cor.~\ref{cor:boundary}). Promoting it to a risk floor is Conjecture~\ref{conj:riskfloor},
-which needs a discriminability/margin lemma we do not prove; its empirical support is the two
-direct tests (land-cover realistic-geometry arm; WM38 order-extrapolation) where geometry and
-support were closed yet the residual persisted (Sec.~\ref{sec:theory}).
+\emph{Worked witness (the floor is non-vacuous and operator-dependent).} Two co-occurring sources
+$a,b$, each a single bit $u_c\in\{0,1\}$ with $P_{\mathrm{solo}}(u_c{=}1)=\tfrac12$, so
+$M=(\mathrm{Bern}(\tfrac12),\mathrm{Bern}(\tfrac12))$ and $\mathrm{Fr}(M)$ is the one-parameter
+family in $p_{11}=P(u_a{=}1,u_b{=}1)\in[0,\tfrac12]$ with landmarks comonotone $Q^+$
+($p_{11}{=}\tfrac12$), independent $P_S$ ($p_{11}{=}\tfrac14$), countermonotone $Q^-$
+($p_{11}{=}0$). Under $\oplus=\mathrm{OR}$ ($v=u_a\vee u_b$) the pushforwards are
+$\oplus_{\#}Q^+=\mathrm{Bern}(\tfrac12)$, $\oplus_{\#}P_S=\mathrm{Bern}(\tfrac34)$,
+$\oplus_{\#}Q^-=\mathrm{Bern}(1)$; since $\mathrm{TV}(\mathrm{Bern}(p),\mathrm{Bern}(p'))=|p-p'|$,
+$\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))=\tfrac12$ and $A^\star(S)=\tfrac14>0$. The
+independent guess $\oplus_{\#}P_S=\mathrm{Bern}(\tfrac34)$ is TV-equidistant from the two extremes
+($\max(\tfrac14,\tfrac14)=\tfrac14=A^\star$), so it \emph{attains} the floor:
+$V(S)=A^\star(S)=\tfrac14$ and independence is minimax-optimal here (a canonical case of
+Thm~\ref{thm:l2char}). The floor tracks the operator: $\oplus=\mathrm{identity}$ (the image reveals
+the pair) gives disjoint supports for $Q^+$ vs $Q^-$, diameter $1$, $A^\star=\tfrac12$ (maximal);
+$\oplus=\mathrm{const}$ gives diameter $0$, $A^\star=0$ (content-blind synthesis is perfect). So
+$A^\star$ is exactly the copula variation the true operator fails to erase.
+
+\begin{proof}[Proof of Theorem~\ref{thm:l2char}]
+The lower bound $V\ge A^\star$ is Thm~\ref{thm:l1floor}. For the upper bound, any
+$c=\oplus_{\#}Q_0$ with $Q_0\in\mathcal U(M)$ is content-blind-reachable and satisfies
+$\sup_{Q}\mathrm{TV}(\oplus_{\#}Q,c)\le\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))=2A^\star(S)$
+(e.g.\ $c=\oplus_{\#}P_S$), so $V(S)\le2A^\star(S)$: the general two-sided bound. Canonical case:
+if a content-blind-reachable $c$ is a Chebyshev center of $\mathcal R(M)$, i.e.\
+$\sup_Q\mathrm{TV}(\oplus_{\#}Q,c)=\tfrac12\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))=A^\star(S)$,
+then $V(S)\le A^\star(S)$ and with the lower bound $V(S)=A^\star(S)$; the worked witness exhibits
+$c=\oplus_{\#}P_S$ as such a center (both extremal distances $\tfrac14=A^\star$), so independence is
+exactly optimal there. The factor two is not improvable in general: under TV (an $L^1$-type
+geometry) the Chebyshev radius of a set can approach its diameter (the $L^1$ Jung constant is not
+$\tfrac12$), so $V=2A^\star$ is possible, and we claim $V=A^\star$ only in the canonical
+(two-point-dominated, symmetric) case, which covers the empirically relevant superposition regimes.
+\end{proof}
+
+\begin{proof}[Proof of Lemma~\ref{lem:floor}]
+Every content-blind output is a measurable functional of $M$, and the marginal map $Q\mapsto M$
+forgets the copula; for $|S|\ge2$ on a non-degenerate space $\mathrm{Fr}(M)$ (hence the default
+$\mathcal U(M)=\mathrm{Fr}(M)$) contains distinct couplings, whose pushforwards through a
+non-collapsing $\oplus$ differ, giving $\operatorname{diam}_{\mathrm{TV}}(\mathcal R(M))>0$ and
+$A^\star(S)>0$. For the anchor, $Q_S,P_S\in\mathcal U(M)$, so
+$A^\star(S)\ge\tfrac12\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)$, and the fixed Markov map
+$\oplus_{\#}$ cannot increase TV, giving
+$\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)\le\mathrm{TV}(Q_S,P_S)=A_{\mathrm{raw}}(S)$.
+\end{proof}
+
+\begin{proof}[Proof of Theorem~\ref{thm:l3risk}]
+Excess risk decomposes pointwise:
+$R_{\mathrm{real}}(f_{\mathrm{syn}})-R_{\mathrm{real}}(f^\star)=\mathbb{E}_{x\sim D_{\mathrm{real}}^X}[\rho(x)]$
+with $\rho(x)=\mathbb{E}_{y|x\sim\mathrm{real}}[\ell(f_{\mathrm{syn}}(x),y)-\ell(f^\star(x),y)]\ge0$
+(nonnegative because $f^\star(x)$ is the real-Bayes action). On $R$, (M2) gives
+$f_{\mathrm{syn}}(x)\ne f^\star(x)$ and (M3) gives $\rho(x)\ge\gamma$; elsewhere $\rho\ge0$. Hence
+$R_{\mathrm{real}}(f_{\mathrm{syn}})-R_{\mathrm{real}}(f^\star)\ge\int_R\rho\,dD_{\mathrm{real}}^X\ge\gamma\,D_{\mathrm{real}}(R)\ge\gamma\beta$
+by (M1).
+\end{proof}
+
+\begin{theorem}[Risk floor for a strictly proper loss, margin-free]\label{thm:l3prime}
+Let $\ell$ be a strictly proper scoring loss with Bregman divergence $D_\ell$ (KL for log loss,
+squared error for Brier), and let $\mathcal F$ be rich enough that $f_{\mathrm{syn}}$ outputs the
+synthetic conditional label law $\eta_{\mathrm{syn}}(\cdot|x)$. If on a positive real-mass set the
+real posterior $\eta_{\mathrm{real}}(\cdot|x)$ differs from $\eta_{\mathrm{syn}}(\cdot|x)$ (a
+posterior shift induced by the content-blind law), then
+\[
+R_{\mathrm{real}}(f_{\mathrm{syn}})-R_{\mathrm{real}}(f^\star)
+=\mathbb{E}_{x\sim D_{\mathrm{real}}^X}\big[D_\ell\big(\eta_{\mathrm{real}}(\cdot|x)\,\Vert\,\eta_{\mathrm{syn}}(\cdot|x)\big)\big]>0,
+\]
+and for log loss it is $\ge2\,\mathbb{E}_x[\mathrm{TV}(\eta_{\mathrm{real}}(\cdot|x),\eta_{\mathrm{syn}}(\cdot|x))^2]>0$ by Pinsker.
+\end{theorem}
+\begin{proof}
+For a strictly proper loss the real risk of predicting a label law $q$ at $x$ exceeds the
+real-Bayes risk (predicting $\eta_{\mathrm{real}}(\cdot|x)$) by exactly
+$D_\ell(\eta_{\mathrm{real}}(\cdot|x)\Vert q)$. Set $q=\eta_{\mathrm{syn}}(\cdot|x)$ and integrate
+over $x$; strict propriety gives $D_\ell\ge0$ with equality iff $q=\eta_{\mathrm{real}}$ a.e., so a
+posterior shift on positive mass makes the integral positive. Pinsker
+($\mathrm{KL}\ge2\,\mathrm{TV}^2$) gives the log-loss form.
+\end{proof}
+
+\emph{Remark (floor on the bound vs.\ on the risk; reconciliation with $A_{\mathrm{raw}}$).} The
+impossibility $V(S)\ge A^\star(S)$ (Thm~\ref{thm:l1floor}) floors the excess-risk \emph{bound}
+$2B\,\mathrm{TV}$; a positive TV need not by itself imply positive excess risk
+(Cor.~\ref{cor:boundary}), which is why the risk floor is stated under Assumption~\ref{ass:margin}
+(Thm~\ref{thm:l3risk}), not unconditionally. We keep the per-world quantity
+$A_{\mathrm{raw}}(S)=\mathrm{TV}(Q_S,P_S)$ as the interpretable appearance dependence in
+Thm~\ref{thm:decomp} (the \emph{upper} bound), while the minimax floor is the operator-aware
+half-diameter $A^\star(S)$; Lemma~\ref{lem:floor} links them by
+$A^\star(S)\ge\tfrac12\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)$ with
+$\mathrm{TV}(\oplus_{\#}Q_S,\oplus_{\#}P_S)\le A_{\mathrm{raw}}(S)$. Empirical support for the risk
+reading (Assumption~\ref{ass:margin} holding) is the two direct tests --- land-cover
+realistic-geometry arm and WM38 order-extrapolation --- where geometry and support were closed yet
+the residual persisted (Sec.~\ref{sec:theory}).
 
 \begin{proposition}[Consistency and order closure]
 In a blind-combination domain with independently placed sources, synthesis using
