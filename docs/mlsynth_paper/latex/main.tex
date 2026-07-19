@@ -320,6 +320,11 @@ two operators:
   recovery trichotomy (Cor.~\ref{cor:trichotomy}) that predicts full recovery, partial recovery up
   to the appearance floor, or outright failure, and calls the measured pattern across our domains
   (including the measured oracle-recovery, Cor.~\ref{cor:oraclerecover}).
+  We confirm this floor empirically: on land cover, three \emph{unlabeled} appearance-injection
+  mechanisms of increasing power (moment alignment, unpaired generation, multi-scale spatial
+  transfer) all fail to beat the content-blind floor, whereas real \emph{labels} do close it ---
+  the missing co-occurrence signal is carried by the labels, not the unlabeled images
+  (Sec.~\ref{sec:landcover}).
   \textbf{The operator choice is moreover learnable end-to-end (Sec.~\ref{sec:opmatch-learned}):}
   a neutral-initialized one-step-hypergradient soft-gate over a convex overlay/partition blend
   recovers the domain's matched operator in $4/4$ regimes with no domain label (learned
@@ -1042,6 +1047,55 @@ $K$ real tiles          & $0$     & $10$    & $25$    & $50$    & $100$   & $250
 \midrule
 synthesis $+$ $K$ real  & $0.832$ & $0.840$ & $0.856$ & $0.841$ & $0.873$ & $0.899$ & $0.905$ & $0.928$ \\
 $K$ real only           & $0.751$ & $0.802$ & $0.819$ & $0.840$ & $0.883$ & $0.888$ & $0.930$ & $0.941$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Unlabeled multi-label images do not close the floor --- only labels do (empirical
+confirmation of Thm~\ref{thm:l1floor}).} The few-shot sweep supplies real \emph{labels}; the
+sharper test of Thm~\ref{thm:l1floor} asks whether the \emph{unlabeled} multi-label images alone
+--- the same tiles with their co-occurrence labels withheld --- can close the appearance floor
+$A^\star(S)$. We inject their appearance into the best content-blind synthesis (mAP $0.832$, the
+$K{=}0$ operating point of Table~\ref{tab:fewshot}) by three unpaired mechanisms of increasing
+power, holding ResNet-18, $3$ seeds, and eval mAP fixed: (i) CORAL global feature-moment
+alignment, (ii) an unpaired generative refiner (U-Net generator with a PatchGAN discriminator,
+trained stably), and (iii) a multi-scale Laplacian-band AdaIN pyramid that transfers appearance
+per frequency and per spatial location. All three \emph{fail} to beat the content-blind floor
+($0.832$): CORAL $0.816$--$0.830$, the generative refiner $0.828$ at best (at $250$ unlabeled
+tiles), and the pyramid $0.806$--$0.821$; none dents the $+0.109$ mAP gap to the oracle ($0.941$),
+and adding more unlabeled tiles does not help (Table~\ref{tab:unlabeled}). This is a clean
+identifiability boundary, not a tuning failure: the arms are stable (neg-prob comparable to the
+floor's, the generative arm converged) and simply have nothing to transfer. The contrast with the
+labeled few-shot sweep above is decisive --- real \emph{labels} climb toward the oracle
+(Table~\ref{tab:fewshot}, needing $O(\mathrm{hundreds})$ of real co-occurrence labels), whereas no
+unlabeled appearance-injection --- global-moment, generative, or multi-scale spatial --- recovers
+any of it. The co-occurrence appearance that closes $A^\star(S)$ is carried by the \emph{labels},
+not the unlabeled images: an empirical confirmation of the Thm~\ref{thm:l1floor} impossibility, and
+a sharpening of it to the label rather than the image. Runners:
+\texttt{multilabel\_synth/run\_unlabeled\_align\_landcover.py},
+\texttt{run\_gen\_transfer\_landcover.py} (committed).
+
+\begin{table}[t]
+\centering
+\caption{Unlabeled multi-label images cannot close the appearance floor (land cover, ResNet-18,
+$3$ seeds, eval mAP). The real multi-label tiles are supplied with their \emph{labels withheld},
+and three appearance-injection mechanisms of increasing power are compared against the best
+content-blind synthesis (the floor) and the labeled oracle. All three stay at or below the floor
+($0.832$) and leave the $+0.109$ mAP gap to the oracle ($0.941$) intact --- the missing signal is
+the co-occurrence \emph{label}, not the image, an empirical confirmation of
+Thm~\ref{thm:l1floor}. Contrast the labeled few-shot sweep (Table~\ref{tab:fewshot}), which does
+climb toward the oracle.}
+\label{tab:unlabeled}
+\begin{tabular}{lc}
+\toprule
+Mechanism (unlabeled images only, labels withheld) & Eval mAP ($3$ seeds) \\
+\midrule
+best content-blind synthesis (floor, no injection)  & $0.832$ \\
+CORAL (global feature-moment alignment)             & $0.816$--$0.830$ \\
+generative refiner (U-Net $+$ PatchGAN, unpaired)   & $0.828$ (best, at $250$) \\
+multi-scale pyramid (Laplacian-band AdaIN, spatial) & $0.806$--$0.821$ \\
+\midrule
+oracle (real multi-label \emph{labels})             & $0.941$ \\
 \bottomrule
 \end{tabular}
 \end{table}

@@ -865,6 +865,35 @@ real-only catches up only past K~100, so content-blind synthesis supplies genuin
 where multi-label labels are hardest to obtain. Runner:
 `multilabel_synth/run_fewshot_ksweep_landcover.py` (committed).
 
+**Unlabeled multi-label images do not close the floor -- only labels do (empirical confirmation of
+Thm L1).** The few-shot sweep supplies real *labels*; the sharper test of Thm L1 asks whether the
+*unlabeled* multi-label images alone -- the same tiles with their co-occurrence labels withheld --
+can close the appearance floor A*(S). We inject their appearance into the best content-blind
+synthesis (mAP 0.832, the K=0 operating point above) by three unpaired mechanisms of increasing
+power (ResNet-18, 3 seeds, eval mAP): (i) CORAL global feature-moment alignment, (ii) an unpaired
+generative refiner (U-Net generator + PatchGAN discriminator, trained stably), and (iii) a
+multi-scale Laplacian-band AdaIN pyramid that transfers appearance per frequency and per spatial
+location.
+
+| land cover (ResNet-18, 3 seeds, eval mAP)             | eval mAP          |
+|-------------------------------------------------------|-------------------|
+| best content-blind synthesis (floor, no injection)    | 0.832             |
+| CORAL (global feature-moment alignment)               | 0.816-0.830       |
+| generative refiner (U-Net + PatchGAN, unpaired)       | 0.828 (best, @250)|
+| multi-scale pyramid (Laplacian-band AdaIN, spatial)   | 0.806-0.821       |
+| oracle (real multi-label *labels*)                    | 0.941             |
+
+All three *fail* to beat the content-blind floor (0.832): none dents the +0.109 mAP gap to the
+oracle (0.941), and adding more unlabeled tiles does not help. This is a clean identifiability
+boundary, not a tuning failure -- the arms are stable (neg-prob comparable to the floor's, the
+generative arm converged) and simply have nothing to transfer. The contrast with the labeled
+few-shot sweep above is decisive: real *labels* climb toward the oracle (needing O(hundreds) of
+real co-occurrence labels), whereas no unlabeled appearance-injection -- global-moment, generative,
+or multi-scale spatial -- recovers any of it. The co-occurrence appearance that closes A*(S) is
+carried by the *labels*, not the unlabeled images: an empirical confirmation of the Thm L1
+impossibility, sharpened to the label rather than the image. Runners:
+`multilabel_synth/run_unlabeled_align_landcover.py`, `run_gen_transfer_landcover.py` (committed).
+
 ### 5.2 MixedWM38 (public benchmark; real multi-label evaluation)
 
 Audit note (2026-07-10): pre-audit WM38 F1 values in this subsection use the
