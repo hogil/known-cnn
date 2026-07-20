@@ -124,16 +124,22 @@ def run_cfg(cfg, sX, sY, teX, teY, nrmX, args, seed):
             "real_bitF1": bf, "normal_FAR": nfar, "best_ep": ep_m, **iso}
 
 
-def build_configs():
+def build_configs(full=False):
     cfgs = []
     for neg in (0.05, 0.10, 0.20):
         cfgs.append({"tag": f"cutmix_neg{neg:.2f}", "arm": "cutmix",
                      "cell_layout": "n/a", "grid": 9, "n_groups": 3, "neg_target": neg})
-    for (ng, grid) in [(3, 9), (4, 16), (3, 12)]:
-        for neg in (0.05, 0.10, 0.20):
-            cfgs.append({"tag": f"fcmpm_cb_g{ng}_grid{grid}_neg{neg:.2f}",
-                         "arm": "fcm_pm", "cell_layout": "checkerboard",
-                         "grid": grid, "n_groups": ng, "neg_target": neg})
+    if full:
+        # full joint checkerboard g x grid x neg (grid divisible by g)
+        gg = {2: (6, 8, 10), 3: (6, 9, 12, 15), 4: (8, 12, 16, 20)}
+    else:
+        gg = {3: (9, 12), 4: (16,)}
+    for ng, grids in gg.items():
+        for grid in grids:
+            for neg in (0.05, 0.10, 0.20):
+                cfgs.append({"tag": f"fcmpm_cb_g{ng}_grid{grid}_neg{neg:.2f}",
+                             "arm": "fcm_pm", "cell_layout": "checkerboard",
+                             "grid": grid, "n_groups": ng, "neg_target": neg})
     for neg in (0.10, 0.20):  # random g3grid9 sanity (should reproduce ~0.72)
         cfgs.append({"tag": f"fcmpm_rand_g3_grid9_neg{neg:.2f}", "arm": "fcm_pm",
                      "cell_layout": "random", "grid": 9, "n_groups": 3, "neg_target": neg})
@@ -153,6 +159,8 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--n-test", type=int, default=3000)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--full", action="store_true",
+                    help="full joint checkerboard g x grid x neg sweep")
     ap.add_argument("--out-csv",
                     default="outputs/multilabel_synth/wm38_fcmpm_checkerboard_vs_cutmix.csv")
     args = ap.parse_args()
@@ -170,7 +178,8 @@ def main():
     print(f"device={args.device} singles={len(sX)} test={len(teX)} normals={len(nrmX)}",
           flush=True)
 
-    cfgs = build_configs()
+    cfgs = build_configs(full=args.full)
+    print(f"n_configs={len(cfgs)} full={args.full}", flush=True)
     rows = []
     for cfg in cfgs:
         for seed in args.seeds:
