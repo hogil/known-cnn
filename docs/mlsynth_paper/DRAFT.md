@@ -942,6 +942,35 @@ partition — as the chip head-to-head measures (Sec 5.2.1). It confirms
 density-faithfulness is a modeling property tied to the combination law, not a
 stand-alone performance lever.
 
+**Deployed operating point (F1 and FAR together, tuning-free).** Beyond the raw bit-F1
+ranking above --- where the matched superposition operator leads on WM38 --- we also
+compare on the deployed metric that couples detection with false alarms: bit-F1 together
+with NORMAL-FAR at a single fixed decision rule shared across arms (no per-arm threshold
+tuning). In a full joint sweep of FCM-PM over group-count g, grid resolution, and
+negative-target smoothing on the checkerboard layout (114 runs,
+run_wm38_fcmpm_checkerboard_vs_cutmix.py;
+outputs/multilabel_synth/wm38_fcmpm_checkerboard_vs_cutmix_FULL.csv), the best admissible
+FCM-PM configuration --- g=2 (two complementary groups), 8x8 grid, negative-target 0.20
+--- reaches bit-F1 0.783 at NORMAL-FAR 2.2%, whereas CutMix, the strongest admissible
+blending baseline, reaches a higher raw bit-F1 0.855 but at NORMAL-FAR 28.7%.
+
+| operator (tuning-free shared rule)              | bit-F1 | NORMAL-FAR | F1 - FAR |
+|-------------------------------------------------|--------|------------|----------|
+| FCM-PM (g=2, 8x8 grid, neg 0.20; **ours**)      | 0.783  | 0.022      | 0.761    |
+| CutMix (strongest admissible blending baseline) | 0.855  | 0.287      | 0.569    |
+
+On the combined F1-minus-FAR score FCM-PM leads 0.761 vs 0.569 (+0.192): FCM-PM's
+negative-target and Pair-Mask give it FAR control by construction, so its tuning-free
+operating point dominates, which matters when per-pattern threshold hand-tuning is
+infeasible (e.g. fab deployment). **Honest caveat:** under per-arm threshold calibration
+to a matched NORMAL-FAR of 5% (iso-FAR), CutMix's bit-F1 recovers and slightly leads
+(0.830 vs 0.791), so the FCM-PM advantage here is specifically in the deployed,
+tuning-free operating point, not in the threshold-calibrated ceiling. This is consistent
+with operator-match: WM38 is a superposition regime, so a blending/superposition operator
+is the matched one on raw bit-F1, and FCM-PM's edge here is FAR control, not fidelity ---
+overlay remains WM38's matched superposition operator (the decisive partition-domain
+crossover is Sec 5.2.1).
+
 **Operator comparison (5 seeds, pick=val_tail_margin_guarded, neg 0.02; FAR as a
 fraction).** Common protocol (matched view budget, splits, checkpoint selection,
 rejection). WM38 is a superposition regime, so its matched operator is overlay
