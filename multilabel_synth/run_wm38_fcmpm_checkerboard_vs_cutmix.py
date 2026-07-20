@@ -107,12 +107,21 @@ def run_cfg(cfg, sX, sY, teX, teY, nrmX, args, seed):
     nrmP = _predict(model, nrmX, device=args.device)
     bf = bit_f1(teP, teY)
     nfar = float((nrmP >= 0.5).any(axis=1).mean())
-    print(f"[{cfg['tag']:26s} s{seed}] marginpick ep{ep_m:02d} | REAL bitF1={bf:.4f} "
-          f"NORMAL_FAR={nfar:.4f}", flush=True)
+    # iso-FAR: threshold each arm to a common NORMAL-FAR target, then read bitF1
+    # there (tau = the (1-alpha) quantile of per-normal-sample max prob).
+    nrm_max = nrmP.max(axis=1)
+    iso = {}
+    for a in (0.01, 0.05, 0.10):
+        tau = float(np.quantile(nrm_max, 1.0 - a))
+        iso[f"bitF1_farq{int(a*100):02d}"] = float(bit_f1(teP, teY, thr=tau))
+    print(f"[{cfg['tag']:26s} s{seed}] margin ep{ep_m:02d} | bitF1={bf:.4f} FAR={nfar:.3f} "
+          f"| iso-FAR bitF1 @1/5/10%="
+          f"{iso['bitF1_farq01']:.3f}/{iso['bitF1_farq05']:.3f}/{iso['bitF1_farq10']:.3f}",
+          flush=True)
     return {"tag": cfg["tag"], "arm": cfg["arm"], "cell_layout": cfg["cell_layout"],
             "grid": cfg["grid"], "n_groups": cfg["n_groups"],
             "neg_target": cfg["neg_target"], "seed": seed,
-            "real_bitF1": bf, "normal_FAR": nfar, "best_ep": ep_m}
+            "real_bitF1": bf, "normal_FAR": nfar, "best_ep": ep_m, **iso}
 
 
 def build_configs():
