@@ -91,6 +91,18 @@ class SmallRGB(nn.Module):
     def forward(self, x): return self.h(self.f(x).flatten(1))
 
 
+_BACKBONE = "small"   # set from CLI; "small" (SmallRGB) or "resnet18"
+
+
+def make_backbone(dev):
+    if _BACKBONE == "resnet18":
+        from torchvision.models import resnet18
+        import torch.nn as _nn
+        m = resnet18(weights=None); m.fc = _nn.Linear(m.fc.in_features, N_CLASSES)
+        return m.to(dev)
+    return SmallRGB(N_CLASSES).to(dev)
+
+
 def _batches(X, Y, bs, rng):
     """Memory-safe minibatches: X uint8 or float HWC -> float CHW per batch."""
     idx = rng.permutation(len(X))
@@ -104,7 +116,7 @@ def _batches(X, Y, bs, rng):
 
 def train(X, Y, epochs, seed, dev, lr=1e-3, bs=64):
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
-    m = SmallRGB(N_CLASSES).to(dev)
+    m = make_backbone(dev)
     opt = torch.optim.Adam(m.parameters(), lr=lr); lf = nn.BCEWithLogitsLoss()
     for _ in range(epochs):
         m.train()
@@ -157,7 +169,7 @@ def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_tar
     synthetic set; return the best-margin checkpoint (val-margin selection)."""
     import copy
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
-    m = SmallRGB(N_CLASSES).to(dev)
+    m = make_backbone(dev)
     opt = torch.optim.Adam(m.parameters(), lr=lr); lf = nn.BCEWithLogitsLoss()
     Yt = (Y + (1.0 - Y) * neg_target).astype(np.float32)
     best, st = -1e9, None
@@ -202,7 +214,7 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
     # freeze test protocol BEFORE touching test
     proto = dict(classes=list(CLASSES), per_class_train=args.per_class_train,
                  per_class_val=args.per_class_val, arms=ARMS, n_per_pair=100,
-                 backbone="SmallRGB", epochs=args.epochs, neg_target=0.02,
+                 backbone=_BACKBONE, epochs=args.epochs, neg_target=0.02,
                  seeds=[1, 2, 3, 4, 5], fpr_targets=[0.01, 0.05],
                  checkpoint="val_margin", threshold="source_val_negbit_fpr",
                  proxy_hash=proxy_hash)
@@ -270,8 +282,15 @@ def main():
     ap.add_argument("--epochs", type=int, default=15)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--proxy-seed", type=int, default=0)
+    ap.add_argument("--backbone", choices=["small", "resnet18"], default="small")
+    ap.add_argument("--outdir", default=None,
+                    help="override OUTDIR (use a NEW dir per backbone; never overwrite v1)")
     ap.add_argument("--run-test", action="store_true")
     args = ap.parse_args()
+    global _BACKBONE, OUTDIR
+    _BACKBONE = args.backbone
+    if args.outdir:
+        OUTDIR = args.outdir
     os.makedirs(OUTDIR, exist_ok=True)
 
     if args.run_test:
@@ -306,7 +325,7 @@ def main():
 
     ranking, scores = proxy_select(sX, sY, vX, vY, args.device, args.epochs, args.proxy_seed)
     predicted_winner = ranking[0]
-    manifest = dict(arms=ARMS, canvas=[CANH, CANW], classes=list(CLASSES),
+    manifest = dict(backbone=_BACKBONE, arms=ARMS, canvas=[CANH, CANW], classes=list(CLASSES),
                     per_class_train=args.per_class_train, per_class_val=args.per_class_val,
                     proxy_scores=scores, proxy_ranking=ranking,
                     predicted_winner=predicted_winner, epochs=args.epochs,

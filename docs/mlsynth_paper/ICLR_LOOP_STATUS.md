@@ -143,4 +143,16 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   updated to 31% + exhausted.
 - Probability ledger: r1 18 -> r3 25 -> r5 27 -> r7 31. THEORY CEILING reached.
 
-### Round 8 (R3 pilot: does a stronger probe LEARN the multi-defect task?) -- next
+### Round 8 (R3: GPU freed, ResNet-18 escalation) -- in progress
+- GATE-1 PILOT PASS: ResNet-18 LEARNS SVHN full-image 2-digit (held-out synth mAP
+  0.838) vs SmallRGB 0.222 (=prevalence). SVHN v1 GATE-2 collapse was a
+  PROBE-CAPACITY artifact of my SmallRGB substitution, NOT fundamental. Also
+  partition 0.838 >> cutmix 0.466 on the learnable synth eval (operator-match
+  signal). (pilot on held-out SYNTH combos, sealed test untouched.)
+- ESCALATION: added --backbone resnet18 + --outdir to the runner (v1 SmallRGB
+  negative PRESERVED; ResNet-18 runs into a NEW v2 dir). Phase A proxy re-frozen
+  with ResNet-18 (hash 432eb145, predicts summation again -- evidence-margin proxy
+  is scale-biased, but GATE-2 judges frozen-proxy vs actual-winner, not human
+  guess). Phase B sealed test (ResNet-18, test_protocol hash 8bf38c6a) RUNNING.
+- This is the real R3 gate-4 attempt on the REAL sealed test with a probe that
+  demonstrably learns. Outcome pending.

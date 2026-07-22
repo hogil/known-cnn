@@ -1,0 +1,46 @@
+{
+  "backbone": "resnet18",
+  "arms": [
+    "single_only",
+    "partition",
+    "summation",
+    "cutmix",
+    "mixup",
+    "fcm_pm"
+  ],
+  "canvas": [
+    64,
+    128
+  ],
+  "classes": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "per_class_train": 350,
+  "per_class_val": 100,
+  "proxy_scores": {
+    "partition": -0.20136681199073792,
+    "summation": -0.18772225081920624,
+    "cutmix": -0.20623041689395905,
+    "mixup": -0.2212221771478653,
+    "fcm_pm": -0.35050907731056213
+  },
+  "proxy_ranking": [
+    "summation",
+    "partition",
+    "cutmix",
+    "mixup",
+    "fcm_pm"
+  ],
+  "predicted_winner": "summation",
+  "epochs": 12,
+  "proxy_seed": 0,
+  "hash": "432eb14507c38610"
+}
