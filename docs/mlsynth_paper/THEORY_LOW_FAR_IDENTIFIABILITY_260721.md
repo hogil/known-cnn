@@ -157,9 +157,23 @@ it forbids the defect-defect interaction physics from being a *known function* o
 the geometry/sensor statistics a good-wafer image reveals -- falsifiable
 (Thm 4'(b) builds a world where it fails), not automatic.
 
-**Theorem 4'(a) (invariance under coupling) [PROVEN].** Under N-ORTH, for every
-`m`, `A*_norm(m) = A*(M)`: the known-good normals do not shrink the copula radius
-even though `P_0^obs` is fully coupled to the defect conditionals through `Z`.
+**Theorem 4'(a) (invariance under coupling) [PROVEN, scoped].** Under N-ORTH the
+copula-CORE is normal-invariant for every `m` (Lemma 4'(a')), and the general
+sandwich `A_Frechet <= A*_norm(m) <= A*(M)` holds. The FULL-invariance identity
+`A*_norm(m) = A*(M)` holds under N-ORTH **and** the additional absorption
+condition
+
+> **(ABSORB).** `L_Phi = 0` on the `P_Z`-directions of the consistent set (the
+> free copula field renders the marginalized conditional independent of the choice
+> of consistent `P_Z`; equivalently the `A*(M)` diameter is realized at a single
+> `psi`, i.e. slice-homogeneity).
+
+Without (ABSORB) there is a genuine `P_Z`-shell whose normal-visible part the
+normals reduce at the Theorem 4'(d) rate. (N-ORTH = "copula ancillary -> core
+invariant"; ABSORB = "`P_Z`-mixing inert"; these are DISTINCT and only their
+conjunction gives full invariance -- see Thm 4'(d) and the two counterexamples in
+Prop 4'(d-necessity). This scoping makes the hypotheses exact; Lemma 4'(a') and
+the sandwich are unaffected.)
 
 *Proof.* Take diameter-realizing copula fields `theta_A, theta_B` for `A*(M)`.
 Form `W_A=(psi,theta_A)`, `W_B=(psi,theta_B)` with the SAME `psi`; N-ORTH makes
@@ -220,6 +234,76 @@ step is the `rho=0` face of this -- now an assumption with a name, a necessity
 proof, and a price. *Pitch: a characterization of WHEN normals can and cannot
 borrow information across the shared nuisance -- not an unconditional
 impossibility.*
+
+## 4b-d. Theorem 4'(d) (general shell geometry -- beyond the toy) [PROVEN]
+
+Two moduli govern the shell in FULL generality (general `Z`, not 2-state):
+- **coupling modulus** `L_Phi = sup_theta sup_{z,z'} TV(K_ab(z;theta_z),
+  K_ab(z';theta_{z'}))` -- the `P_Z`-Lipschitz constant of the marginalized
+  conditional `Phi(P,theta)=int K_ab(z;theta_z)dP(z)`; `L_Phi=0` iff slices are
+  homogeneous (ABSORB).
+- **restricted N-injectivity** `kappa_* = inf{ ||T_N h||_TV : h signed, h(Z)=0,
+  L_Phi(h)>0 }` where `T_N P = int N(z)dP(z)` is the only channel normals see;
+  `kappa_*>0` (**N-COMPLETE**) iff every `Phi`-moving `P_Z`-direction is visible
+  to `N` (`ker T_N subset ker L_Phi`).
+
+**Theorem 4'(d).** With `C_m = {P in C_0 : ||T_N P - hatP_0^{obs}_m||_TV <= r_m}`,
+`r_m = sqrt(log(2/delta)/2m)` (DKW):
+```
+   (sandwich)  A_Frechet <= A*_norm(inf) <= A*_norm(m) <= A*_norm(inf) + L_Phi eps_m,
+   eps_m <= r_m / kappa_* = O( sqrt(log(1/delta)/m) / kappa_* )   w.p. 1-delta,
+   (rate, N-COMPLETE)  A*_norm(m) = A_Frechet + O( L_Phi / (kappa_* sqrt(m)) ) -> A_Frechet.
+```
+So the REDUCIBLE shell is exactly the PRODUCT `L_Phi * eps_m` = (copula-`P_Z`
+coupling) x (inverse N-injectivity)/`sqrt(m)`. Either factor zero kills it.
+*Proof.* `Phi` is affine in `P`; for `nu=P-P'`, `nu(Z)=0`,
+`TV(Phi(P,theta),Phi(P',theta)) <= L_Phi (1/2)||P-P'||_TV` (Aumann-integral
+Lipschitz step), giving the sandwich; the `m`-normal set has
+`||T_N(P-P^0)||<=2r_m`, so the `Phi`-relevant component has `||.||_* <= 2r_m/kappa_*`,
+routing any two reachable points through their `C_inf`-projections gives the rate.
+A matching two-point converse gives `Theta(1/sqrt(m))` when the `kappa_*`-argmin
+carries `L_Phi` (true in the toy). QED.
+
+**Proposition 4'(d-necessity) [PROVEN by construction].** The universal linear
+`shell = A*(M) rho` form is FALSE in general: (i) NON-injective `N`
+(`Z in {0,1,2}`, `N(0)=N(1)`) leaves an irreducible-by-normals `P_Z`-floor ABOVE
+`A_Frechet` for ALL `m` (`kappa_*=0`); (ii) singleton heterogeneous slices
+(`K_0={delta_1}, K_1={delta_2}`, no copula freedom, `A_Frechet=0`) give a shell
+`= 100%` of `A*(M)`, `rho`-independent, with N-ORTH holding VACUOUSLY -- witnessing
+that 4'(a) full-invariance needs (ABSORB), not N-ORTH alone. The 2-state
+toy of 4'(c) is exactly the special case {`|Z|=2` + injective `N` (N-COMPLETE) +
+linear coupling}; verified numerically (`verify_t4_coupled_radius.py`).
+
+## 4b-DC. Proposition 4'-DC (separation from data-combination partial ID) [PROVEN]
+
+The sharpest reviewer threat is econometric two-sample data-combination
+(Cross-Manski 2002, Ridder-Moffitt 2007): samples of `Law(U,W)` and `Law(V,W)`,
+shared `W`, bound the unobserved joint `(U,V)` by a Frechet interval that is a
+FUNCTION OF THE DC INPUTS ONLY. Embed `U<-`source-a, `V<-`source-b, `W<-Z`; the
+normal sample is a THIRD channel `N(z)`, not a marginal of `(U,V,Z)`.
+
+**Prop 4'-DC.** There are two coupled models `M_ORTH` (N-ORTH holds) and `M_LINK`
+(N-ORTH fails) with IDENTICAL data-combination inputs (same Sample-1/2 laws, same
+Frechet constraint, same normal marginal `P_0^obs`, same `A*(M)=1/4`) but
+DIFFERENT `A*_norm(inf)`: `1/4` vs `0`. Any DC/Cross-Manski/Ridder-Moffitt bound is
+a function of the identical inputs, hence identical for both, hence cannot output
+the opposing invariance verdicts -- so **T4' is NOT derivable from any N-ORTH-free
+data-combination bound.**
+*Proof (twin).* Both: `Z in {0,1}`, `w=1/2`, marginals `1/2`, injective `N`.
+`M_ORTH`: `p11(z)=(1/2)f_z` free -> reachable `[0,1/2]` for every `P` ->
+`A*_norm(m)=1/4` all `m`. `M_LINK`: `p11(z)=(1/2)z` pinned -> reachable `(1/2)w`,
+normals identify `w=1/2` -> `A*_norm(inf)=0`. Single/normal observables identical
+(both `Ber(1/2)`, both `(1/2)N(0)+(1/2)N(1)`); DC Frechet input identical
+(`[0,1/2]`, radius `1/4`). QED.
+
+**Honest reverse check.** `A_Frechet` (the copula CORE) IS a data-combination
+Frechet bound -- conceded, not novel. T4' is NOT: it concerns whether a THIRD
+functionally-different channel shrinks that radius, an axis absent from the DC
+input list; it becomes derivable only after AUGMENTING DC with the N-ORTH
+cross-channel variation-independence restriction -- which IS the contribution. So
+T4' is a new identification result stated in the partial-ID *language*, not a
+corollary of existing data-combination *theorems*. (This upgrades the Section 8
+line-446 assertion to a proven proposition.)
 
 ## 4b'. Theorem 4 Part (b) (excess-risk lower bound UNDER Assumption M)
 

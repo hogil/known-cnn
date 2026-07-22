@@ -86,3 +86,40 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   axis -- but positioning is only safe with the citation). Would have been a
   reviewer kill-shot if missed.
 - 16 bib keys to add (listed in doc). Re-JUDGE next (round 5).
+
+### Round 5 (JUDGE re-review) -- ICLR 25% -> 27% (+2-3), PLATEAU approaching
+- Positioning converted R2 from kill-shot to incrementality charge (+2-3). But:
+  map is EXPOSITION not contribution (5/6 cells relocated known results); doc
+  over-claims "map is the contribution" -> reframe to sell T4', map as frame.
+- data-combination flag defused IGNORANCE kill-shot but NOT incrementality: the
+  "no variation-independence axis" distinction is ASSERTED (line 446), needs a
+  formal SEPARATION LEMMA. conformal/NP appearance-axis row HOLDS (real).
+- R2 partially reduced (~ -1/2), NOT neutralized. R3 (no clean positive) UNTOUCHED
+  and now the single largest cap: ICLR hard-capped ~33-35% by theory+positioning
+  ALONE regardless of polish (empirics = tautological illustration + permanent
+  negative + tie).
+- ACTION (round 6, LAST confident theory increment): (a) prove general shell-
+  geometry (close T4'c beyond 2-state toy) + formal data-combination separation
+  lemma (harden line 446 assertion -> proposition). ~+4-6pp to the ~35% ceiling.
+- After (a): theory EXHAUSTED. JUDGE: stop positioning rounds (diminishing); R3
+  cannot move by prose. To exceed ~35% needs ONE pre-registered clean empirical
+  win (probe that demonstrably learns + equal budget + matched-FAR bitF1 CI>0);
+  base rate low (2 priors failed). 60% ICLR NOT reachable (max ceiling ~45%).
+- Probability ledger: r1 18 -> r3 25 -> r5 27. Theory ceiling ~33-35%.
+
+### Round 6 (THEORY: shell-geometry + separation lemma) -- DONE
+- Thm 4'(d): general shell = L_Phi * eps_m = (copula-P_Z coupling) x (inverse
+  N-injectivity)/sqrt(m); sandwich A_Frechet <= A*_norm(m) <= A*(M) + rate
+  Theta(1/sqrt(m)) under N-COMPLETE (kappa_*>0). Shell conjecture CLOSED (as a
+  product of two named moduli, NOT a universal linear-in-rho form).
+- Prop 4'(d-necessity): universal linear form DISPROVEN (non-injective N -> floor
+  above A_Frechet; singleton heterogeneous slices -> shell=100% A*(M) rho-indep).
+  Toy = special case {|Z|=2 + injective N + linear coupling}.
+- Prop 4'-DC: PROVEN twin (M_ORTH vs M_LINK, identical DC inputs, A*_norm 1/4 vs 0)
+  -> no Cross-Manski/Ridder-Moffitt bound derives T4'; line-446 assertion -> proof.
+- HONEST correctness fix: 4'(a) full-invariance needs N-ORTH AND (ABSORB)
+  (slice-homogeneity), not N-ORTH alone -- scoped; core Lemma 4'(a') + sandwich
+  intact. Makes hypotheses exact (strengthens).
+- Applied to doc. Re-JUDGE (round 7).
+
+### Round 7 (JUDGE re-review after 4'(d) + Prop 4'-DC) -- in progress
