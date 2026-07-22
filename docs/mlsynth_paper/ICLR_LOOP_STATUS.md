@@ -122,4 +122,25 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   intact. Makes hypotheses exact (strengthens).
 - Applied to doc. Re-JUDGE (round 7).
 
-### Round 7 (JUDGE re-review after 4'(d) + Prop 4'-DC) -- in progress
+### Round 7 (JUDGE re-review after 4'(d) + Prop 4'-DC) -- ICLR 27% -> 31%, THEORY EXHAUSTED
+- 4'(d) genuinely closes the shell (factorization L_Phi x 1/kappa_*, two named
+  moduli, universal-linear form DISPROVEN) -- real but non-constructive depth,
+  reviewers discount -> +2-3pp. Prop 4'-DC + ABSORB fix = INSURANCE (removes
+  subsumption + false-headline kill-shots), 0 upside. ABSORB fix net-positive
+  (was a latent kill-shot; core Lemma 4'a' carries the story unconditionally).
+- JUDGE: THEORY EXHAUSTED = YES. No pure-theory move clears >+1pp without diluting
+  the narrative or being R3 in disguise. Stop theory rounds.
+- Ceiling ~33-35% via theory alone; current 31%. Only lever above: ONE
+  pre-registered clean empirical win (R3), success ~30-40% (track record 0/3:
+  SVHN collapse, land-cover tie, GATE-2 fail), win-ceiling ~45% (NOT 60%).
+- R3 experiment must clear ALL 4 gates at once: (1) probe DEMONSTRABLY learns
+  multi-defect (mAP >> prevalence); (2) EQUAL optimizer-update budget across arms;
+  (3) operator-match prediction PRE-REGISTERED before test; (4) matched-real-FAR
+  bitF1, operator-match > content-blind, paired CI strictly > 0. Proceed only if
+  gate (1) pre-verified on a pilot.
+- FIX cleanup done: Section 8 map cell now consistent with scoped 4'(a) (core
+  always irreducible; shell reducible at L_Phi/(kappa_* sqrt m)); stale prob note
+  updated to 31% + exhausted.
+- Probability ledger: r1 18 -> r3 25 -> r5 27 -> r7 31. THEORY CEILING reached.
+
+### Round 8 (R3 pilot: does a stronger probe LEARN the multi-defect task?) -- next

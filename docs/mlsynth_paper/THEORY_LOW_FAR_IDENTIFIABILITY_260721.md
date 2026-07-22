@@ -442,11 +442,14 @@ Composition, Calibration, and Coverage."*
 FCM-PM, val-margin, NB-reject are *concrete mechanisms illustrating* the
 characterization -- not method-superiority claims.
 
-**Honest probability (post proof-audit, conservative).** ICLR ~25-40% (two-point
-theorems correct but may read as "expected"; T3 is a known corollary; no clean
-public method-win). TMLR ~55-70% (correctness + characterization fit) -- the
-realistic primary. Depth lever for ICLR: strengthen T4 beyond two-point (e.g.
-quantitative reachable-law geometry), NOT more experiments.
+**Honest probability (post theory-loop, conservative).** ICLR ~31% (theory
+plateaued at ceiling ~33-35%: T4' + 4'(d) general shell geometry are a genuine but
+non-constructive (two-moduli) characterization reviewers discount; T3 is a known
+corollary; no clean public method-win). TMLR ~55-70% (correctness + characterization
+fit) -- the realistic primary. Theory depth is now EXHAUSTED; the only lever above
+~35% is one pre-registered clean empirical win (operator-matched synthesis beating
+content-blind baselines at matched real-FAR, paired CI > 0, on a domain where the
+probe demonstrably learns), which would raise ICLR to ~45% (hard cap), NOT 60%.
 
 ---
 
@@ -469,8 +472,9 @@ none models a *second information source trying to identify the first's target*.
 -----------------|---------------------------------|----------------------------------------------------
 S single-label   | NO (T2: defect-only cannot      | PARTIAL under operator-match; irreducible floor
   marginals      |     certify FAR)                |     A*(S) otherwise (T1)
-N known-good     | YES (T3: minimal m normals,     | NO under N-ORTH (T4'a); necessity converse (4'b);
-  normals        |     a conformal corollary)      |     rho-damped radius (4'c)  <-- GENUINELY NEW CELL
+N known-good     | YES (T3: minimal m normals,     | CORE irreducible always (Lemma 4'a'); shell
+  normals        |     a conformal corollary)      |     reducible only at L_Phi/(kappa_* sqrt m)
+                 |                                 |     (4'd); full-invar. under +ABSORB (4'a)  <-- NEW
 C positive       | NO (co-occurrence positives do  | YES (only source that fixes the copula; the
   co-occurrence  |     not reveal P_0)             |     constructive flip side of T1)
 ```
