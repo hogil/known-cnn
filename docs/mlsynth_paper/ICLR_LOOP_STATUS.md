@@ -204,3 +204,23 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   extension now (GPU-free) so it fires the moment GPU frees.
 - Probability ledger: r1 18 -> r3 25 -> r5 27 -> r7 31 (theory ceiling) -> r9 40
   (method-system). Path to 60 open, gated on the public full-system win.
+
+### Round 10 (prep + honest scoping under continuous operation) -- GPU still blocked
+- best-grid/g sweep added to SVHN runner (b442eff): fcm_pm no longer grid9-fixed;
+  swept on source-val, frozen in proxy hash. Runner READY for the public run.
+- HONEST SCOPE realization: NB-reject + conformal calibration need a REAL NORMAL
+  (defect-free) class -- they live on normal-bearing domains (WM38, chip). SVHN /
+  land-cover have NO natural normal, so forcing NB/conformal there would be
+  dishonest. => the SVHN public win is scoped to operator-match(best-grid) +
+  val-margin at matched negative-bit FPR; NB/conformal stay demonstrated on
+  WM38/chip. The paper's full system is domain-factored: operator-match+val-margin
+  (all domains) + NB/conformal (normal-bearing domains). No more SVHN prep needed.
+- TENSION (JUDGE-flagged, now precise): the operator-match WIN lives on partition
+  domains (SVHN/land-cover, no normals); the FAR components (NB/conformal) live on
+  normal-bearing domains (WM38 superposition / chip private). Only CHIP has both +
+  a real win, but it's private. This is the structural reason 60% is gated -- a
+  single PUBLIC domain with both partition-structure AND a real normal class is
+  what's missing (chip has it but is private).
+- BLOCKED: GPU 95% held by external procs across multiple ticks. Runner ready;
+  launch convnextv2 full-system SVHN (best-grid+proxy+val-margin, sealed once) the
+  moment GPU frees. Continuous loop maintained.
