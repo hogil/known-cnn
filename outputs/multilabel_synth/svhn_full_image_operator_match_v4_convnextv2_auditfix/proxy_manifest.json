@@ -1,0 +1,57 @@
+{
+  "backbone": "convnextv2_tiny",
+  "arms": [
+    "single_only",
+    "partition",
+    "summation",
+    "cutmix",
+    "mixup",
+    "fcm_pm"
+  ],
+  "canvas": [
+    64,
+    128
+  ],
+  "classes": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "per_class_train": 350,
+  "per_class_val": 100,
+  "proxy_scores": {
+    "partition": -0.10581395775079727,
+    "summation": -0.14382076263427734,
+    "cutmix": -0.15629713237285614,
+    "mixup": -0.16749757528305054,
+    "fcm_pm": -0.25838273763656616
+  },
+  "proxy_ranking": [
+    "partition",
+    "summation",
+    "cutmix",
+    "mixup",
+    "fcm_pm"
+  ],
+  "fcm_pm_best_grid": {
+    "best_g": 4,
+    "best_grid": 16,
+    "grid_scores": {
+      "g2_grid6": -0.292564332485199,
+      "g2_grid8": -0.2946254014968872,
+      "g3_grid9": -0.2731706202030182,
+      "g3_grid12": -0.2860029935836792,
+      "g4_grid16": -0.22904540598392487
+    }
+  },
+  "predicted_winner": "partition",
+  "epochs": 10,
+  "proxy_seed": 0,
+  "hash": "45a17054997ea70c"
+}
