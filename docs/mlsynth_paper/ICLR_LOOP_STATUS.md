@@ -265,3 +265,20 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
 - All GPU-free prep done (audit fairness fixes, best-grid, 2 backbones, May recipe,
   normalization). Loop kept alive; the three unblocks are: user accepts Kaggle
   rules (Severstal), GPU frees (DINOv3), codex commits (manuscript).
+
+### Round 13 (DINOv3 on SVHN -- honest negative, audit-predicted)
+- DINOv3 ConvNeXt-tiny (convnext_tiny.dinov3_lvd1689m) on SVHN full-image: proxy
+  DEGENERATE (all-arm identical margin -0.0246); gate-1 confirms it does NOT learn
+  SVHN digits (held-out-synth mAP 0.2375 ~= prevalence 0.222) at 10ep/lr2e-4 --
+  COLLAPSE. Consistent with the audit's prediction: DINO self-supervised SEMANTIC
+  invariance weakens fine-grained digit patterns, unlike FCMAE's texture/
+  reconstruction features (convnextv2 FCMAE learned, mAP 0.58).
+- Informative architecture finding: backbone pretraining OBJECTIVE matters -- FCMAE
+  (texture) transfers to fine digits, DINO (semantic-invariance) does not. But it
+  means NO 2nd clean partition win on SVHN; architecture-robustness on SVHN is
+  FCMAE-only. DINOv3's fair test is a COARSER domain (Severstal industrial defects),
+  not fine digits -- retry there with lower lr / head-only proxy (audit prescription).
+- v5 Phase B skipped (degenerate proxy + non-learning model = garbage). v5 proxy
+  kept as honest negative record.
+- Primary diagnostic result (convnextv2 partial partition win + normalization fix)
+  stands. Levers unchanged: Severstal (user Kaggle rules), manuscript (codex commit).
