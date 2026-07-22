@@ -67,6 +67,23 @@ def main():
               f"=> impossibility (T2): threshold uncontrolled without real normals")
         print(f"  REAL-split (minimal) cal   : {min(real_vals)*100:.1f}-{max(real_vals)*100:.1f}%  "
               f"=> minimal calibration (T3): controlled at target for every operator")
+
+    # T4/T5 empirical: at matched FAR (real-split, 1%), bitF1 varies widely by operator
+    # -> FAR pinned by normals, appearance/recovery pinned by operator (orthogonal).
+    rows2 = [r for r in rows if r["calibration_regime"] == "real_normal_split"
+             and abs(_f(r["alpha"]) - 0.01) < 1e-9]
+    rows2.sort(key=lambda r: int(r["n_calibration"]), reverse=True)
+    seen, bf = set(), {}
+    for r in rows2:
+        if r["arm"] in seen:
+            continue
+        seen.add(r["arm"]); bf[r["arm"]] = _f(r["mixed_bitF1_all_mean"])
+    if bf:
+        print(f"\nT4/T5 (matched real-FAR 1%): FAR fixed for ALL arms, but mixed-bitF1 spans "
+              f"{min(bf.values()):.2f}-{max(bf.values()):.2f} by operator")
+        print("  => normals control the FAR axis; the appearance/recovery axis stays operator-"
+              "determined (orthogonal resources) -- normal calibration does not close the "
+              "multi-label gap.")
     print(f"\n[OUT] {os.path.abspath(out_csv)}")
 
 

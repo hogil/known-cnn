@@ -99,6 +99,66 @@ impossibility. Known-good normals are abundant in a fab (unlike multi-defect
 labels, which are not -- see [[feedback_no_real_combo_label_assumption]]), so a
 "practical" arm that uses them is industrially honest, not a leak.
 
+**Novelty w.r.t. conformal risk control.** Theorem 3 itself is a *corollary* of
+split-conformal / Learn-then-Test (Angelopoulos et al. 2022; Bates et al. 2021)
+-- we do NOT claim the O(1/m) FAR bound as new. The contribution is the
+*information-resource separation* below (Thms 4-5): which target (FAR vs
+coverage) each information source (normals vs positive co-occurrence) can and
+cannot control. That separation is what is new, not the rate.
+
+---
+
+## 4b. Theorem 4 (Normal calibration cannot recover positive appearance)
+
+**Claim.** Known-good normals control FAR (Thm 3) but do **not** reduce the
+multi-label positive-appearance ambiguity. Formally: there exist two worlds
+`W_A, W_B` with (i) identical single-defect conditionals `P(x|y=e_c)`, (ii)
+identical normal distribution `P_0`, yet (iii) different multi-defect conditional
+`P(x|y=e_a+e_b)`, with TV distance `>= A*(M)` (the reachable-law radius of Thm 1).
+No estimator using single-defect data plus any number `m` of known-good normals
+distinguishes `W_A` from `W_B`, so the minimax excess multi-label risk stays
+`>= c*A*(M)` regardless of `m`.
+
+**Proof (two-point, orthogonal resources).** Take the Thm 1 two-point pair
+`(W_A, W_B)` that already share all single conditionals and differ only in the
+copula/interaction of the pair `(a,b)`. Attach the *same* normal distribution
+`P_0` to both (the construction is free to do so: `P_0` is unconstrained by the
+defect conditionals). The learner's observations -- single-defect samples and
+`m` normal draws -- have identical law under `W_A` and `W_B` (singles identical
+by (i), normals identical by (ii)). Hence any decision rule is measurable w.r.t.
+a statistic with the same distribution in both worlds; Le Cam's two-point bound
+gives minimax excess risk `>= c * TV(P_A(x|e_a+e_b), P_B(...)) >= c*A*(M)`. The
+normals add information about `P_0` only, which is orthogonal to the copula. QED.
+
+**Reading.** FAR and positive-appearance are governed by *different* information
+resources: normals fix the FAR axis (Thm 3), positive co-occurrence fixes the
+appearance axis (Thm 1); neither substitutes for the other. This is exactly why
+in experiments a *practical* arm (single + known-good normals) drives realized
+FAR to target yet does not close the mAP gap to the multi-label oracle -- the two
+gaps are provably orthogonal.
+
+## 4c. Theorem 5 (Joint FAR-coverage resource bound; reject-all is not a solution)
+
+**Claim.** Consider any rule that may abstain (reject). Fix a coverage floor
+`cov >= 1 - beta` on genuine defects. Then with only single-defect data and
+known-good normals, no rule attains both `FAR <= alpha` and defect-recall within
+`A*(M)` of optimal at coverage `>= 1 - beta`, unless it observes positive
+co-occurrence information. The trivial reject-all rule (`FAR = 0`) is excluded by
+the coverage floor.
+
+**Proof.** Couple Thm 3 (FAR controllable) with Thm 4 (appearance not
+recoverable) under the shared coverage constraint. Reject-all has coverage `0 <
+1 - beta`, violating the floor, so it is not admissible. Any admissible rule with
+coverage `>= 1 - beta` must decide bit-labels on accepted defect inputs; on the
+`(W_A, W_B)` pair those decisions incur excess risk `>= c*A*(M)` (Thm 4), while
+FAR is separately pinned by the normals (Thm 3). Hence the joint target is
+unreachable without the third resource (positive co-occurrence). QED.
+
+**Reading.** Every guarantee here is stated *jointly* over FAR and coverage, so
+the degenerate "reject everything -> FAR 0" escape is ruled out by construction.
+The paper's operating-point tables (F1@FAR with reported coverage and
+positive-reject) are the empirical form of this joint accounting.
+
 ---
 
 ## 5. Empirical corroboration (no new training)
