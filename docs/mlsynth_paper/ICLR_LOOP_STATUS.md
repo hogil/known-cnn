@@ -175,3 +175,32 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
 - Honest read: pretrained convnextv2 LEARNS (gate-1), but the REAL-test transfer
   (gate-4) is the open question -- both scratch backbones failed it. Outcome
   pending; ICLR still 31% until a clean real-test win lands (cap ~45%).
+
+### Round 9 (JUDGE re-eval: METHOD-SYSTEM framing, not FCM-PM-single) -- ICLR 31% -> 40%
+- User corrected the framing: paper = method-SYSTEM (operator-match+best-grid +
+  val-margin + NB-reject + minimal calibration, all first-class contributions;
+  theory = motivation), NOT FCM-PM-single/theory-only. Prior 31% UNDER-COUNTED
+  the system.
+- Recalibrated ICLR:
+    theory-only (old)                                    31%
+    method-system (current, honest)                      40%  (+9)
+    + clean PUBLIC real-test win (full system, pre-reg)  55%  (+15)
+    + 2 backbones + best-grid + full-system ablation     61%  (+6)
+- Load-bearing PUBLIC+reproducible assets = NB-reject (FAR 22.6->1.1%, ~0 recall
+  loss) + conformal calibration (86-100% -> ~1%); these move 31->40. Chip flagship
+  (0.997/0.68 vs 0.873/16.2) is strong but PRIVATE -> cannot alone cross 60%.
+- NEW dominant reject lever: "pipeline of individually-standard components." Rebuttable
+  ONLY by narrative: operator-match LAW + pre-registered source-only proxy +
+  identifiability map => "theory-predicted law instantiated by matched components",
+  not an ad hoc stack.
+- 60% REACHABLE but strictly ORDERED: (a) ONE pre-registered PUBLIC full-system
+  real-test win FIRST, THEN (b) backbones + ablation. Breadth alone caps ~45%.
+- HIGHEST-VALUE ACTION: full system on ONE public domain, pre-registered, to a
+  sealed real-test win: best-grid/g swept on source-val + FROZEN -> proxy operator
+  -> val-margin -> NB-reject -> conformal -> sealed eval ONCE. best-grid sweep is
+  MANDATORY (grid9-fixed under-tunes fcm_pm = unfair to our own method) but MUST be
+  source-val-only + frozen or it is a leakage/cherry-pick reject.
+- BLOCKED on GPU (external procs 97%). Building the best-grid+NB+conformal runner
+  extension now (GPU-free) so it fires the moment GPU frees.
+- Probability ledger: r1 18 -> r3 25 -> r5 27 -> r7 31 (theory ceiling) -> r9 40
+  (method-system). Path to 60 open, gated on the public full-system win.
