@@ -107,7 +107,42 @@ def make_backbone(dev):
         m = timm.create_model("convnextv2_tiny.fcmae_ft_in22k_in1k", pretrained=True,
                               num_classes=N_CLASSES, in_chans=3)
         return m.to(dev)
+    if _BACKBONE in ("convnext_tiny_dinov3", "dinov3_convnext_tiny"):
+        import timm
+        m = timm.create_model("convnext_tiny.dinov3_lvd1689m", pretrained=True,
+                              num_classes=N_CLASSES, in_chans=3)
+        return m.to(dev)
     return SmallRGB(N_CLASSES).to(dev)
+
+
+_PRETRAINED = ("convnextv2_tiny", "convnext_tiny_dinov3")   # need low lr + warmup
+
+
+def build_optim_sched(model, epochs, steps_per_epoch, base_lr, warmup_epochs=2,
+                      warmup_start=0.05, eta_min=1e-6, backbone_lr=None):
+    """May-recipe BKM: separate backbone LR (2-LR) + LinearLR warmup ->
+    CosineAnnealing. Mirrors chip_multilabel/_train_chip_variant.py."""
+    import torch.optim as optim
+    from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
+    if backbone_lr is not None:
+        head_p, bb_p = [], []
+        for n, p in model.named_parameters():
+            (head_p if (n.startswith("fc") or n.startswith("head") or ".head." in n)
+             else bb_p).append(p)
+        opt = optim.AdamW([{"params": bb_p, "lr": backbone_lr},
+                           {"params": head_p, "lr": base_lr}], weight_decay=0.05)
+    else:
+        opt = optim.AdamW(model.parameters(), lr=base_lr, weight_decay=0.05)
+    total = max(1, epochs * steps_per_epoch)
+    wsteps = max(1, warmup_epochs * steps_per_epoch)
+    if warmup_epochs > 0:
+        sched = SequentialLR(opt, [
+            LinearLR(opt, start_factor=warmup_start, total_iters=wsteps),
+            CosineAnnealingLR(opt, T_max=max(1, total - wsteps), eta_min=eta_min)],
+            milestones=[wsteps])
+    else:
+        sched = CosineAnnealingLR(opt, T_max=total, eta_min=eta_min)
+    return opt, sched
 
 
 def _batches(X, Y, bs, rng):
@@ -183,21 +218,42 @@ def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
     return ranking, scores, {"best_g": bg, "best_grid": bgrid, "grid_scores": grid_scores}
 
 
-def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_target=0.02):
+def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_target=0.02,
+                      use_may_recipe=None, ema_decay=0.0, backbone_lr=None,
+                      warmup_epochs=2):
     """Train; after each epoch score pos-min minus neg-max margin on a source-val
-    synthetic set; return the best-margin checkpoint (val-margin selection)."""
+    synthetic set; return the best-margin checkpoint (val-margin selection).
+    May-recipe (BKM): LinearLR warmup -> CosineAnnealing (+ optional 2-LR, EMA).
+    Auto-on for pretrained backbones unless overridden."""
     import copy
+    if use_may_recipe is None:
+        use_may_recipe = _BACKBONE in _PRETRAINED
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
     m = make_backbone(dev)
-    opt = torch.optim.Adam(m.parameters(), lr=lr); lf = nn.BCEWithLogitsLoss()
+    lf = nn.BCEWithLogitsLoss()
     Yt = (Y + (1.0 - Y) * neg_target).astype(np.float32)
+    steps = max(1, (len(X) + bs - 1) // bs)
+    if use_may_recipe:
+        opt, sched = build_optim_sched(m, epochs, steps, lr, warmup_epochs=warmup_epochs,
+                                       backbone_lr=backbone_lr)
+    else:
+        opt, sched = torch.optim.Adam(m.parameters(), lr=lr), None
+    ema = copy.deepcopy(m) if ema_decay > 0 else None
     best, st = -1e9, None
     for _ in range(epochs):
         m.train()
         for xb, yb in _batches(X, Yt, bs, rng):
-            xb, yb = xb.to(dev), yb.to(dev); opt.zero_grad(); lf(m(xb), yb).backward(); opt.step()
-        P = predict(m, vmX, dev); mg = evidence_margin(P, vmY)
-        if mg > best: best, st = mg, copy.deepcopy(m.state_dict())
+            xb, yb = xb.to(dev), yb.to(dev)
+            opt.zero_grad(); lf(m(xb), yb).backward(); opt.step()
+            if sched is not None: sched.step()
+            if ema is not None:
+                with torch.no_grad():
+                    for ev, v in zip(ema.state_dict().values(), m.state_dict().values()):
+                        if ev.dtype.is_floating_point: ev.mul_(ema_decay).add_(v, alpha=1-ema_decay)
+                        else: ev.copy_(v)
+        eval_m = ema if ema is not None else m
+        P = predict(eval_m, vmX, dev); mg = evidence_margin(P, vmY)
+        if mg > best: best, st = mg, copy.deepcopy(eval_m.state_dict())
     m.load_state_dict(st); return m
 
 
@@ -236,7 +292,9 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
                  backbone=_BACKBONE, epochs=args.epochs, neg_target=0.02,
                  seeds=[1, 2, 3, 4, 5], fpr_targets=[0.01, 0.05],
                  checkpoint="val_margin", threshold="source_val_negbit_fpr",
-                 proxy_hash=proxy_hash)
+                 recipe=dict(may_bkm=_BACKBONE in _PRETRAINED, ema_decay=args.ema_decay,
+                             backbone_lr=args.backbone_lr, warmup_epochs=args.warmup_epochs,
+                             lr=args.lr), proxy_hash=proxy_hash)
     proto["hash"] = hashlib.sha256(json.dumps(proto, sort_keys=True).encode()).hexdigest()[:16]
     with open(os.path.join(OUTDIR, "test_protocol.json"), "w") as f:
         json.dump(proto, f, indent=2)
@@ -264,9 +322,11 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
             vmX_full, vmY_full = build_arm_train(_vmarm, vX, vY, 20,
                                                  np.random.default_rng(seed), **_gg(_vmarm))
             n_c = len(vmX_full) - len(vX); vmX, vmY = vmX_full[:n_c], vmY_full[:n_c]
-            _lr = args.lr if args.lr else (2e-4 if _BACKBONE == "convnextv2_tiny" else 1e-3)
+            _lr = args.lr if args.lr else (2e-4 if _BACKBONE in _PRETRAINED else 1e-3)
             m = train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
-                                  lr=_lr, neg_target=proto["neg_target"])
+                                  lr=_lr, neg_target=proto["neg_target"],
+                                  ema_decay=args.ema_decay, backbone_lr=args.backbone_lr,
+                                  warmup_epochs=args.warmup_epochs)
             Pv = predict(m, vX, args.device)   # source-val singles (uint8)
             Pt = predict(m, tX, args.device)   # sealed test (uint8)
             r = {"arm": arm, "seed": seed, "mAP": _map(Pt, tY)}
@@ -311,8 +371,14 @@ def main():
     ap.add_argument("--epochs", type=int, default=15)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--proxy-seed", type=int, default=0)
-    ap.add_argument("--backbone", choices=["small", "resnet18", "convnextv2_tiny"],
+    ap.add_argument("--backbone",
+                    choices=["small", "resnet18", "convnextv2_tiny", "convnext_tiny_dinov3"],
                     default="small")
+    ap.add_argument("--ema-decay", type=float, default=0.0,
+                    help="EMA decay (May BKM uses e.g. 0.999; 0 = off)")
+    ap.add_argument("--backbone-lr", type=float, default=None,
+                    help="separate backbone LR (2-LR); None = single LR")
+    ap.add_argument("--warmup-epochs", type=int, default=2)
     ap.add_argument("--lr", type=float, default=None,
                     help="override lr; default 1e-3 (scratch) / 2e-4 (pretrained)")
     ap.add_argument("--outdir", default=None,
