@@ -156,3 +156,22 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   guess). Phase B sealed test (ResNet-18, test_protocol hash 8bf38c6a) RUNNING.
 - This is the real R3 gate-4 attempt on the REAL sealed test with a probe that
   demonstrably learns. Outcome pending.
+
+### Round 8b (backbone escalation results) -- pretrained learns, scratch collapses
+- ResNet-18 (v2) REAL sealed test: partition mAP ~0.34 (collapse); scratch backbone
+  does NOT transfer synth->real (synth 0.84 -> real 0.34). Run HUNG at 19/30
+  (Windows torch hang, GPU 15GB held @2% util); killed, partial preserved as
+  boundary evidence (scratch collapse + hang).
+- convnextv2_tiny FCMAE (v3) gate-1 PILOT: at CORRECT lr 2e-4, LEARNS strongly --
+  held-out synth partition mAP 0.882 (> ResNet 0.84), single 0.750, cutmix 0.695
+  (partition > single > cutmix, operator-match signal). gate-1 PASS.
+- BUG found + fixed: proxy_select trained at lr 1e-3 -> destroyed FCMAE features ->
+  degenerate proxy (all arms identical margin -0.1171). Fixed proxy_select to use
+  2e-4 for pretrained. The v3 frozen proxy (hash a2593f07) is INVALID (lr bug);
+  will re-freeze into a fresh dir with the fix before Phase B (honest bug-fix, not
+  p-hacking -- the degenerate proxy was never a valid pre-registration).
+- BLOCKED: convnextv2 Phase B (real sealed test) needs GPU; external procs (codex)
+  now hold GPU 100%/15GB. Run when free.
+- Honest read: pretrained convnextv2 LEARNS (gate-1), but the REAL-test transfer
+  (gate-4) is the open question -- both scratch backbones failed it. Outcome
+  pending; ICLR still 31% until a clean real-test win lands (cap ~45%).

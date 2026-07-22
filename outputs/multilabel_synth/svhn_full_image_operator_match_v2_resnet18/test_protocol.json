@@ -1,0 +1,42 @@
+{
+  "classes": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "per_class_train": 350,
+  "per_class_val": 100,
+  "arms": [
+    "single_only",
+    "partition",
+    "summation",
+    "cutmix",
+    "mixup",
+    "fcm_pm"
+  ],
+  "n_per_pair": 100,
+  "backbone": "resnet18",
+  "epochs": 12,
+  "neg_target": 0.02,
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "fpr_targets": [
+    0.01,
+    0.05
+  ],
+  "checkpoint": "val_margin",
+  "threshold": "source_val_negbit_fpr",
+  "proxy_hash": "432eb14507c38610",
+  "hash": "8bf38c6a59eac463"
+}

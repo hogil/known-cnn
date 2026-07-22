@@ -155,7 +155,8 @@ def evidence_margin(P, Y):
 def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
     """Train probe on source singles; score each operator's source-val combos by
     evidence margin. Returns ranking (higher first). NEVER sees the test set."""
-    probe = train(sX, sY, epochs, seed, dev)
+    lr = 2e-4 if _BACKBONE == "convnextv2_tiny" else 1e-3   # pretrained needs low lr
+    probe = train(sX, sY, epochs, seed, dev, lr=lr)
     rng = np.random.default_rng(seed + 1)
     scores = {}
     for arm in [a for a in ARMS if a not in ("single_only",)]:
