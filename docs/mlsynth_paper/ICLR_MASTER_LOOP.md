@@ -29,6 +29,21 @@ the loop reports the true probability each round and says so if it plateaus.
    (plateau), OR user stops. On plateau, MASTER states the honest ceiling and
    recommends venue (ICLR vs TMLR).
 
+## Continuous operation (user directive 260722)
+- The FULL agent cycle (JUDGE -> route -> THEORY/EXPERIMENT -> FIX -> re-JUDGE)
+  runs PERIODICALLY and CONTINUOUSLY -- it does NOT stop at a plateau. After every
+  experiment finishes, run ONE more full round (re-JUDGE with the new evidence),
+  then continue. The loop only pauses waiting on a resource (GPU) or an
+  in-flight experiment/agent; when that clears, immediately fire the next round.
+- Framing is METHOD-SYSTEM, not FCM-PM-single: operator-matched synthesis (with
+  best-grid/g source-val sweep) + val-margin + NB-reject + minimal calibration are
+  ALL first-class contributions counted in the probability; theory is the
+  motivating characterization. JUDGE must evaluate the whole system, not FCM-PM
+  alone.
+- Every round: re-JUDGE probability adversarially, log it, commit evidence, keep
+  going. Never fabricate the number; never stop the cycle on the user's standing
+  "keep the loop running" directive.
+
 ## Guardrails (non-negotiable)
 - Never fabricate probability; JUDGE sets it adversarially.
 - Never claim method-superiority (SVHN GATE-2 closed that path).
