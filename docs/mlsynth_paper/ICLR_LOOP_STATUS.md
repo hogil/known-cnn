@@ -299,3 +299,18 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   confirmatory win remains gated on Severstal (user Kaggle rules). But the DINOv3
   positive means DINOv3 is a viable 2nd backbone for the Severstal confirmatory run
   (Severstal defects are coarse industrial patterns, DINO-suitable).
+
+### Round 15 (DINOv3 land-cover FULL 3-seed -- honest weak/inconclusive)
+- Added --backbone {resnet18,convnextv2_tiny,dinov3} to run_operator_match_landcover.
+- DINOv3 land-cover full 3-seed: partition mAP 0.6645 is TOP admissible but a
+  near-TIE with single 0.6636; bit_f1 BROKEN (most arms 0.000 -- DINOv3 outputs
+  miscalibrated, nothing crosses 0.5 threshold). The 1-seed gate-1 (partition 0.72
+  vs cutmix 0.64) did NOT survive full eval.
+- vs resnet18 land-cover: partition bit_f1 0.72 vs cutmix 0.53 = CLEAN win. So the
+  2-backbone robustness on land-cover is resnet18-CLEAN, DINOv3-INCONCLUSIVE.
+- PATTERN CONFIRMED: DINOv3 (self-supervised semantic) is finicky on these tasks
+  (SVHN collapse 0.24; land-cover marginal+miscalibrated). FCMAE/resnet
+  (reconstruction/supervised) are the reliable backbones. Honest backbone story:
+  do NOT claim DINOv3 2-backbone robustness; use resnet18 + convnextv2 FCMAE.
+- No probability change (caveated domain + inconclusive backbone). Clean
+  confirmatory still gated on Severstal (user Kaggle rules).

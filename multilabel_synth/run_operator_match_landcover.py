@@ -56,10 +56,25 @@ def _norm(X):
     return (X - IMEAN) / ISTD
 
 
+_BACKBONE = "resnet18"   # set from CLI: resnet18 | convnextv2_tiny | dinov3
+
+
+def _make_model(n_classes, pretrained, device):
+    if _BACKBONE == "convnextv2_tiny":
+        import timm
+        return timm.create_model("convnextv2_tiny.fcmae_ft_in22k_in1k",
+                                 pretrained=pretrained, num_classes=n_classes, in_chans=3).to(device)
+    if _BACKBONE == "dinov3":
+        import timm
+        return timm.create_model("convnext_tiny.dinov3_lvd1689m",
+                                 pretrained=pretrained, num_classes=n_classes, in_chans=3).to(device)
+    return build_resnet18(n_classes, pretrained=pretrained).to(device)
+
+
 def train_model(trX, trY, epochs, bs, lr, device, seed, n_classes, pretrained):
     torch.manual_seed(seed)
-    model = build_resnet18(n_classes, pretrained=pretrained).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    model = _make_model(n_classes, pretrained, device)
+    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.05)
     lossf = nn.BCEWithLogitsLoss()
     ds = TensorDataset(torch.from_numpy(_norm(trX)), torch.from_numpy(trY))
     loader = DataLoader(ds, batch_size=bs, shuffle=True)
@@ -339,7 +354,11 @@ def main():
     ap.add_argument("--cache", default=None)
     ap.add_argument("--out-csv",
                     default="outputs/multilabel_synth/operator_match_landcover.csv")
+    ap.add_argument("--backbone", choices=["resnet18", "convnextv2_tiny", "dinov3"],
+                    default="resnet18")
     args = ap.parse_args()
+    global _BACKBONE
+    _BACKBONE = args.backbone
 
     if args.device == "cuda" and not torch.cuda.is_available():
         print("[warn] cuda unavailable -> cpu", flush=True)
