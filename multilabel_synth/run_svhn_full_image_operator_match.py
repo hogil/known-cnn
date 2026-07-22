@@ -100,6 +100,11 @@ def make_backbone(dev):
         import torch.nn as _nn
         m = resnet18(weights=None); m.fc = _nn.Linear(m.fc.in_features, N_CLASSES)
         return m.to(dev)
+    if _BACKBONE in ("convnextv2_tiny", "convnextv2_tiny_fcmae"):
+        import timm
+        m = timm.create_model("convnextv2_tiny.fcmae_ft_in22k_in1k", pretrained=True,
+                              num_classes=N_CLASSES, in_chans=3)
+        return m.to(dev)
     return SmallRGB(N_CLASSES).to(dev)
 
 
@@ -236,8 +241,9 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
             vmX_full, vmY_full = build_arm_train(arm if arm != "single_only" else "partition",
                                                  vX, vY, 20, np.random.default_rng(seed))
             n_c = len(vmX_full) - len(vX); vmX, vmY = vmX_full[:n_c], vmY_full[:n_c]
+            _lr = args.lr if args.lr else (2e-4 if _BACKBONE == "convnextv2_tiny" else 1e-3)
             m = train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
-                                  neg_target=proto["neg_target"])
+                                  lr=_lr, neg_target=proto["neg_target"])
             Pv = predict(m, vX, args.device)   # source-val singles (uint8)
             Pt = predict(m, tX, args.device)   # sealed test (uint8)
             r = {"arm": arm, "seed": seed, "mAP": _map(Pt, tY)}
@@ -282,7 +288,10 @@ def main():
     ap.add_argument("--epochs", type=int, default=15)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--proxy-seed", type=int, default=0)
-    ap.add_argument("--backbone", choices=["small", "resnet18"], default="small")
+    ap.add_argument("--backbone", choices=["small", "resnet18", "convnextv2_tiny"],
+                    default="small")
+    ap.add_argument("--lr", type=float, default=None,
+                    help="override lr; default 1e-3 (scratch) / 2e-4 (pretrained)")
     ap.add_argument("--outdir", default=None,
                     help="override OUTDIR (use a NEW dir per backbone; never overwrite v1)")
     ap.add_argument("--run-test", action="store_true")
