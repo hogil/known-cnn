@@ -79,11 +79,10 @@ def main():
             continue
         seen.add(r["arm"]); bf[r["arm"]] = _f(r["mixed_bitF1_all_mean"])
     if bf:
-        print(f"\nT4/T5 (matched real-FAR 1%): FAR fixed for ALL arms, but mixed-bitF1 spans "
-              f"{min(bf.values()):.2f}-{max(bf.values()):.2f} by operator")
-        print("  => normals control the FAR axis; the appearance/recovery axis stays operator-"
-              "determined (orthogonal resources) -- normal calibration does not close the "
-              "multi-label gap.")
+        print(f"\nT4/T5 ILLUSTRATION (not a proof; matched real-FAR 1%): FAR fixed for ALL arms, "
+              f"but mixed-bitF1 spans {min(bf.values()):.2f}-{max(bf.values()):.2f} by operator")
+        print("  => consistent with resource separation (FAR axis fixed by normals, appearance "
+              "axis by operator). This ILLUSTRATES, does NOT prove/causally confirm, T4/T5.")
     print(f"\n[OUT] {os.path.abspath(out_csv)}")
 
 
