@@ -128,26 +128,103 @@ cannot control. That separation is what is new, not the rate.
 
 ---
 
-## 4b. Theorem 4 (Normal calibration cannot recover positive appearance)
+## 4b. Theorem 4' (Coupled-nuisance resource separation)
 
-**Part (a) -- assumption-free: normals do not shrink the reachable-law radius.**
-There exist two worlds `W_A, W_B` with (i) identical single-defect conditionals
-`P(x|y=e_c)`, (ii) identical normal distribution `P_0`, yet (iii) different
-multi-defect conditional `P(x|y=e_a+e_b)` with `TV(P_A(.|e_a+e_b),
-P_B(.|e_a+e_b)) >= A*(M)`. No estimator using single-defect data plus any number
-`m` of known-good normals distinguishes `W_A` from `W_B`. Hence adding normals
-does **not** reduce the positive reachable-law TV radius `A*(M)`; the
-identifiability gap on multi-defect appearance is invariant to `m`. *(This part
-needs no margin assumption -- it is a pure non-identifiability statement.)*
+*Replaces the old T4 Part (a): the free-`P_0` independence step is deleted and the
+invariance is re-proven with the normal law fully COUPLED to the defect world
+through a shared latent appearance nuisance `Z` (fab geometry / sensor /
+background). The separation survives coupling, but now rests on a named,
+falsifiable, physically-motivated condition -- not a modeling convenience.*
 
-**Proof of (a).** Take the Thm 1 two-point pair `(W_A, W_B)` sharing all single
-conditionals and differing only in the copula of `(a,b)`. Attach the *same* `P_0`
-to both (`P_0` is unconstrained by the defect conditionals). Single-defect
-samples and `m` normal draws then have identical law under both worlds (singles
-by (i), normals by (ii)), so the two worlds are statistically indistinguishable
-from the available data and the reachable set still has TV diameter `>= A*(M)`.
-QED(a).
+**Coupled model.** Latent `Z ~ P_Z`; kernels `x|(normal,Z=z)~N(z)`,
+`x|(y=e_c,Z=z)~D_c(z)`, `x|(y=e_a+e_b,Z=z)~K_{ab}(z;theta)` where the copula field
+`theta = {Q_z}` has `Q_z in Frechet(mu_a(z),mu_b(z))` a.e. and
+`K_{ab}(z;theta) = oplus_# Q_z`. The learner observes single-defect draws from
+`D_c^obs = int D_c(z)dP_Z(z)` and `m` known-good normals from
+`P_0^obs = int N(z)dP_Z(z)` (never `Z`, never a pairing, never a multi-label).
+Note `P_0^obs` is DERIVED from the shared `(N,P_Z)` -- it is coupled to the defect
+conditionals, not attached freely. Reachable radius `A*(M) = (1/2) diam_TV` of the
+`Z`-marginalized multi-defect conditional over reachable `theta` (as in Thm 1);
+`A*_norm(m)` is the same after conditioning on the `m` normals.
 
+**Assumption N-ORTH (copula variation-independence).** The parameter factors as
+`(psi, theta)` with `psi = (P_Z, N, {D_c, mu_c})` generating the observables and
+`theta` ranging over the full per-`z` Frechet field `Theta(psi)` *not further
+constrained by* `psi`. Equivalently: the observed-data law does not depend on
+`theta` (the copula is ancillary for the observables); no functional link
+`theta = phi(psi)` is imposed. This is the honest replacement for "`P_0` free":
+it forbids the defect-defect interaction physics from being a *known function* of
+the geometry/sensor statistics a good-wafer image reveals -- falsifiable
+(Thm 4'(b) builds a world where it fails), not automatic.
+
+**Theorem 4'(a) (invariance under coupling) [PROVEN].** Under N-ORTH, for every
+`m`, `A*_norm(m) = A*(M)`: the known-good normals do not shrink the copula radius
+even though `P_0^obs` is fully coupled to the defect conditionals through `Z`.
+
+*Proof.* Take diameter-realizing copula fields `theta_A, theta_B` for `A*(M)`.
+Form `W_A=(psi,theta_A)`, `W_B=(psi,theta_B)` with the SAME `psi`; N-ORTH makes
+both admissible (product space). Both draw normals from the identical
+`P_0^obs=int N dP_Z` (shared `N,P_Z` -- the coupling is present and IDENTICAL in
+both worlds, so it cannot separate them) and singles from identical `D_c^obs`;
+the multi-defect conditional is unobserved. Hence `L((S),(Nm)|W_A) =
+L((S),(Nm)|W_B)` exactly; the Le Cam two-point argument leaves both
+`K_{ab}^obs(theta_A), K_{ab}^obs(theta_B)` reachable, TV apart by the diameter, so
+`A*_norm(m) >= A*(M)`; with monotonicity, equality. The load-bearing fact is now
+"`theta` variation-independent of `psi`" (N-ORTH), NOT "`P_0` free". QED.
+
+**Lemma 4'(a') (irreducible core) [PROVEN].** Let `A_Frechet = (1/2) diam_TV` over
+per-`z` Frechet freedom with `P_Z` pinned at truth. Then `A*_norm(m) >= A_Frechet`
+for every `m` and every coupling: even normals identifying `P_Z` exactly cannot
+touch the per-`z` couplings (no observable instantiates two defect sources at a
+fixed `z`). So `A*(M)` splits into an irreducible core `A_Frechet` (always
+normal-invariant) and a reducible shell `A*(M) - A_Frechet` (lives in `P_Z`-mixing,
+the only thing normals can reach); N-ORTH says the shell is empty.
+
+**Theorem 4'(b) (converse: N-ORTH is necessary) [PROVEN by construction].** There
+is a coupled world violating N-ORTH where `m` normals strictly shrink the radius.
+Model S-LINK: `Z in {0,1}`, `P_Z(Z=1)=w` unknown, singles uninformative about `w`,
+operator OR, and a *known* copula-geometry link `p11(z)=(1/2)g(z)`, `g(0)=0,g(1)=1`
+(so `A_Frechet=0`; only `w` is free), with invertible normal kernel `N(0)!=N(1)`.
+Then `P(v=1)=1-w/2`: without normals `w in [0,1]` gives `A*(M)=1/4`; `m` normals
+identify `w` and collapse it to `0`. Hence dropping N-ORTH lets normals constrain
+`theta` through the shared `Z` -- the assumption is not free. Restoring EITHER a
+per-`z` Frechet copula OR a non-invertible `N` restores invariance, so the failure
+needs BOTH a modeled copula-geometry link AND normals informative about that
+geometry.
+
+**Theorem 4'(c) (quantitative reachable radius) [PROVEN for the instance,
+machine-checked].** Interpolate with coupling strength `rho in [0,1]`
+(`rho=0` = N-ORTH, `rho=1` = S-LINK): `p11(z)=(1/2)[(1-rho)f_z + rho z]`. With
+`m` normals identifying `w` to half-width `eps_m`,
+
+```
+   A*_norm(m) = A*(M) * [ (1-rho) + 2 rho eps_m ],        A*(M) = 1/4,
+   reduction  g(rho,m) = A*(M) * rho * (1 - 2 eps_m)_+ ,
+   eps_m <= c sqrt(log(1/delta)/m) / kappa,   kappa = TV(N(0),N(1)),
+   =>  g(rho,inf) - g(rho,m) = O( rho / (kappa sqrt(m)) ).
+```
+
+`g(0,m)=0` (orthogonality), `g(rho,0)=0` (no normals), `A*_norm(inf)=A*(M)(1-rho)
+=A_Frechet` (core). This is the promised upgrade beyond two-point: a `rho`- and
+`m`-explicit reachable radius, `=0` exactly at `rho=0`. The general sandwich
+`A_Frechet <= A*_norm(m) <= A*(M)` and the `O(rho/sqrt(m))` scaling are proven;
+the universal-linear-in-`rho` shell form is CONJECTURED (only the instance +
+sandwich are proven).
+
+**Reading.** Normals identify the FAR axis (Thm 3) and at most the `P_Z`-mixing;
+they touch the copula `theta` ONLY through a modeled link `theta = phi(P_Z-facts)`.
+Absent it the separation is exact under full coupling (4'(a)); present, the
+reduction is capped at the geometry-tied, `N`-identifiable, finite-`m`-damped
+fraction (4'(c)) and never breaches the Frechet core (4'(a')). The old free-`P_0`
+step is the `rho=0` face of this -- now an assumption with a name, a necessity
+proof, and a price. *Pitch: a characterization of WHEN normals can and cannot
+borrow information across the shared nuisance -- not an unconditional
+impossibility.*
+
+## 4b'. Theorem 4 Part (b) (excess-risk lower bound UNDER Assumption M)
+
+*(The risk consequence of the non-identifiability above still needs a margin
+assumption -- unchanged.)*
 **Part (b) -- excess-risk lower bound UNDER Assumption M.** A TV gap does not by
 itself force excess *risk*: if the Bayes decision agrees on the overlapping mass,
 risk can be zero despite `TV > 0`. We therefore state the risk bound only under
