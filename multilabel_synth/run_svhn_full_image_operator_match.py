@@ -334,16 +334,24 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
     synth_total = n_pairs * 100 + len(sX)
     print(f"[equal budget] synth_total={synth_total} (single_only replayed to match)", flush=True)
 
+    # SHARED operator-balanced checkpoint validation bank (audit fairness fix):
+    # ONE fixed val bank -- equal mix of all content-blind operators -- used by
+    # EVERY arm's val-margin selection, so checkpoint choice is not biased toward
+    # the arm's own synthesis operator. Built once from source-val singles.
+    _val_ops = ["partition", "summation", "cutmix", "mixup"]
+    _vbx, _vby = [], []
+    for _op in _val_ops:
+        _fx, _fy = build_arm_train(_op, vX, vY, 8, np.random.default_rng(7777))
+        _nc = len(_fx) - len(vX)
+        _vbx.append(_fx[:_nc]); _vby.append(_fy[:_nc])
+    vmX = np.concatenate(_vbx); vmY = np.concatenate(_vby)
+    print(f"[shared val bank] {len(vmX)} combos from {_val_ops} (all arms use this)", flush=True)
+
     rows = []
     for arm in ARMS:
         for seed in proto["seeds"]:
             rng = np.random.default_rng(1000 + seed)
             trX, trY = build_arm_train(arm, sX, sY, 100, rng, match_n=synth_total, **_gg(arm))
-            # val-margin checkpoint set: synth val combos (source-val only)
-            _vmarm = arm if arm != "single_only" else "partition"
-            vmX_full, vmY_full = build_arm_train(_vmarm, vX, vY, 20,
-                                                 np.random.default_rng(seed), **_gg(_vmarm))
-            n_c = len(vmX_full) - len(vX); vmX, vmY = vmX_full[:n_c], vmY_full[:n_c]
             _lr = args.lr if args.lr else (2e-4 if _BACKBONE in _PRETRAINED else 1e-3)
             m = train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
                                   lr=_lr, neg_target=proto["neg_target"],

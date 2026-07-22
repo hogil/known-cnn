@@ -314,3 +314,27 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   do NOT claim DINOv3 2-backbone robustness; use resnet18 + convnextv2 FCMAE.
 - No probability change (caveated domain + inconclusive backbone). Clean
   confirmatory still gated on Severstal (user Kaggle rules).
+
+### Round 16 (external audit round 2 -- honest corrections, my-side fixes)
+- Audit verdict accepted: SVHN v4 supports "proxy + normalization validity" but is
+  NOT a clean confirmatory win (partition-cutmix +0.00335 not significant; test
+  burned v1/v2; fcm_pm result is searched g4/16 not primary g3/9x9; per-arm val
+  banks differed). Probability essentially unchanged; the real bottlenecks are
+  Severstal ACCESS (user Kaggle rules) + STALE manuscript (codex-owned files),
+  NOT GPU.
+- FIX (my file): shared operator-balanced checkpoint val bank -- ONE fixed bank
+  (equal mix partition/summation/cutmix/mixup, 1152 combos) used by EVERY arm's
+  val-margin selection, removing the per-arm/single-only-partition bias the audit
+  flagged. Applies to Severstal / any future clean run (SVHN is burned).
+- CORRECTION (honesty): DINOv3 "fails because semantic pretraining" is a HYPOTHESIS,
+  NOT proven -- the proxy used plain Adam, not the warmup/two-LR recipe, so
+  pretraining-objective causation cannot be claimed. Reframe as: DINOv3 did not
+  learn under THIS recipe (SVHN collapse, land-cover marginal); causal attribution
+  to the pretraining objective is unverified.
+- Manuscript main_iclr.tex confirmed STALE (0 T4'/coupled/N-ORTH mentions, Jul-21);
+  DRAFT/main.tex/refs.bib all codex-M -> cannot edit without collision. Submitting
+  current PDF as-is is risky (audit: ICLR 25-35%).
+- Honest probability (audit round 2): current PDF as-is ICLR 25-35%; manuscript+
+  citations+artifact cleaned 30-40%; Severstal frozen full-system win 45-55%; TMLR
+  55-70%. My-side work maximized; the two moves that raise probability are BOTH
+  external (user: Kaggle rules; codex: commit manuscript).
