@@ -1,0 +1,6 @@
+[prep] real multi eval (200, 128, 128, 3) oracle (500, 128, 128, 3) (1s)
+[prep] single-class crop pool (634, 64, 64, 3) per_class={'buildings': 138, 'pavement': 140, 'trees': 130, 'grass': 140, 'baresoil': 86} (5s)
+prevalence mAP ~ 0.400
+DINOv3 land-cover [partition  ] mAP=0.7207 bit_f1=0.5347 (LEARNS)
+DINOv3 land-cover [cutmix     ] mAP=0.6378 bit_f1=0.0000 (LEARNS)
+DINOv3 land-cover [single_only] mAP=0.6725 bit_f1=0.0000 (LEARNS)
