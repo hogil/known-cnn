@@ -57,10 +57,15 @@ def synth_pair(arm, a, b, rng, grid=9, n_groups=3):
 
 
 def build_arm_train(arm, sX, sY, n_per_pair, rng, oracleX=None, oracleY=None,
-                    grid=9, n_groups=3):
+                    grid=9, n_groups=3, match_n=None):
     """Return (X[N,H,W,3] uint8, Y[N,C] float). single_only=sources; oracle=real.
-    grid/n_groups only affect the fcm_pm operator (best-grid selection)."""
+    grid/n_groups only affect the fcm_pm operator (best-grid selection).
+    match_n: if given, replay-sample single_only up to match_n (equal update
+    budget across arms -- audit fairness fix)."""
     if arm == "single_only":
+        if match_n and match_n > len(sX):
+            idx = rng.integers(0, len(sX), size=match_n)
+            return sX[idx], sY[idx]
         return sX, sY
     if arm == "oracle":
         return oracleX, oracleY
@@ -145,15 +150,26 @@ def build_optim_sched(model, epochs, steps_per_epoch, base_lr, warmup_epochs=2,
     return opt, sched
 
 
+_IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], np.float32)
+_IMAGENET_STD = np.array([0.229, 0.224, 0.225], np.float32)
+
+
+def _prep(xb):
+    """uint8/float HWC -> normalized float CHW. Pretrained backbones get ImageNet
+    mean/std (timm default); scratch gets plain /255."""
+    if xb.dtype == np.uint8:
+        xb = xb.astype(np.float32) / 255.0
+    if _BACKBONE in _PRETRAINED:
+        xb = (xb - _IMAGENET_MEAN) / _IMAGENET_STD
+    return np.ascontiguousarray(np.transpose(xb, (0, 3, 1, 2)))
+
+
 def _batches(X, Y, bs, rng):
-    """Memory-safe minibatches: X uint8 or float HWC -> float CHW per batch."""
+    """Memory-safe minibatches: X uint8/float HWC -> normalized float CHW."""
     idx = rng.permutation(len(X))
     for i in range(0, len(X), bs):
-        b = idx[i:i + bs]; xb = X[b]
-        if xb.dtype == np.uint8:
-            xb = xb.astype(np.float32) / 255.0
-        xb = np.ascontiguousarray(np.transpose(xb, (0, 3, 1, 2)))
-        yield torch.from_numpy(xb), torch.from_numpy(Y[b])
+        b = idx[i:i + bs]
+        yield torch.from_numpy(_prep(X[b])), torch.from_numpy(Y[b])
 
 
 def train(X, Y, epochs, seed, dev, lr=1e-3, bs=64):
@@ -172,11 +188,8 @@ def predict(m, X, dev, bs=128):
     m.eval(); P = []
     with torch.no_grad():
         for i in range(0, len(X), bs):
-            xb = X[i:i + bs]
-            if xb.dtype == np.uint8:
-                xb = xb.astype(np.float32) / 255.0
-            xb = np.ascontiguousarray(np.transpose(xb, (0, 3, 1, 2)))
-            P.append(torch.sigmoid(m(torch.from_numpy(xb).to(dev))).cpu().numpy())
+            xb = torch.from_numpy(_prep(X[i:i + bs])).to(dev)
+            P.append(torch.sigmoid(m(xb)).cpu().numpy())
     return np.concatenate(P)
 
 
@@ -192,7 +205,7 @@ def evidence_margin(P, Y):
 def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
     """Train probe on source singles; score each operator's source-val combos by
     evidence margin. Returns ranking (higher first). NEVER sees the test set."""
-    lr = 2e-4 if _BACKBONE == "convnextv2_tiny" else 1e-3   # pretrained needs low lr
+    lr = 2e-4 if _BACKBONE in _PRETRAINED else 1e-3   # pretrained needs low lr (incl. DINOv3)
     probe = train(sX, sY, epochs, seed, dev, lr=lr)
     rng = np.random.default_rng(seed + 1)
     scores = {}
@@ -312,11 +325,19 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
     def _gg(arm):
         return dict(grid=_bg["best_grid"], n_groups=_bg["best_g"]) if arm == "fcm_pm" else {}
 
+    # equal update budget: synth arms produce 36 pairs x 100 + len(sX) singles;
+    # single_only replays to the same total (audit fairness fix).
+    n_pairs = len({tuple(sorted(np.where(y >= 0.5)[0])) for y in
+                   [np.eye(N_CLASSES)[c] + np.eye(N_CLASSES)[d]
+                    for c in range(N_CLASSES) for d in range(c + 1, N_CLASSES)]})
+    synth_total = n_pairs * 100 + len(sX)
+    print(f"[equal budget] synth_total={synth_total} (single_only replayed to match)", flush=True)
+
     rows = []
     for arm in ARMS:
         for seed in proto["seeds"]:
             rng = np.random.default_rng(1000 + seed)
-            trX, trY = build_arm_train(arm, sX, sY, 100, rng, **_gg(arm))
+            trX, trY = build_arm_train(arm, sX, sY, 100, rng, match_n=synth_total, **_gg(arm))
             # val-margin checkpoint set: synth val combos (source-val only)
             _vmarm = arm if arm != "single_only" else "partition"
             vmX_full, vmY_full = build_arm_train(_vmarm, vX, vY, 20,
