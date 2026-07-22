@@ -363,3 +363,91 @@ theorems correct but may read as "expected"; T3 is a known corollary; no clean
 public method-win). TMLR ~55-70% (correctness + characterization fit) -- the
 realistic primary. Depth lever for ICLR: strengthen T4 beyond two-point (e.g.
 quantitative reachable-law geometry), NOT more experiments.
+
+---
+
+## 8. Related work and the delta (positioning vs near-priors)
+
+Our theorems reuse three mature bodies of machinery -- conformal calibration,
+Neyman-Pearson (NP) detection, Frechet-Hoeffding/copula partial identification.
+Each individual guarantee is standard; we do NOT position on the guarantees. We
+position on the OBJECT they assemble into: a **source x target identifiability
+map** whose off-diagonal cells (which source identifies which OTHER source's
+target) no single framework defines. The one genuinely new cell -- known-good
+normals cannot identify multi-defect appearance even when coupled to defects
+through a shared nuisance (Thm 4') -- is invisible to every prior below because
+none models a *second information source trying to identify the first's target*.
+
+### The source x target map (the contribution is the whole map, not a cell)
+
+```
+                 | FAR axis (normal tail)          | Appearance / copula axis (multi-defect conditional)
+-----------------|---------------------------------|----------------------------------------------------
+S single-label   | NO (T2: defect-only cannot      | PARTIAL under operator-match; irreducible floor
+  marginals      |     certify FAR)                |     A*(S) otherwise (T1)
+N known-good     | YES (T3: minimal m normals,     | NO under N-ORTH (T4'a); necessity converse (4'b);
+  normals        |     a conformal corollary)      |     rho-damped radius (4'c)  <-- GENUINELY NEW CELL
+C positive       | NO (co-occurrence positives do  | YES (only source that fixes the copula; the
+  co-occurrence  |     not reveal P_0)             |     constructive flip side of T1)
+```
+
+Single-label sources fix the marginals but not the copula; known-good normals fix
+the FAR axis but not the appearance axis; positive co-occurrence is the only
+source that fixes appearance. Every prior occupies ONE cell -- conformal and NP
+live in `N->FAR`; Frechet-Hoeffding in the static `S->appearance` region; SPML in
+a different regime. NEW = the off-diagonal `N->appearance` impossibility under
+coupling (T4'a) + its necessity converse (4'b) + quantitative radius (4'c).
+
+### Delta table
+
+```
+| Framework                              | What it gives                                  | What it does NOT give that our map does                       |
+|----------------------------------------|------------------------------------------------|---------------------------------------------------------------|
+| Conformal novelty / risk control       | Distribution-free finite-sample type-I / risk  | Silent on WHICH source controls which target; takes the score  |
+|  (Bates+23; Angelopoulos+ CRC22;       | control on ONE nonconformity score, given      | as GIVEN; never asks if appearance/copula is recoverable;      |
+|   Vovk+; Lei+18)                        | exchangeable inlier calibration data           | presupposes the inliers -> cannot even state T2 (no-normals).  |
+| Neyman-Pearson / one-class / PU /       | Type-I-constrained optimal detection GIVEN     | Assumes null in hand -> silent on FAR WITHOUT it (T2), on      |
+|  open-set (Scott-Nowak05; Tong13;       | null samples; contaminated-null novelty        | multi-label appearance non-ID (T1), and on a 2nd source        |
+|   Blanchard-Lee-Scott10)                | detection                                       | crossing to the 1st's target (T4').                           |
+| Frechet-Hoeffding / copula partial ID   | Sharp bounds on a JOINT given fixed marginals   | No learning/excess-risk under an operator; no FAR axis; no      |
+|  (Frechet51; Hoeffding40; Sklar59;      | (static, single marginal-set)                  | AUXILIARY-source axis -> cannot ask if normals shrink the      |
+|   Manski03)                             |                                                | copula radius (that question IS T4').                          |
+| Two-sample data-combination partial ID  | Bounds a joint by FUSING two samples (the       | Fuses two MARGINAL samples of the SAME variables; no notion of  |
+|  (Cross-Manski02; Ridder-Moffitt07)     | real near-prior for T4' -- see flag)           | a functionally DIFFERENT channel (normal law vs defect law) and |
+|                                         |                                                | NO variation-independence condition governing cross-latent leak.|
+| SPML (single-positive multi-label)      | Loss/label-estimation when a multi-label image | Different regime: SPML images already contain multiple classes; |
+|  (Cole+21; Zhou+22; Liu+23)             | has ONE observed positive                      | ours are physically single-SOURCE, combos never in training.   |
+```
+
+### What we do NOT claim over prior work (pre-empt the "reassembled" reading)
+
+(i) **T3 is a conformal corollary** -- the O(1/m) FAR bound is Lei+18 / Bates+23 /
+Angelopoulos+22, not ours; we claim its *placement* in the map, not the rate.
+(ii) **T1, T2 use standard two-point / Le Cam / NP-style arguments** -- textbook
+machinery; T2 is close to intuitive once framed and is sold only as the cell that
+makes the map's FAR column well-defined, not a standalone theorem.
+(iii) **The per-slice core `A_Frechet` is classical Frechet-Hoeffding** -- we claim
+only its *invariance to the auxiliary source* (Lemma 4'(a')), not the bound. The
+novelty is exactly the **assembled map + Thm 4'**, nothing more.
+
+### Honest subsumption flag (critical positioning requirement)
+
+The sharpest subsumption threat is NOT classical Frechet-Hoeffding but the
+**econometric two-sample data-combination / partial-identification** literature
+(Cross-Manski 2002; Ridder-Moffitt 2007 survey; data-fusion / ecological-inference
+bounds), which DOES combine samples from more than one source to bound a joint.
+We MUST cite it and frame Thm 4' *inside* Manski's partial-ID language, not as if
+unaware. The delta that survives: that literature fuses two marginal samples of
+the SAME variables to bound their single joint, with no notion of a functionally
+different channel and no variation-independence condition (N-ORTH) governing
+whether the different channel leaks into the copula through a shared latent. If we
+omit these citations a reviewer can say "this is data-combination partial ID"; if
+we cite them and frame T4' as a new identification result within that framework,
+the delta holds. (Verified: it does not actually subsume T4' -- it has no
+cross-channel variation-independence axis -- but the positioning is only safe with
+the explicit citation.)
+
+Bib keys to add: bates2023outliers, angelopoulos2022crc, vovk2005algorithmic,
+scott2005neyman, tong2013plugin, blanchard2010ssnd, frechet1951tableaux,
+hoeffding1940, sklar1959, manski2003partial, crossmanski2002, riddermoffitt2007,
+zhou2022ack, liu2023mime. Present: cole2021spml, lei2018conformal.

@@ -53,3 +53,36 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   but substantive with named necessity + price. Defuses JUDGE R1/Q2 on T4.
 - Honest: this is a real technical upgrade on the paper's most-attacked axis;
   does NOT manufacture an unconditional theorem. Re-JUDGE next (round 3).
+
+### Round 3 (JUDGE re-review) -- ICLR 18% -> 25% (+7pp)
+- T4' GENUINELY defused the free-P_0 triviality (Q2): N-ORTH is a named, falsifiable
+  variation-independence/ancillarity condition with a real converse (4'b, radius
+  1/4->0 when violated) + quantitative price (4'c). "Most convincing part = the
+  converse." Not a rename.
+- Residual: 4'(a) invariance is near-definitional given N-ORTH; the novel content
+  (converse + interpolation) sits in a 2-state toy; the general shell-geometry form
+  is CONJECTURED (the depth lever round-1 asked for is still IOU'd). 4'(c) machine
+  check moves 0 significance weight (nobody doubted the algebra).
+- R1 "position paper" downgraded from dominant to strong-but-contestable (-1/3).
+- CO-DOMINANT still-OPEN lever = R2: near-priors unaddressed = conformal novelty
+  detection (Bates AoS 2023), Neyman-Pearson classification (Scott-Nowak 2005,
+  Tong 2013), Frechet-Hoeffding partial-ID. Deepening T4' does NOT close this.
+- ACTION (round 4): (b) positioning DELTA TABLE vs the R2 near-priors -- for each,
+  what it gives vs what the SOURCE->TARGET resource separation adds that it does
+  NOT imply. Reframes "3 known frameworks reassembled" -> "one organizing
+  principle." No GPU, no downside, prerequisite for the manuscript. Then (c) write
+  main_iclr.tex around it; (a) shell-geometry / (d) empirical only if a gap remains.
+- Probability ledger: r1 18% -> r3 25%. TMLR remains realistic primary. 40%
+  presupposes BOTH positioning AND a clean empirical win (neither exists yet).
+
+### Round 4 (positioning delta vs near-priors) -- DONE
+- Added Section 8: source x target identifiability MAP (S/N/C x FAR/appearance)
+  as the organizing principle; delta table vs conformal / NP / Frechet / SPML;
+  "what we do NOT claim" pre-empt paragraph.
+- CRITICAL honest flag surfaced: the real subsumption threat is econometric
+  two-sample DATA-COMBINATION partial-ID (Cross-Manski 2002, Ridder-Moffitt 2007),
+  NOT classical Frechet. Must cite + frame T4' as a new partial-ID result within
+  it (it does not actually subsume -- no cross-channel variation-independence
+  axis -- but positioning is only safe with the citation). Would have been a
+  reviewer kill-shot if missed.
+- 16 bib keys to add (listed in doc). Re-JUDGE next (round 5).
