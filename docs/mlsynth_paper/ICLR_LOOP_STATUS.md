@@ -252,3 +252,16 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   Needs GPU + Kaggle download.
 - Probability: current ~40% (method-system); SVHN v4 is diagnostic (no lift);
   Severstal confirmatory win = the +15 to ~55%. Manuscript consistency fix ~+3-5.
+
+### Round 12 -- three main levers all externally blocked
+- Severstal download: Kaggle 401 Unauthorized -- competition data needs RULES
+  ACCEPTANCE on kaggle.com first (kaggle.com/c/severstal-steel-defect-detection/
+  rules); API cannot bypass. => USER ACTION needed to unlock the confirmatory lever.
+  kaggle auth (kaggle.json) IS present; download will work once rules accepted.
+- DINOv3 robustness run: GPU re-occupied by external procs (grabbed one v4 window,
+  now blocked again). Runner ready (--backbone convnext_tiny_dinov3).
+- Manuscript consistency (audit's highest-value): DRAFT.md/main.tex/main_iclr.tex
+  are codex's uncommitted worktree -> blocked until codex commits.
+- All GPU-free prep done (audit fairness fixes, best-grid, 2 backbones, May recipe,
+  normalization). Loop kept alive; the three unblocks are: user accepts Kaggle
+  rules (Severstal), GPU frees (DINOv3), codex commits (manuscript).
