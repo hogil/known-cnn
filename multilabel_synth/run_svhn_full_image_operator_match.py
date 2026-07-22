@@ -216,6 +216,7 @@ def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
         n_combo = len(cX) - len(vX)
         P = predict(probe, cX[:n_combo], dev)
         scores[arm] = evidence_margin(P, cY[:n_combo])
+    ranking = sorted(scores, key=scores.get, reverse=True)
     # best-grid/g selection for fcm_pm on SOURCE-VAL ONLY (frozen before test).
     # Reuse the singles-probe evidence margin -> no retraining, no target labels.
     grid_cands = [(2, 6), (2, 8), (3, 9), (3, 12), (4, 16)]
