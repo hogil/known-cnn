@@ -56,8 +56,10 @@ def synth_pair(arm, a, b, rng, grid=9, n_groups=3):
     raise ValueError(arm)
 
 
-def build_arm_train(arm, sX, sY, n_per_pair, rng, oracleX=None, oracleY=None):
-    """Return (X[N,H,W,3] uint8, Y[N,C] float). single_only=sources; oracle=real."""
+def build_arm_train(arm, sX, sY, n_per_pair, rng, oracleX=None, oracleY=None,
+                    grid=9, n_groups=3):
+    """Return (X[N,H,W,3] uint8, Y[N,C] float). single_only=sources; oracle=real.
+    grid/n_groups only affect the fcm_pm operator (best-grid selection)."""
     if arm == "single_only":
         return sX, sY
     if arm == "oracle":
@@ -72,7 +74,7 @@ def build_arm_train(arm, sX, sY, n_per_pair, rng, oracleX=None, oracleY=None):
         for _ in range(n_per_pair):
             ia = by[ca][int(rng.integers(len(by[ca])))]
             ib = by[cb][int(rng.integers(len(by[cb])))]
-            Xo.append(synth_pair(arm, sX[ia], sX[ib], rng))
+            Xo.append(synth_pair(arm, sX[ia], sX[ib], rng, grid=grid, n_groups=n_groups))
             y = np.zeros(N_CLASSES, np.float32); y[ca] = 1.0; y[cb] = 1.0; Yo.append(y)
     X = np.concatenate([np.stack(Xo).astype(np.uint8), sX])       # fold in singles
     Y = np.concatenate([np.stack(Yo), sY])
@@ -166,8 +168,19 @@ def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
         n_combo = len(cX) - len(vX)
         P = predict(probe, cX[:n_combo], dev)
         scores[arm] = evidence_margin(P, cY[:n_combo])
-    ranking = sorted(scores, key=scores.get, reverse=True)
-    return ranking, scores
+    # best-grid/g selection for fcm_pm on SOURCE-VAL ONLY (frozen before test).
+    # Reuse the singles-probe evidence margin -> no retraining, no target labels.
+    grid_cands = [(2, 6), (2, 8), (3, 9), (3, 12), (4, 16)]
+    grid_scores = {}
+    for (g, gr) in grid_cands:
+        cX, cY = build_arm_train("fcm_pm", vX, vY, n_per_pair=20,
+                                 rng=np.random.default_rng(seed + 7),
+                                 grid=gr, n_groups=g)
+        nc = len(cX) - len(vX)
+        grid_scores[f"g{g}_grid{gr}"] = evidence_margin(predict(probe, cX[:nc], dev), cY[:nc])
+    best_key = max(grid_scores, key=grid_scores.get)
+    bg, bgrid = int(best_key.split("_")[0][1:]), int(best_key.split("grid")[1])
+    return ranking, scores, {"best_g": bg, "best_grid": bgrid, "grid_scores": grid_scores}
 
 
 def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_target=0.02):
@@ -233,14 +246,23 @@ def phase_b(sX, sY, vX, vY, args, proxy_hash):
     tX, tY, tm = load_full_image_by_cardinality(args.root_test, 2, distinct=True, seed=0)
     print(f"[SEALED TEST loaded] n={tm['n']} pairs={tm['n_pairs']}", flush=True)
 
+    # frozen source-val best-grid/g for fcm_pm (pre-registered in manifest)
+    _bg = json.load(open(os.path.join(OUTDIR, "proxy_manifest.json"))).get(
+        "fcm_pm_best_grid", {"best_g": 3, "best_grid": 9})
+    print(f"[fcm_pm frozen best-grid] g={_bg['best_g']} grid={_bg['best_grid']}", flush=True)
+
+    def _gg(arm):
+        return dict(grid=_bg["best_grid"], n_groups=_bg["best_g"]) if arm == "fcm_pm" else {}
+
     rows = []
     for arm in ARMS:
         for seed in proto["seeds"]:
             rng = np.random.default_rng(1000 + seed)
-            trX, trY = build_arm_train(arm, sX, sY, 100, rng)
+            trX, trY = build_arm_train(arm, sX, sY, 100, rng, **_gg(arm))
             # val-margin checkpoint set: synth val combos (source-val only)
-            vmX_full, vmY_full = build_arm_train(arm if arm != "single_only" else "partition",
-                                                 vX, vY, 20, np.random.default_rng(seed))
+            _vmarm = arm if arm != "single_only" else "partition"
+            vmX_full, vmY_full = build_arm_train(_vmarm, vX, vY, 20,
+                                                 np.random.default_rng(seed), **_gg(_vmarm))
             n_c = len(vmX_full) - len(vX); vmX, vmY = vmX_full[:n_c], vmY_full[:n_c]
             _lr = args.lr if args.lr else (2e-4 if _BACKBONE == "convnextv2_tiny" else 1e-3)
             m = train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
@@ -333,11 +355,13 @@ def main():
     sX, sY, vX, vY = allX[tr], allY[tr], allX[va], allY[va]
     print(f"source-train={len(sX)} source-val={len(vX)} (per-class {args.per_class_train}/{args.per_class_val})", flush=True)
 
-    ranking, scores = proxy_select(sX, sY, vX, vY, args.device, args.epochs, args.proxy_seed)
+    ranking, scores, best_grid = proxy_select(sX, sY, vX, vY, args.device, args.epochs,
+                                              args.proxy_seed)
     predicted_winner = ranking[0]
     manifest = dict(backbone=_BACKBONE, arms=ARMS, canvas=[CANH, CANW], classes=list(CLASSES),
                     per_class_train=args.per_class_train, per_class_val=args.per_class_val,
                     proxy_scores=scores, proxy_ranking=ranking,
+                    fcm_pm_best_grid=best_grid,   # frozen source-val best-grid/g for fcm_pm
                     predicted_winner=predicted_winner, epochs=args.epochs,
                     proxy_seed=args.proxy_seed)
     manifest["hash"] = hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()[:16]
@@ -345,6 +369,8 @@ def main():
         json.dump(manifest, f, indent=2)
     print("=== PROXY (evidence-fidelity margin, source-val only; NO test) ===")
     for a in ranking: print(f"  {a:12s} margin={scores[a]:+.4f}")
+    print(f"=== fcm_pm BEST-GRID (source-val, frozen): g={best_grid['best_g']} "
+          f"grid={best_grid['best_grid']} | {best_grid['grid_scores']} ===")
     print(f"PREDICTED WINNER = {predicted_winner}  |  hash={manifest['hash']}")
     print(f"[OUT] {os.path.abspath(os.path.join(OUTDIR, 'proxy_manifest.json'))}")
     if predicted_winner in ("partition", "fcm_pm"):
