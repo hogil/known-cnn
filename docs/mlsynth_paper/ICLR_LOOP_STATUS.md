@@ -224,3 +224,31 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
 - BLOCKED: GPU 95% held by external procs across multiple ticks. Runner ready;
   launch convnextv2 full-system SVHN (best-grid+proxy+val-margin, sealed once) the
   moment GPU frees. Continuous loop maintained.
+
+### Round 11 (audit fixes + SVHN v4 diagnostic) -- external audit integrated
+- Integrated external audit (highest-value = manuscript consistency + fairness, NOT
+  more backbones). RUNNER fairness fixes done (mine): pretrained ImageNet norm,
+  DINO proxy lr via _PRETRAINED, equal update budget (single_only replay to 6750).
+- SVHN v4 (convnextv2 audit-fixed, GPU freed): NORMALIZATION FIX = game-changer,
+  real-test mAP 0.34 (scratch) -> 0.58 (pretrained+norm). proxy predicted partition
+  TEST-BLIND (GATE-1) and partition IS actual winner (GATE-2 MATCH). partition beats
+  single/summation/mixup 5/5 paired CI_low>0 (3 metrics); vs cutmix mAP TIE
+  (CI_low -0.010). fcm_pm lowest 0.514 even @best-grid g4/16 (SVHN side-by-side
+  favors partition over grid-complement).
+- VERDICT: GATE-2 PARTIAL (operator-match validated: proxy test-blind pick correct
+  + partition beats most baselines significantly; but NOT a clean full-baseline
+  CI>0 win -- cutmix mAP tie). And SVHN test is BURNED (v1/v2) -> DIAGNOSTIC, not
+  confirmatory. Does NOT raise the confirmatory probability, but validates the
+  audit-fixed methodology on real public data + de-risks Severstal.
+- MANUSCRIPT-CONSISTENCY work (audit's highest-value) BLOCKED: DRAFT.md/main.tex/
+  main_iclr.tex are all codex's uncommitted worktree; cannot edit without collision.
+  Pending: fix the SVHN "oracle ~1% recovery" claim (rests on bbox SVHN = location,
+  contradicts abstract "no location"; full-image strict collapsed then v4 diag only),
+  add 14 citations, claim-to-artifact table. Do when codex commits.
+- NEXT (audit-prescribed confirmatory lever): Severstal Steel Defect (public
+  industrial: normal + single + multi-defect, 4 classes) -- the ONE domain with
+  BOTH partition-structure AND a real normal class, un-burned. Metadata gate first,
+  then pre-registered full-system (operator-match + val-margin + NB + conformal).
+  Needs GPU + Kaggle download.
+- Probability: current ~40% (method-system); SVHN v4 is diagnostic (no lift);
+  Severstal confirmatory win = the +15 to ~55%. Manuscript consistency fix ~+3-5.
