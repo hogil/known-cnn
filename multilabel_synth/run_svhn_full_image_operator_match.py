@@ -172,14 +172,37 @@ def _batches(X, Y, bs, rng):
         yield torch.from_numpy(_prep(X[b])), torch.from_numpy(Y[b])
 
 
-def train(X, Y, epochs, seed, dev, lr=1e-3, bs=64):
+def train(X, Y, epochs, seed, dev, lr=1e-3, bs=64, head_only_epochs=0, backbone_lr=None,
+          warmup_epochs=2, use_may_recipe=None):
+    """Plain trainer with optional 2-stage (head-only warmup -> unfreeze two-LR +
+    warmup/cosine), same BKM as train_with_margin. Used for the Phase-A proxy probe
+    so proxy and Phase-B share the recipe (audit fix)."""
+    if use_may_recipe is None:
+        use_may_recipe = _BACKBONE in _PRETRAINED
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
-    m = make_backbone(dev)
-    opt = torch.optim.Adam(m.parameters(), lr=lr); lf = nn.BCEWithLogitsLoss()
-    for _ in range(epochs):
+    m = make_backbone(dev); lf = nn.BCEWithLogitsLoss()
+    steps = max(1, (len(X) + bs - 1) // bs)
+    _head = [p for n, p in m.named_parameters() if _is_head(n)]
+    if head_only_epochs > 0 and use_may_recipe and _head:
+        for n, p in m.named_parameters(): p.requires_grad_(_is_head(n))
+        o1 = torch.optim.AdamW(_head, lr=lr, weight_decay=0.05)
+        for _ in range(head_only_epochs):
+            m.train()
+            for xb, yb in _batches(X, Y, bs, rng):
+                xb, yb = xb.to(dev), yb.to(dev); o1.zero_grad(); lf(m(xb), yb).backward(); o1.step()
+        for p in m.parameters(): p.requires_grad_(True)
+    else:
+        head_only_epochs = 0
+    ft = max(1, epochs - (head_only_epochs if use_may_recipe else 0))
+    if use_may_recipe:
+        opt, sched = build_optim_sched(m, ft, steps, lr, warmup_epochs=warmup_epochs, backbone_lr=backbone_lr)
+    else:
+        opt, sched = torch.optim.Adam(m.parameters(), lr=lr), None
+    for _ in range(ft):
         m.train()
         for xb, yb in _batches(X, Y, bs, rng):
             xb, yb = xb.to(dev), yb.to(dev); opt.zero_grad(); lf(m(xb), yb).backward(); opt.step()
+            if sched is not None: sched.step()
     return m
 
 

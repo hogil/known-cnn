@@ -24,6 +24,7 @@ from PIL import Image
 
 N_CLASSES = 4                              # Severstal defect classes 1..4 -> idx 0..3
 CANH, CANW = 128, 256                      # letterbox target (steel strips are wide)
+LETTERBOX_FILL = 114                        # neutral gray (audit: black loses thin defects)
 
 
 def parse_labels(train_csv):
@@ -49,7 +50,7 @@ def parse_labels(train_csv):
     return present, all_imgs
 
 
-def _letterbox(img, out_h, out_w, fill=0):
+def _letterbox(img, out_h, out_w, fill=LETTERBOX_FILL):
     w, h = img.size
     s = min(out_w / w, out_h / h)
     nw, nh = max(1, int(round(w * s))), max(1, int(round(h * s)))
@@ -114,9 +115,9 @@ def load_split(root, seed=0):
         img_dir=os.path.join(root, "train_images"))
 
 
-def load_images(ids, img_dir, canh=CANH, canw=CANW):
+def load_images(ids, img_dir, canh=CANH, canw=CANW, fill=LETTERBOX_FILL):
     out = []
     for i in ids:
         p = os.path.join(img_dir, i)
-        out.append(_letterbox(Image.open(p), canh, canw))
+        out.append(_letterbox(Image.open(p), canh, canw, fill=fill))
     return np.stack(out) if out else np.zeros((0, canh, canw, 3), np.uint8)

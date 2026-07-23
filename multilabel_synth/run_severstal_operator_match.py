@@ -125,8 +125,11 @@ def main():
     for i, y in enumerate((vY >= 0.5)): byc_v[int(np.argmax(y))].append(i)
 
     # ---- Phase A: proxy operator + best-grid, frozen (source-val only, NO test) ----
+    _pre = args.backbone in SV._PRETRAINED
     probe = SV.train(sX, sY, args.epochs, 0, args.device,
-                     lr=2e-4 if args.backbone in SV._PRETRAINED else 1e-3)
+                     lr=2e-4 if _pre else 1e-3,
+                     head_only_epochs=(2 if _pre else 0),   # audit: proxy shares 2-stage recipe
+                     backbone_lr=(2e-5 if _pre else None), warmup_epochs=2)
     scores = {}
     for arm in [a for a in ARMS if a != "single_only"]:
         cX, cY = build_arm(arm, vX, vY, byc_v, 20, np.random.default_rng(1))
