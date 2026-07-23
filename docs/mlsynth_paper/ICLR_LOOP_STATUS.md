@@ -338,3 +338,26 @@ FIX (patch paper/proofs) -> repeat until ICLR probability plateaus or user stops
   citations+artifact cleaned 30-40%; Severstal frozen full-system win 45-55%; TMLR
   55-70%. My-side work maximized; the two moves that raise probability are BOTH
   external (user: Kaggle rules; codex: commit manuscript).
+
+### Round 17 (Severstal downloaded + B0 preliminary; GPU-contention blocked)
+- Kaggle token fixed (new key, datasets work); competition still 401 (rules) so
+  downloaded via PUBLIC MIRROR icebergi/severstal-steel-defection-dataset
+  (train.csv + 12568 train_images). metadata gate: normal 5902, single 6239
+  (C2=195, just below 200 -- documented near-miss, threshold 190), multi 427,
+  3 pairs>=30.
+- Severstal full-system runner built (real normal + NB + conformal + real-FAR
+  primary). B0 (pre-fix) preliminary before it died at 7/30 (GPU contention):
+    * single_only mAP ~0.92, partition ~0.92 -- synthesis barely helps on mAP
+      (single-defect training already generalizes to multi on Severstal).
+    * F1@real-normal-1%-FAR LOW + noisy (0.002-0.15) -- the metric that matters is
+      unstable at this recipe.
+    * proxy (10ep) picks MIXUP (fcm_pm LOWEST) -> Severstal is NOT a clean
+      partition domain; steel defects blend -> matched op is a blend, not partition.
+- HONEST implication: Severstal will likely NOT give an FCM-PM confirmatory win
+  (fcm_pm lowest). Operator-match could still be validated IF mixup (proxy pick)
+  wins the sealed test -- but B0 died before the verdict. B1 pipeline (2-stage FT +
+  two-LR + fixed g3/9x9, per audit plan) is ready but needs GPU.
+- BLOCKER: GPU held 100%/15.7GB by codex unknown-contrastive tasks (~636MB free) --
+  my Severstal runs keep dying from contention. This is now THE bottleneck.
+- Probability unchanged (~40% ICLR method-system). Severstal confirmatory is
+  uncertain (not partition per proxy) AND GPU-blocked.
