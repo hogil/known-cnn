@@ -261,15 +261,21 @@ def _verdict(rows, proxy_winner):
     for a in arms:
         tag = " <-ours(FCM-PM)" if a == "fcm_pm" else ""
         print(f"  {a:12s} F1@FAR1%={np.mean(ag[a]['f1']):.4f} mAP={np.mean(ag[a]['map']):.4f}{tag}")
-    adm = [a for a in arms if a != "oracle"]
     seeds = sorted(set(r["seed"] for r in rows))
-    def by(a): return {r["seed"]: r["F1@FAR0.01"] for r in rows if r["arm"] == a}
-    fcm = by("fcm_pm")
-    print("\nFCM-PM full-system paired vs content-blind (F1@real-FAR1%):")
-    for opp in ["single_only", "summation", "cutmix", "mixup"]:
-        ov = by(opp); d = [fcm[s] - ov[s] for s in seeds if s in fcm and s in ov]
-        w = sum(1 for x in d if x > 0); lo = np.mean(d) - 1.96 * np.std(d, ddof=1) / np.sqrt(len(d))
-        print(f"  vs {opp:11s}: d={np.mean(d):+.4f} wins={w}/{len(d)} CI_low={lo:+.4f}{' CI>0' if lo>0 else ''}")
+    def by(a, key="F1@FAR0.01"): return {r["seed"]: r[key] for r in rows if r["arm"] == a}
+    present_arms = set(ag)
+    # operator-match test: the PROXY-PREDICTED WINNER should beat each admissible
+    # baseline at the real-FAR operating point (paired, seed-matched, CI).
+    for key, lab in [("F1@FAR0.01", "real-FAR1%"), ("F1@FAR0.05", "real-FAR5%")]:
+        win = by(proxy_winner, key)
+        if not win: continue
+        print(f"\nproxy-winner [{proxy_winner}] paired vs admissible baselines (F1@{lab}):")
+        for opp in [a for a in ["single_only", "summation", "cutmix", "mixup", "partition", "fcm_pm"]
+                    if a != proxy_winner and a in present_arms]:
+            ov = by(opp, key); d = [win[s] - ov[s] for s in seeds if s in win and s in ov]
+            if len(d) < 2: continue
+            w = sum(1 for x in d if x > 0); lo = np.mean(d) - 1.96 * np.std(d, ddof=1) / np.sqrt(len(d))
+            print(f"  vs {opp:11s}: d={np.mean(d):+.4f} wins={w}/{len(d)} CI_low={lo:+.4f}{' CI>0' if lo>0 else ''}")
 
 
 if __name__ == "__main__":
