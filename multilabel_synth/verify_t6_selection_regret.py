@@ -115,6 +115,23 @@ def fcm_coherence_brute(N, m, r_a, r_b):
     return good / tot
 
 
+def t6d_rate_K(K, m, seed=0):
+    """Worst-case (over a common gap Delta) simple regret for K arms: 1 best at
+    0.5+Delta/2, K-1 others at 0.5-Delta/2; empirical argmax. Illustrates the log K
+    growth of the UPPER envelope (not a proof)."""
+    rng = np.random.default_rng(seed)
+    gaps = np.linspace(0.02, 0.6, 40)
+    wc = 0.0
+    for D in gaps:
+        mu = np.full(K, 0.5 - D / 2); mu[0] = 0.5 + D / 2
+        mis = 0
+        for _ in range(3000):
+            est = rng.binomial(m, mu) / m
+            if int(np.argmax(est)) != 0: mis += 1
+        wc = max(wc, D * mis / 3000.0)
+    return None, wc, None
+
+
 def main():
     print("== T6-FCM: footprint-coherence formula vs brute (small N) ==")
     maxerr = 0.0
@@ -123,12 +140,16 @@ def main():
         maxerr = max(maxerr, abs(f - b))
         print(f"  N={N} m={m} r_a={ra} r_b={rb}: formula={f:.5f} brute={b:.5f} |d|={abs(f-b):.1e}")
     print(f"  max |formula-brute| = {maxerr:.2e} ({'PASS' if maxerr<1e-9 else 'FAIL'})")
-    print("  chip grid g=9 (N=81,m=27): compact (r_a=r_b=1) vs extended footprints:")
+    print("  [NOTE] formula==brute is a DERIVATION identity check, NOT a domain test.")
+    print("  hypothetical g=9 (N=81,m=27) -- NOT the deployed arm:")
     for r in (1, 2, 3, 5, 8):
-        p = fcm_coherence_formula(81, 27, r, r)
-        print(f"    r_a=r_b={r:2d}: P(both preserved)={p:.4f}")
-    print("  => compact footprints survive; extended footprints decay fast"
-          " (mechanism for grid_complement failing on continuous defects).")
+        print(f"    r_a=r_b={r:2d}: P(both)={fcm_coherence_formula(81,27,r,r):.4f}")
+    print("  DEPLOYED Severstal arm g=3 (N=9,m=3) -- decay is COARSE here (audit finding 5):")
+    for r in (1, 2, 3):
+        print(f"    r_a=r_b={r:2d}: P(both)={fcm_coherence_formula(9,3,r,r):.4f}")
+    print("  => at the deployed g=3 the 'super-polynomial destruction' story is WEAK"
+          " (P(1,1)=0.25, only r<=3 feasible); mechanism = HYPOTHESIS, not validated"
+          " (no footprint-size measurement, no same-domain mask ablation).")
 
     print("\n== T6a: 2-world selection game (Delta=0.4) ==")
     det, rand, D = t6a(0.4)
@@ -138,6 +159,8 @@ def main():
     print("  PASS: randomized halves worst-case to Delta/2 (game value)")
 
     print("\n== T6b: minimax primal == maximin dual (strong duality) ==")
+    print("  [NOTE] LP strong duality holds unconditionally (von Neumann) for ANY payoff")
+    print("  matrix -- this confirms the solver + our dual derivation, NOT the infinite game.")
     maxerr = 0.0
     rng = np.random.default_rng(1)
     for t in range(200):
@@ -147,13 +170,33 @@ def main():
         maxerr = max(maxerr, abs(vp - vd))
     print(f"  max |V_primal - V_dual| over 200 random instances = {maxerr:.2e}  "
           f"({'PASS' if maxerr < 1e-6 else 'FAIL'})")
+    # NON-trivial: adding interior (convex-combination) worlds must NOT change V (hull-invariance)
+    hull_err = 0.0
+    for t in range(50):
+        K = rng.integers(2, 5); M = rng.integers(2, 5)
+        u = rng.uniform(0, 1, size=(M, K))
+        v0, _ = minimax_primal(u)
+        # add 5 interior points (convex combos of existing worlds)
+        W = rng.dirichlet(np.ones(M), size=5) @ u
+        v1, _ = minimax_primal(np.vstack([u, W]))
+        hull_err = max(hull_err, abs(v0 - v1))
+    print(f"  hull-invariance: max |V(U) - V(U + interior pts)| over 50 = {hull_err:.2e}  "
+          f"({'PASS (V depends only on hull)' if hull_err < 1e-6 else 'FAIL'})")
 
-    print("\n== T6d: empirical-argmax regret rate (expect log-log slope ~ -0.5) ==")
+    print("\n== T6d: empirical-argmax regret rate (K=2 -> tests the 1/sqrt(m) factor ONLY) ==")
     ms, regs, slope = t6d_rate()
     for m, r in zip(ms, regs):
         print(f"   m={int(m):5d}  regret={r:.5f}")
     print(f"  log-log slope = {slope:.3f}  "
           f"({'PASS ~ -0.5 (O(1/sqrt m))' if -0.75 < slope < -0.35 else 'CHECK'})")
+    print("  [HONEST] this is K=2, so it verifies 1/sqrt(m) ONLY; the log K factor is")
+    print("  NOT tested here and the matching LOWER bound's log K needs Fano (asserted,")
+    print("  not proven). We report Theta(1/sqrt m) matched; log K is UPPER-only (cited).")
+    # K-sweep at fixed m: worst-case regret should grow ~ sqrt(log K) in the UPPER
+    print("  K-sweep at m=200 (worst-case over gap), expect mild growth ~ sqrt(log K):")
+    for K in (2, 4, 8, 16):
+        _, rr, _ = t6d_rate_K(K, m=200)
+        print(f"    K={K:2d}  worst-case regret={rr:.5f}  sqrt(log K)={np.sqrt(np.log(K)):.3f}")
 
 
 if __name__ == "__main__":
