@@ -133,13 +133,9 @@ def main():
         n_c = len(cX) - len(vX)
         scores[arm] = evidence_margin(SV.predict(probe, cX[:n_c], args.device), cY[:n_c])
     ranking = sorted(scores, key=scores.get, reverse=True)
-    grid_scores = {}
-    for (g, gr) in [(2, 6), (2, 8), (3, 9), (3, 12), (4, 16)]:
-        cX, cY = build_arm("fcm_pm", vX, vY, byc_v, 20, np.random.default_rng(7), grid=gr, n_groups=g)
-        n_c = len(cX) - len(vX)
-        grid_scores[f"g{g}_grid{gr}"] = evidence_margin(SV.predict(probe, cX[:n_c], args.device), cY[:n_c])
-    bk = max(grid_scores, key=grid_scores.get)
-    best = {"best_g": int(bk.split("_")[0][1:]), "best_grid": int(bk.split("grid")[1])}
+    # FCM-PM geometry FIXED at primary g=3, 9x9 (audit: no grid search -- avoids the
+    # "searched g4/16 not primary" criticism; g3/9x9 is the pre-declared primary).
+    best = {"best_g": 3, "best_grid": 9, "note": "fixed primary (no grid search)"}
     manifest = dict(backbone=args.backbone, arms=ARMS, classes=list(range(N_CLASSES)),
                     proxy_scores=scores, proxy_ranking=ranking, fcm_pm_best_grid=best,
                     predicted_winner=ranking[0], n_per_pair=args.n_per_pair, epochs=args.epochs)
@@ -184,9 +180,13 @@ def main():
         for seed in args.seeds:
             rng = np.random.default_rng(1000 + seed)
             trX, trY = build_arm(arm, sX, sY, byc, args.n_per_pair, rng, match_n=synth_total, **_gg(arm))
-            lr = args.lr if hasattr(args, "lr") and args.lr else (2e-4 if args.backbone in SV._PRETRAINED else 1e-3)
+            pre = args.backbone in SV._PRETRAINED
+            lr = 2e-4 if pre else 1e-3
             m = SV.train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
-                                     lr=lr, neg_target=0.02)
+                                     lr=lr, neg_target=0.02,
+                                     head_only_epochs=(2 if pre else 0),   # audit 2-stage FT
+                                     backbone_lr=(2e-5 if pre else None),  # two-LR
+                                     warmup_epochs=2)
             Pcal = SV.predict(m, calib_X, args.device)
             Pnc = SV.predict(m, ncal_X, args.device); Pnt = SV.predict(m, ntest_X, args.device)
             Pmt = SV.predict(m, mtest_X, args.device)

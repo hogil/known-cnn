@@ -232,13 +232,19 @@ def proxy_select(sX, sY, vX, vY, dev, epochs, seed=0):
     return ranking, scores, {"best_g": bg, "best_grid": bgrid, "grid_scores": grid_scores}
 
 
+def _is_head(name):
+    return (name.startswith("fc") or name.startswith("head") or ".head." in name
+            or name.startswith("h.") or name == "h.weight" or name == "h.bias")
+
+
 def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_target=0.02,
                       use_may_recipe=None, ema_decay=0.0, backbone_lr=None,
-                      warmup_epochs=2):
+                      warmup_epochs=2, head_only_epochs=0):
     """Train; after each epoch score pos-min minus neg-max margin on a source-val
     synthetic set; return the best-margin checkpoint (val-margin selection).
-    May-recipe (BKM): LinearLR warmup -> CosineAnnealing (+ optional 2-LR, EMA).
-    Auto-on for pretrained backbones unless overridden."""
+    2-STAGE (audit BKM): if head_only_epochs>0, first train HEAD-only (backbone
+    frozen) for head_only_epochs, then unfreeze and train with two-LR + warmup +
+    cosine. Auto-on for pretrained backbones unless overridden."""
     import copy
     if use_may_recipe is None:
         use_may_recipe = _BACKBONE in _PRETRAINED
@@ -246,15 +252,11 @@ def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_tar
     m = make_backbone(dev)
     lf = nn.BCEWithLogitsLoss()
     Yt = (Y + (1.0 - Y) * neg_target).astype(np.float32)
-    steps = max(1, (len(X) + bs - 1) // bs)
-    if use_may_recipe:
-        opt, sched = build_optim_sched(m, epochs, steps, lr, warmup_epochs=warmup_epochs,
-                                       backbone_lr=backbone_lr)
-    else:
-        opt, sched = torch.optim.Adam(m.parameters(), lr=lr), None
     ema = copy.deepcopy(m) if ema_decay > 0 else None
     best, st = -1e9, None
-    for _ in range(epochs):
+
+    def _epoch(opt, sched):
+        nonlocal best, st
         m.train()
         for xb, yb in _batches(X, Yt, bs, rng):
             xb, yb = xb.to(dev), yb.to(dev)
@@ -266,8 +268,27 @@ def train_with_margin(X, Y, vmX, vmY, epochs, seed, dev, lr=1e-3, bs=64, neg_tar
                         if ev.dtype.is_floating_point: ev.mul_(ema_decay).add_(v, alpha=1-ema_decay)
                         else: ev.copy_(v)
         eval_m = ema if ema is not None else m
-        P = predict(eval_m, vmX, dev); mg = evidence_margin(P, vmY)
+        mg = evidence_margin(predict(eval_m, vmX, dev), vmY)
         if mg > best: best, st = mg, copy.deepcopy(eval_m.state_dict())
+
+    steps = max(1, (len(X) + bs - 1) // bs)
+    # Stage 1: head-only warmup (backbone frozen) -- pretrained only
+    _head_ps = [p for n, p in m.named_parameters() if _is_head(n)]
+    if head_only_epochs > 0 and use_may_recipe and _head_ps:
+        for n, p in m.named_parameters(): p.requires_grad_(_is_head(n))
+        opt1 = torch.optim.AdamW(_head_ps, lr=lr, weight_decay=0.05)
+        for _ in range(head_only_epochs): _epoch(opt1, None)
+        for p in m.parameters(): p.requires_grad_(True)
+    else:
+        head_only_epochs = 0   # no detectable head -> skip stage 1
+    # Stage 2: full fine-tune, two-LR + warmup + cosine (or plain Adam if not pretrained)
+    ft_ep = max(1, epochs - (head_only_epochs if use_may_recipe else 0))
+    if use_may_recipe:
+        opt, sched = build_optim_sched(m, ft_ep, steps, lr, warmup_epochs=warmup_epochs,
+                                       backbone_lr=backbone_lr)
+    else:
+        opt, sched = torch.optim.Adam(m.parameters(), lr=lr), None
+    for _ in range(ft_ep): _epoch(opt, sched)
     m.load_state_dict(st); return m
 
 
