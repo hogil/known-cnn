@@ -371,34 +371,53 @@ O(sqrt(log(1/delta)/m))` by operator-norm / matrix-Bernstein on the empirical
 `T_hatN` (finite/​sieve `Z`). It is observable because normals ARE the channel's
 data.
 
-**(f-ii) `L_Phi` has an observable UPPER bound from single-defect slice
-heterogeneity.** Because `K_ab(z;theta) = oplus_# Q_z` with `Q_z in
-Frechet(mu_a(z), mu_b(z))` and the operator pushforward `oplus_#` is `L_op`-
-Lipschitz in its input marginals under TV (data-processing coupling),
+**(f-ii) `L_Phi` has an observable UPPER bound UNDER Assumption SCI.** *Caveat
+first (an adversarial-review catch, kept honest): the raw `L_Phi = sup_theta
+sup_{z,z'} TV(K_ab(z;theta_z), K_ab(z';theta_{z'}))` is NOT bounded by marginal
+heterogeneity in general -- with a FREE per-`z` copula field, `theta_z` and
+`theta_{z'}` may be different couplings of nearly-equal marginals, so the slice
+difference can reach the per-`z` Frechet diameter even when the single-defect
+marginals are identical. The core freedom leaks into the raw modulus.* The
+marginal bound therefore needs a named restriction:
+
+> **Assumption SCI (slice-copula-invariance).** The interaction copula SHAPE is
+> constant across `Z`-slices: `theta_z = C(mu_a(z), mu_b(z))` for a single copula
+> `C`, with only the single-defect marginals `mu_a(.), mu_b(.)` varying in `z`.
+> Physically: how two defects interact does not depend on fab geometry / sensor /
+> background (the nuisance `Z`); only the single-defect appearances do. Falsifiable
+> (a `z`-varying interaction physics violates it).
+
+Under SCI, the pushforward `oplus_# C(.,.)` is `L_op`-Lipschitz in its input
+marginals under TV (data-processing + copula-continuity of the FIXED shape `C`;
+`L_op=1` for the product copula by tensorization, absorbed for general fixed `C`):
 ```
-   L_Phi = sup_{theta} sup_{z,z'} TV( K_ab(z;theta_z), K_ab(z';theta_{z'}) )
+   L_Phi = sup_{z,z'} TV( oplus_# C(mu_a(z),mu_b(z)), oplus_# C(mu_a(z'),mu_b(z')) )
         <= L_op * [ sup_{z,z'} TV(mu_a(z),mu_a(z')) + sup_{z,z'} TV(mu_b(z),mu_b(z')) ]
          =: L_op * H_single,
 ```
-where `H_single` is the `P_Z`-slice heterogeneity of the OBSERVABLE single-defect
-conditionals (estimable by stratifying single-defect data along the normal-
-identified `P_Z`-shell; `L_op` is a known constant of the declared operator --
-e.g. `L_op = 1` for max-union/summation, `<=1` for a convex blend). Hence a
-computable `hatL_Phi = L_op * hatH_single`.
+`H_single` = `P_Z`-slice heterogeneity of the OBSERVABLE single-defect conditionals
+(estimable by stratifying single-defect data along the normal-identified
+`P_Z`-shell). Hence a computable `hatL_Phi = L_op * hatH_single` -- **only under
+SCI**. Without SCI, `kappa_*` is still estimable (f-i) but `L_Phi` is not
+marginal-boundable, and the shell certificate is unavailable: an honest limit, not
+hidden.
 
-**Proposition 4'(f).** With probability `>= 1 - 2delta`,
+**Proposition 4'(f).** `kappa_*` is normal-estimable unconditionally (f-i); and
+UNDER Assumption SCI, with probability `>= 1 - 2delta`,
 ```
    A*_norm(m)  <=  A_Frechet  +  hatL_Phi * r_m / hatkappa_*  +  O(1/sqrt m),
 ```
-so the REDUCIBLE shell has a fully data-computable finite-`m` certificate. *Honest
-scope:* (a) it is an UPPER bound on `L_Phi` (the `L_op`-Lipschitz step can be
-loose), so the certificate is conservative, not exact; (b) `A_Frechet` -- the
-irreducible copula core -- remains unobservable BY DESIGN (no observable
-instantiates two defect sources at a fixed `z`; that is the content of Lemma
-4'(a')). Thus normals + singles certify how much the shell can ADD, not the total
-radius. This is the exact operational reading of the two-moduli law: the part the
-data can bound (shell) is bounded; the part it provably cannot (core) is named as
-such.
+so the REDUCIBLE shell has a data-computable finite-`m` certificate. *Honest
+scope:* (a) the `L_Phi` bound needs Assumption SCI (slice-invariant interaction
+copula); without SCI the copula freedom leaks into the modulus and only `kappa_*`
+is estimable; (b) even under SCI it is an UPPER bound (the `L_op`-Lipschitz step
+can be loose), so the certificate is conservative, not exact; (c) `A_Frechet` --
+the irreducible copula core -- remains unobservable BY DESIGN (no observable
+instantiates two defect sources at a fixed `z`; Lemma 4'(a')). Thus normals +
+singles certify how much the shell can ADD (under SCI), not the total radius. This
+is the exact operational reading of the two-moduli law: the part the data can bound
+(shell, under a named physical assumption) is bounded; the part it provably cannot
+(core) is named as such.
 
 **Reading.** 4'(e) makes the bound TIGHT and ACHIEVED; 4'(f) makes its constant
 COMPUTABLE (shell) and honestly flags the one term (core) that is unbounded by
