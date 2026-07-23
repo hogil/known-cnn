@@ -1,98 +1,104 @@
-# Severstal sealed operator-match result (public confirmatory lever) — 260724
+# Severstal sealed operator result (public evidence) — 260724, soundness-corrected
 
-Backbone convnextv2_tiny (FCMAE), 2-stage FT (head-warmup 2ep → two-LR unfreeze,
-warmup/cosine), gray letterbox 128×256, 10 epochs, 5 seeds. Strict image-level:
-single 80/20 train/source-val; **real** normal 50/50 cal/test; **all real multi**
-sealed positive. Primary: bit-F1 @ real-normal 1% FAR (τ from normal-cal, FAR on
-untouched normal-test). NB-reject + conformal on. Proxy frozen test-blind BEFORE
-sealed test. CSV: `outputs/multilabel_synth/severstal_operator_match_v2_b1/sealed_test_results.csv`.
+Backbone convnextv2_tiny (FCMAE), 2-stage FT, gray letterbox 128×256, 10 epochs,
+5 seeds. Strict image-level: single 80/20 train/source-val; real normal 50/50
+cal/test; all real multi as positive eval. Primary: bit-F1 @ real-normal FAR.
+CSV: `outputs/multilabel_synth/severstal_operator_match_v2_b1/sealed_test_results.csv`.
+Stats: `multilabel_synth/severstal_sound_stats.py` (paired-t 95% CI, seed bootstrap,
+exact Wilcoxon 1-sided).
 
-## Sealed leaderboard (6 arms × 5 seeds, mean)
+> **Soundness note (supersedes the first draft of this doc).** The earlier version
+> reported "partition beats ALL arms 5/5 CI>0" using a 1.96×SE normal-approx CI,
+> claimed the `fcm_pm` arm was FCM-PM, and credited the full system incl. NB-reject.
+> A re-audit corrected all of these; the honest claims are below. Nothing here uses
+> the 1.96×SE interval anymore.
 
-```
-| Arm         | F1@FAR0.5% | F1@FAR1% | F1@FAR5% |  mAP   | proxy rank | note                     |
-|-------------|------------|----------|----------|--------|------------|--------------------------|
-| partition   |     0.0176 |   0.0397 |   0.0982 | 0.9163 |     4th    | SEALED WINNER            |
-| cutmix      |     0.0106 |   0.0153 |   0.0654 | 0.9207 |     2nd    | 2nd                      |
-| summation   |     0.0093 |   0.0134 |   0.0987 | 0.8944 |     3rd    | strong@FAR5%             |
-| mixup       |     0.0065 |   0.0121 |   0.0646 | 0.9063 |     1st    | proxy pick (mis-selected)|
-| fcm_pm      |     0.0019 |   0.0051 |   0.0269 | 0.9144 |     5th    | OURS -- FAILS here       |
-| single_only |     0.0019 |   0.0028 |   0.0061 | 0.9193 |     --     | no-synth floor           |
-```
+## What the arm labelled `fcm_pm` actually is (naming correction)
 
-## Paired, seed-matched CIs (95%)
+The Severstal runner's `fcm_pm` arm builds a SINGLE simplified grid image: of a 9×9
+grid, ~1/3 of cells are swapped from source A onto B (`SV.synth_pair` in
+`run_svhn_full_image_operator_match.py`). It is NOT the full FCM-PM operator
+(complement-set + Pair-Mask view in `synthesis/fcmpm_image.py`), which is not wired
+into this runner. **Reported here as `grid_complement_g3_9`.** No conclusion about
+full FCM-PM's merit can be drawn from this arm.
 
-```
-| Comparison (F1@FAR1%)      |    d    | wins | CI_low  | sig  |
-|----------------------------|---------|------|---------|------|
-| partition vs single_only   | +0.0369 |  5/5 | +0.0209 | CI>0 |
-| partition vs fcm_pm        | +0.0346 |  5/5 | +0.0179 | CI>0 |
-| partition vs mixup         | +0.0277 |  5/5 | +0.0075 | CI>0 |
-| partition vs summation     | +0.0263 |  5/5 | +0.0059 | CI>0 |
-| partition vs cutmix        | +0.0244 |  5/5 | +0.0031 | CI>0 |
-| mixup(proxy) vs single     | +0.0093 |  5/5 | +0.0043 | CI>0 |
-| mixup(proxy) vs partition  | -0.0277 |  0/5 | -0.0478 | lose |
-```
-
-At FAR5% partition beats single_only (+0.086, CI>0) and fcm_pm (+0.071, CI>0)
-significantly; vs cutmix/summation/mixup it leads but CI touches 0.
-
-## Honest findings (report as-is)
-
-**POSITIVE (survives):**
-1. Content-blind pair-synthesis from single-label sources **substantially beats
-   single-only** at the low-FAR operating point on PUBLIC industrial data. Every
-   synthesis arm > single_only; best (partition) is ~14× single at FAR1%, ~16× at
-   FAR5%, all paired CI>0. mAP is ~flat across arms (0.89–0.92) — i.e. the gain is
-   invisible to mAP and shows ONLY at the real-FAR operating point (the paper's
-   central measurement point).
-2. Full system (val-margin checkpoint + NB-reject + conformal FAR) runs end-to-end
-   on real normals; realFAR tracks the 1%/5% targets (0.005–0.020).
-
-**NEGATIVE (must be reported, undermines two prior claims):**
-1. **The test-blind proxy MIS-SELECTED.** It picked `mixup` (superposition op);
-   the sealed winner was `partition` (whole-object side-by-side), which the proxy
-   ranked 4th. Automatic operator selection is NOT reliable here.
-2. **FCM-PM (our flagship grid-complement op) FAILS on Severstal** — 2nd-worst,
-   statistically indistinguishable from single_only, and partition beats it 5/5
-   CI>0 at both FAR1% and FAR5%. Root cause: Severstal defects are continuous,
-   spatially-extended (thin scratches / patches); the 9×9 grid-cell complement
-   chops each defect into scattered cells and destroys its coherence. FCM-PM's
-   grid geometry is matched to the **chip** domain (grid-aligned discrete chip
-   objects), not to continuous-defect steel.
-
-## Cross-domain operator picture (descriptive law, 3 domains)
-
-The best content-blind operator tracks the domain's **defect composition geometry**,
-not a single universal choice:
+## Sealed leaderboard (mean over 5 seeds)
 
 ```
-| Domain    | data    | defect geometry             | best admissible op        |
-|-----------|---------|-----------------------------|---------------------------|
-| chip      | private | discrete grid-aligned cells | fcm_pm (grid complement)  |
-| Severstal | public  | continuous extended regions | partition (whole-object)  |
-| WM38      | public  | superimposed wafer bins     | cutmix/summation (overlay)|
+| Arm                  | F1@FAR1% | F1@FAR5% |  mAP   | realFAR@1% (mean, range)  |
+|----------------------|----------|----------|--------|---------------------------|
+| partition            |   0.0397 |   0.0915 | 0.9163 | 1.29%  (0.80 - 2.00%)     |
+| cutmix               |   0.0153 |   0.0587 | 0.9207 | 0.86%  (0.30 - 1.30%)     |
+| summation            |   0.0134 |   0.0921 | 0.8944 | 0.64%  (0.40 - 0.90%)     |
+| mixup                |   0.0121 |   0.0646 | 0.9063 | 0.94%  (0.75 - 1.15%)     |
+| grid_complement_g3_9 |   0.0051 |   0.0202 | 0.9144 | 0.85%  (0.55 - 1.30%)     |
+| single_only          |   0.0028 |   0.0061 | 0.9193 | 0.96%  (0.60 - 1.15%)     |
 ```
 
-The law "match the synthesis operator to defect-composition geometry" holds
-**descriptively** across all three, but requires KNOWING the geometry. The
-test-blind proxy (evidence-margin) is a heuristic that works on some domains and
-failed on Severstal — an honest open problem, not a solved contribution.
+## Paired significance (paired-t 95% CI is the arbiter; bootstrap + Wilcoxon shown)
 
-## Paper implication (honest)
+```
+| Comparison (F1@FAR1%)                 |  mean d | wins | paired-t 95% CI      | Wilcx | verdict |
+|---------------------------------------|---------|------|----------------------|-------|---------|
+| partition   - single_only             | +0.0369 | 5/5  | [+0.0142, +0.0596]   | 0.031 | sig     |
+| cutmix      - single_only             | +0.0125 | 5/5  | [+0.0047, +0.0202]   | 0.031 | sig     |
+| summation   - single_only             | +0.0106 | 5/5  | [+0.0024, +0.0189]   | 0.031 | sig     |
+| mixup       - single_only             | +0.0093 | 5/5  | [+0.0023, +0.0163]   | 0.031 | sig     |
+| grid_compl  - single_only             | +0.0023 | 2/5  | [-0.0044, +0.0091]   | 0.375 | NOT sig |
+| partition   - cutmix                  | +0.0244 | 5/5  | [-0.0058, +0.0547]   | 0.031 | boundary|
+| partition   - summation               | +0.0263 | 5/5  | [-0.0026, +0.0551]   | 0.031 | boundary|
+| partition   - mixup                   | +0.0277 | 5/5  | [-0.0009, +0.0562]   | 0.031 | boundary|
+| partition   - grid_complement_g3_9    | +0.0346 | 5/5  | [+0.0110, +0.0582]   | 0.031 | sig     |
+```
 
-- The FCM-PM-as-universal-operator framing does NOT survive public validation.
-- The robust, defensible claim is the **empirical study**: (i) synthesis-from-
-  singles helps low-FAR multi-label detection, invisibly to mAP; (ii) the right
-  operator is geometry-dependent and we characterize which per geometry; (iii)
-  automatic (test-blind) selection remains unsolved (honest negative).
-- This is aligned with the earlier pivot ("not an FCM-PM-only paper"). The
-  system pieces (val-margin, NB-reject, conformal, the FAR-operating-point metric)
-  are the transferable contribution; FCM-PM is one domain-specific instance.
+## Honest claims (exactly these, no more)
 
-## Honest probability
+1. **Content-blind pair-synthesis from single-label sources significantly improves
+   the low-FAR operating point over single-only, on PUBLIC industrial data.** Each
+   of partition / cutmix / summation / mixup beats single_only at F1@FAR1% AND
+   F1@FAR5% with paired-t 95% CI strictly > 0 and exact Wilcoxon p = 0.031 (the
+   floor for n=5). The gain is invisible to mAP (all arms 0.89–0.92, single highest)
+   and shows only at the real-FAR operating point. **This is the paper-usable
+   result.**
+2. **`partition` has the highest mean but is NOT statistically separated from the
+   other synthesis operators.** partition − {cutmix, summation, mixup} paired-t 95%
+   CIs all include 0 (boundary; bootstrap is anti-conservative at n=5 so not the
+   arbiter). Report partition as "best mean rank," not "significantly best."
+3. **The simplified `grid_complement_g3_9` arm is indistinguishable from single_only**
+   (paired-t CI crosses 0, 2/5 wins, Wilcoxon 0.375). Because it is NOT full FCM-PM,
+   this says nothing about FCM-PM; it only shows a naive 1/3-cell grid swap does not
+   help on continuous steel defects.
+4. **NB-reject contributes nothing on Severstal.** `nb_far_after == realFAR@0.01`
+   in 30/30 rows — NB adds zero FAR reduction; it only trims positive coverage
+   (0.977–1.000). FAR control here is entirely from normal calibration. Report NB as
+   inert on this domain, separate from calibration.
+5. **Calibration is approximate, not exact conformal.** The threshold is
+   `np.quantile(., 1-α)` (linear interpolation) with a `>=` rule, not the exact
+   split-conformal order statistic `s_(k)` with strict/randomized ties. Realized FAR
+   at nominal 1% is 1.29% mean (0.80–2.00%) for partition — close but above nominal;
+   the artifact must switch to the exact order-statistic rule to match the T3
+   statement.
+6. **Status: public DIAGNOSTIC evidence, not a sealed confirmatory test.** An earlier
+   B0 pass already read the same 427-image multi-test before this B1 recipe was
+   committed; the operator ranking within B1 is test-blind but the dataset is already
+   opened. Do NOT call this an untouched/sealed confirmation.
 
-Severstal did NOT deliver the FCM-PM confirmatory win the paper wanted; it delivered
-a clean "synthesis helps" public result PLUS an honest negative on FCM-PM generality
-and proxy reliability. Net: ICLR stays ~**35–38%** (not lifted toward 60%). Strongest
-honest venue framing is an empirical study; TMLR ~55–65% remains the realistic target.
+## Cross-domain operator picture (consistent OBSERVATION, not causal)
+
+The best-mean content-blind operator differs by domain defect geometry — chip
+(discrete grid-aligned) favours grid-cell complement; Severstal (continuous
+extended) favours whole-object `partition`; WM38 (superimposed bins) favours
+cutmix/summation. This is a consistent observation across three domains, NOT a
+causal proof (no mask-ablation on the same domain). The FCM grid-coherence theorem
+(planned) gives the mechanism hypothesis a formal probability; until a same-domain
+mask ablation is run, it stays "consistent with," not "proves."
+
+## Honest probability contribution
+
+Severstal yields ONE clean, paper-usable public result — synthesis-from-singles
+significantly beats single-only at low FAR — plus honest negatives (operator
+choice not separated; the naive grid arm and NB inert here; not a sealed test).
+It does not lift ICLR toward 60%. Consistent with the decision-range
+`~30–40%` after soundness fixes; the theory cluster (T6 selection-regret + FCM
+coherence + constructive hedge) is the lever that can reach `~35–45%` IF it passes
+independent proof audit.
