@@ -321,41 +321,59 @@ multi-defect conditional is identified only up to the reachable set
 metric, the hull is convex and weak-* compact). (4) Deploy the Bayes-optimal bit
 rule `h*` for `K_center`.
 
-**Theorem 4'(e).** For every world `W` in the consistent set,
+**Theorem 4'(e) (tight RATE in `m`, honest constants).** Let `rad_TV(R_m) =
+inf_K sup_{W} TV(K_W, K)` be the TV Chebyshev radius of the reachable set (attained
+at `K_center`). For every world `W`,
 ```
    excess bit-risk of P* under W  <=  2 * L_ell * TV(K_W, K_center)
-                                  <=  2 * L_ell * A*_norm(m),          (UPPER, unconditional)
+                                  <=  2 * L_ell * rad_TV(R_m),         (UPPER, unconditional)
 ```
 `L_ell` the bit-loss range (=1 for 0/1). Combined with the Theorem 4(b) two-point
 LOWER bound `>= c(p_M,gamma) * A*_norm(m)` (Assumption M, applied to a two-point
 pair INSIDE `C_m` -- valid because the 4'(d) converse places the argmin pair in
-`C_m`), the minimax excess multi-label risk obeys
+`C_m`, clean in the `A_Frechet` core by Lemma 4'(a')), and using the metric-space
+bound `A*_norm(m) <= rad_TV(R_m) <= 2 A*_norm(m)` (see the CAVEAT),
 ```
-   c(p_M,gamma) * A*_norm(m)  <=  R_minimax(m)  <=  2 L_ell * A*_norm(m),
+   c(p_M,gamma) * A*_norm(m)  <=  R_minimax(m)  <=  4 L_ell * A*_norm(m),
    hence  R_minimax(m) = Theta( A*_norm(m) ) = Theta( A_Frechet + L_Phi * eps_m ).
 ```
-So the finite-`m` rate is TIGHT (upper meets lower up to the margin constants), and
-the upper bound is achieved by a CONSTRUCTIVE rule -- not an existence statement.
+So the finite-`m` RATE in `m` is tight, achieved by a CONSTRUCTIVE rule. We claim a
+tight rate, NOT a matched minimax constant.
 
-*Proof.* Upper: for bounded loss the regret of using the Bayes rule of `Q` when the
-truth is `P` is at most `2 L_ell TV(P,Q)` (Neyman-Pearson / total-variation
-coupling; no margin needed). Chebyshev-center definition gives
-`sup_{W} TV(K_W,K_center) = A*_norm(m)`. Lower: 4(b) restricted to the two
-diameter-realizing worlds of `R_m`, which lie in `C_m` (4'(d) converse). QED.
+> **CAVEAT (adversarial-review catch -- radius != half-diameter).** `A*_norm(m)` is
+> defined as `(1/2) diam_TV`. In a general metric space the Chebyshev radius obeys
+> only `(1/2)diam <= rad <= diam`; TV/L1 has **Jung constant 1**, so `rad` can reach
+> the FULL diameter, i.e. `rad_TV in [A*_norm(m), 2 A*_norm(m)]`. Witness (machine
+> check): `n` mutually-singular appearance conditionals have `diam_TV=1`,
+> `A*_norm=1/2`, but best-center radius `= 1 - 1/n` (2/3, 3/4, ..., ->1). Hence the
+> honest upper constant is `2 L_ell rad_TV <= 4 L_ell A*_norm(m)`; the earlier
+> "`= A*_norm(m)` exactly / matched minimax" was WRONG (it silently used the Hilbert
+> `rad = (1/2)diam`). Only the RATE `Theta(A*_norm(m))` survives.
 
-**Machine check (`verify_t4_coupled_radius.py`, achievability block).** In the
-2-state toy the center procedure's worst-case appearance error equals `A*_norm(m)`
-to 1e-9 for every `(rho, eps_m)` tested (0.25/0.19/0.13/0.0625... exactly), while
-committing to a set-edge estimate is 2x worse -- confirming the center rule is the
-unique minimax procedure and attains the identification width. (Same script that
-checks 4'(c); both PASS.)
+*Proof.* Upper: for bounded loss the regret of the Bayes rule of `Q` under truth `P`
+is `<= 2 L_ell TV(P,Q)` (Neyman-Pearson / TV coupling; no margin). Take
+`K=K_center`; `sup_W TV(K_W,K_center) = rad_TV(R_m)`. Lower: 4(b) at the two
+diameter-realizing worlds of `R_m` (in `C_m` by 4'(d)). QED.
+
+**Three constant-level gaps (stated, not hidden).** "Tight" is a rate statement;
+the upper/lower constants differ by (i) the margin slack `c(p_M,gamma)` vs `2 L_ell`;
+(ii) the radius/half-diameter factor in `[1,2]` (Jung); (iii) hypothesis asymmetry
+-- the upper needs NO margin, the lower needs Assumption M. So this is a matched
+RATE in `m`, not a matched minimax theorem.
+
+**Machine check (`verify_t4_coupled_radius.py`).** The scalar (1-D) block confirms
+the center attains the width -- but is a tautology on `R` (Jung `1/2`); the added
+`chebyshev_gap_demo` exhibits `rad_TV/half-diam = 1.33, 1.50, 1.75, 1.96` for
+`n=3,4,8,50`, confirming the CAVEAT (radius exceeds half-diameter, up to 2x). The
+`4'(c)` width block (`closed_form` vs `brute`, max diff 5.6e-17) is the real
+identification-width check and is unaffected.
 
 **Reading.** The theory now has BOTH directions: 4'(d) lower + 4'(e) upper by a
-runnable rule. The reviewer line "you only prove you can't do better" is answered
-by "and here is the procedure that does exactly this well, provably." The rate
-`Theta(A_Frechet + L_Phi/(kappa_* sqrt m))` is minimax-optimal, not conservative.
-Honest scope: the constant gap (`c` vs `2 L_ell`) is the usual margin-vs-TV slack;
-we claim tight RATE in `m`, not a matched constant.
+runnable rule, so "you only prove you can't do better" is answered by a procedure
+that provably does this well IN RATE. The upgrade over "lower-bound-only" is real
+but bounded: the finite-`m` rate `Theta(A_Frechet + L_Phi/(kappa_* sqrt m))` is
+tight in `m`; the constant is within a factor `4 L_ell / c(p_M,gamma)` of optimal,
+not exact.
 
 ## 4b-f. Proposition 4'(f) (the two moduli are observable-boundable -- operational, not oracle) [PROVEN]
 
@@ -363,13 +381,23 @@ we claim tight RATE in `m`, not a matched constant.
 Both moduli admit data-computable bounds, so the finite-`m` shell guarantee is a
 number a practitioner can report, not an oracle quantity.*
 
-**(f-i) `kappa_*` is estimable from normals alone.** `kappa_* = inf{ ||T_N h||_TV :
-h(Z)=0, L_Phi(h)>0 }` is a restricted min-singular-value of the normal channel
-`T_N`, whose kernel-representation `N(z)` is exactly what the `m` normals sample.
-The plug-in `hatkappa_* (T_hatN)` concentrates at `|kappa_* - hatkappa_*| =
-O(sqrt(log(1/delta)/m))` by operator-norm / matrix-Bernstein on the empirical
-`T_hatN` (finite/​sieve `Z`). It is observable because normals ARE the channel's
-data.
+**(f-i) `kappa_*` is estimable from normals UNDER Assumption Z-FINITE.** `kappa_* =
+inf{ ||T_N h||_TV : h(Z)=0, L_Phi(h)>0 }` is a restricted min-singular-value of the
+normal channel `T_N P = int N(z)dP(z)`.
+
+> **Assumption Z-FINITE (bounded effective rank).** `Z` ranges over a finite (or
+> sieved) set of effective size `d_m`, and `T_N` restricted to it has
+> `kappa_* > 0`.
+
+Under Z-FINITE the plug-in `hatkappa_*(T_hatN)` concentrates at
+`O(sqrt(d_m log d_m / m))` (matrix-Bernstein, dimension factor `d_m`), plus a
+sieve-approximation bias `b(d_m)` from `kappa_*^{sieve} != kappa_*^{true}`. *Honest
+limit (JUDGE finding 4):* for CONTINUOUS `Z`, `T_N` is a compact integral operator
+whose singular values accumulate at 0, so `kappa_* = 0` generically and
+`eps_m = r_m/kappa_* = inf` -- the shell certificate is then VACUOUS. The
+"(finite/sieve)" qualifier is load-bearing, not cosmetic: the certificate exists
+only for bounded-effective-rank `Z`, and the sieve changes the estimand (bias
+`b(d_m)` is NOT `O(1/sqrt m)`). We name this rather than hide it.
 
 **(f-ii) `L_Phi` has an observable UPPER bound UNDER Assumption SCI.** *Caveat
 first (an adversarial-review catch, kept honest): the raw `L_Phi = sup_theta
@@ -387,43 +415,54 @@ marginal bound therefore needs a named restriction:
 > background (the nuisance `Z`); only the single-defect appearances do. Falsifiable
 > (a `z`-varying interaction physics violates it).
 
-Under SCI, the pushforward `oplus_# C(.,.)` is `L_op`-Lipschitz in its input
-marginals under TV (data-processing + copula-continuity of the FIXED shape `C`;
-`L_op=1` for the product copula by tensorization, absorbed for general fixed `C`):
+Under SCI, the fixed-copula coupling map `(mu_a,mu_b) -> C(mu_a,mu_b)` is
+`L_op(C)`-Lipschitz in its input marginals under TV:
 ```
    L_Phi = sup_{z,z'} TV( oplus_# C(mu_a(z),mu_b(z)), oplus_# C(mu_a(z'),mu_b(z')) )
-        <= L_op * [ sup_{z,z'} TV(mu_a(z),mu_a(z')) + sup_{z,z'} TV(mu_b(z),mu_b(z')) ]
-         =: L_op * H_single,
+        <= L_op(C) * [ sup_{z,z'} TV(mu_a(z),mu_a(z')) + sup_{z,z'} TV(mu_b(z),mu_b(z')) ]
+         =: L_op(C) * H_single,
 ```
 `H_single` = `P_Z`-slice heterogeneity of the OBSERVABLE single-defect conditionals
 (estimable by stratifying single-defect data along the normal-identified
-`P_Z`-shell). Hence a computable `hatL_Phi = L_op * hatH_single` -- **only under
-SCI**. Without SCI, `kappa_*` is still estimable (f-i) but `L_Phi` is not
-marginal-boundable, and the shell certificate is unavailable: an honest limit, not
-hidden.
+`P_Z`-shell). *Honest constant (JUDGE finding 3):* `L_op(C) = 1` holds ONLY for the
+product (independence) copula, by tensorization. For a general fixed `C` with
+density `c`, `L_op(C) <= 1 + (1/2) Lip(c)`, which DIVERGES as `C -> comonotone` /
+high-correlation -- exactly the strong-interaction regime. Worse, `L_op(C)` depends
+on the interaction copula `C`, which is UNOBSERVED (no co-occurrence data), so
+`hatL_Phi` is data-computable only under an extra
 
-**Proposition 4'(f).** `kappa_*` is normal-estimable unconditionally (f-i); and
-UNDER Assumption SCI, with probability `>= 1 - 2delta`,
-```
-   A*_norm(m)  <=  A_Frechet  +  hatL_Phi * r_m / hatkappa_*  +  O(1/sqrt m),
-```
-so the REDUCIBLE shell has a data-computable finite-`m` certificate. *Honest
-scope:* (a) the `L_Phi` bound needs Assumption SCI (slice-invariant interaction
-copula); without SCI the copula freedom leaks into the modulus and only `kappa_*`
-is estimable; (b) even under SCI it is an UPPER bound (the `L_op`-Lipschitz step
-can be loose), so the certificate is conservative, not exact; (c) `A_Frechet` --
-the irreducible copula core -- remains unobservable BY DESIGN (no observable
-instantiates two defect sources at a fixed `z`; Lemma 4'(a')). Thus normals +
-singles certify how much the shell can ADD (under SCI), not the total radius. This
-is the exact operational reading of the two-moduli law: the part the data can bound
-(shell, under a named physical assumption) is bounded; the part it provably cannot
-(core) is named as such.
+> **Assumption C-REG (known copula-regularity bound).** A known `B >= L_op(C)` is
+> available a priori (e.g. from a declared bounded-density interaction model).
 
-**Reading.** 4'(e) makes the bound TIGHT and ACHIEVED; 4'(f) makes its constant
-COMPUTABLE (shell) and honestly flags the one term (core) that is unbounded by
-construction. Together they convert "a non-constructive two-moduli lower bound"
-into "a tight minimax rate with a runnable optimal procedure and a data-computable
-shell certificate" -- the two changes that a theory reviewer actually rewards.
+Then `hatL_Phi = B * hatH_single`. Without C-REG (near-singular `C`), the
+certificate is UNAVAILABLE; without SCI, `L_Phi` is not marginal-boundable at all.
+Both are named, not hidden.
+
+**Proposition 4'(f).** UNDER Assumptions Z-FINITE + SCI + C-REG, with probability
+`>= 1 - 2delta`,
+```
+   A*_norm(m)  <=  A_Frechet  +  B * hatH_single * r_m / hatkappa_*  +  bias(d_m) + O(sqrt(d_m log d_m / m)),
+```
+so the REDUCIBLE shell has a data-computable finite-`m` certificate. *Honest scope
+(all named, per adversarial review):* (a) `L_Phi` bound needs SCI (slice-invariant
+copula) AND C-REG (known `B >= L_op(C)`); near-comonotone `C` makes `L_op(C)`
+diverge and the certificate unavailable; (b) `kappa_*` estimability needs Z-FINITE
+(bounded effective rank) -- continuous `Z` gives `kappa_*=0` and a VACUOUS
+certificate; (c) even when all hold it is an UPPER bound (conservative); (d)
+`A_Frechet` -- the irreducible copula core -- is unobservable BY DESIGN (Lemma
+4'(a')). So the certificate bounds how much the shell can ADD, under three named
+falsifiable conditions, not the total radius. This is the honest operationalization
+of the two-moduli law: the shell is bounded WHERE the conditions hold; where they
+fail (continuous `Z`, singular `C`) the theory says so explicitly.
+
+**Reading (honest, post adversarial review).** 4'(e) upgrades "lower-bound-only" to
+a tight RATE in `m` achieved by a runnable rule (constant within `4 L_ell/c` of
+optimal, NOT exact -- three named gaps). 4'(f) gives a shell certificate that is
+computable ONLY under three named falsifiable conditions (Z-FINITE, SCI, C-REG) and
+vacuous where they fail. This is a real but BOUNDED upgrade: from "non-constructive
+lower bound" to "tight-rate + conditionally-computable shell," not to "matched
+minimax + unconditional certificate." The residual is exactly what a sharp theory
+reviewer would still discount.
 
 ## 4b'. Theorem 4 Part (b) (excess-risk lower bound UNDER Assumption M)
 
@@ -562,21 +601,22 @@ Composition, Calibration, and Coverage."*
 FCM-PM, val-margin, NB-reject are *concrete mechanisms illustrating* the
 characterization -- not method-superiority claims.
 
-**Honest probability (post theory-loop-2, 260724).** ICLR ~**35-37%** (up from ~31%
-via 4'(e)+4'(f), a real but bounded upgrade). The two prior discount reasons are now
-retired: (a) "lower bound only" -> 4'(e) gives a MATCHING constructive procedure, so
-the finite-`m` minimax risk is a TIGHT `Theta(A_Frechet + L_Phi/(kappa_* sqrt m))`
-rate (machine-checked); (b) "non-constructive two moduli" -> 4'(f) gives a
-data-computable shell certificate + names the one unbounded term (core) by design.
-This makes the T4' cluster a COMPLETE minimax theory (converse + achievability +
-operational constant), which reviewers discount much less than a bare lower bound.
-Residual ceiling (~40%): T3 is still a conformal corollary; the object is still a
-partial-ID characterization in a niche; and the Severstal public test (260724,
-[[SEVERSTAL_SEALED_RESULT_260724]]) confirmed FCM-PM is domain-specific (partition
-op wins, FCM-PM grid-complement fails on continuous defects) -- so there is a clean
-public "synthesis-helps-at-low-FAR" win but NO public FCM-PM method-win. TMLR
-~60-70% remains the realistic primary. 60% ICLR is NOT reached; the honest gain is
-theory COMPLETENESS, not a method SOTA.
+**Honest probability (post theory-loop-2 + adversarial review, 260724).** ICLR
+~**30-33%** (an independent opus JUDGE, trying to REFUTE, put the cluster at ~30%;
+the earlier "35-37%" was NOT defensible and is retracted). The 4'(e)/4'(f) upgrade
+is real but small (~+1-2 pp, not +4-6): (a) "lower bound only" -> 4'(e) gives a
+matching constructive procedure, but only a tight RATE in `m` (constant within
+`4 L_ell/c`, three named gaps: margin, radius/half-diam Jung factor, M-asymmetry),
+NOT a matched minimax constant; (b) "non-constructive two moduli" -> 4'(f) gives a
+shell certificate computable ONLY under Z-FINITE + SCI + C-REG, vacuous for
+continuous `Z` or near-singular copula. Residual (~35% ceiling): T3 is a conformal
+corollary; the object is a partial-ID characterization in a niche; and the Severstal
+public test (260724, [[SEVERSTAL_SEALED_RESULT_260724]], soundness-corrected)
+gives a clean "synthesis-helps-at-low-FAR" public win (paired-t CI>0) but the
+`grid_complement_g3_9` arm != full FCM-PM and operators are not separated -- no
+public method-win. TMLR ~55-65% realistic primary. The path above ~35% is the
+planned T6 operator-selection-regret cluster IF it passes independent proof audit;
+60% is not reached.
 
 ---
 
