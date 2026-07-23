@@ -23,7 +23,7 @@ from . import run_svhn_full_image_operator_match as SV   # reuse operators + mod
 
 ARMS = ["single_only", "partition", "summation", "cutmix", "mixup", "fcm_pm"]
 N_CLASSES = SEV.N_CLASSES   # 4
-OUTDIR = "outputs/multilabel_synth/severstal_operator_match_v1"
+OUTDIR = "outputs/multilabel_synth/severstal_operator_match_v2_b1"
 
 
 # ---- image-level synthesis from REAL single-defect sources ----
@@ -100,6 +100,9 @@ def main():
     ap.add_argument("--run-test", action="store_true")
     ap.add_argument("--max-normal", type=int, default=2000, help="cap normals loaded (mem)")
     ap.add_argument("--max-multi", type=int, default=427)
+    ap.add_argument("--arms", nargs="+", default=None,
+                    help="subset of arms to run this invocation (chunk to dodge env hang); "
+                         "results APPEND to the shared CSV")
     args = ap.parse_args()
     os.makedirs(OUTDIR, exist_ok=True)
     SV._BACKBONE = args.backbone
@@ -178,8 +181,9 @@ def main():
     def _gg(arm): return dict(grid=best["best_grid"], n_groups=best["best_g"]) if arm == "fcm_pm" else {}
     synth_total = len({(a, b) for a in range(N_CLASSES) for b in range(a+1, N_CLASSES)}) * args.n_per_pair + len(sX)
 
+    run_arms = args.arms if args.arms else ARMS
     rows = []
-    for arm in ARMS:
+    for arm in run_arms:
         for seed in args.seeds:
             rng = np.random.default_rng(1000 + seed)
             trX, trY = build_arm(arm, sX, sY, byc, args.n_per_pair, rng, match_n=synth_total, **_gg(arm))
@@ -207,10 +211,22 @@ def main():
             print(f"[{arm:11s} s{seed}] mAP={r['mAP']:.4f} F1@FAR1%={r['F1@FAR0.01']:.4f} "
                   f"realFAR={r['realFAR@0.01']:.3f} nb_cov={r['nb_coverage']:.3f}", flush=True)
 
-    with open(os.path.join(OUTDIR, "sealed_test_results.csv"), "w", newline="") as f:
-        w = csvmod.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
-    _verdict(rows, ranking[0])
-    print(f"[OUT] {os.path.abspath(os.path.join(OUTDIR,'sealed_test_results.csv'))}", flush=True)
+    # APPEND to CSV so per-arm chunked runs accumulate (dodge the ~8-run env hang)
+    csv_path = os.path.join(OUTDIR, "sealed_test_results.csv")
+    exist = os.path.exists(csv_path)
+    with open(csv_path, "a", newline="") as f:
+        w = csvmod.DictWriter(f, fieldnames=list(rows[0].keys()))
+        if not exist: w.writeheader()
+        w.writerows(rows)
+    # verdict over ALL accumulated rows
+    all_rows = list(csvmod.DictReader(open(csv_path)))
+    for rr in all_rows:
+        for k in rr:
+            if k not in ("arm",):
+                try: rr[k] = float(rr[k])
+                except: pass
+    _verdict(all_rows, ranking[0])
+    print(f"[OUT] {os.path.abspath(csv_path)} (total rows={len(all_rows)})", flush=True)
 
 
 def _map(P, Y):
