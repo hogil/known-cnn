@@ -103,6 +103,9 @@ def main():
     ap.add_argument("--arms", nargs="+", default=None,
                     help="subset of arms to run this invocation (chunk to dodge env hang); "
                          "results APPEND to the shared CSV")
+    ap.add_argument("--skip-proxy", action="store_true",
+                    help="skip the Phase-A probe (proxy winner=mixup already frozen); "
+                         "keeps each chunked invocation lean")
     args = ap.parse_args()
     os.makedirs(OUTDIR, exist_ok=True)
     SV._BACKBONE = args.backbone
@@ -129,16 +132,24 @@ def main():
 
     # ---- Phase A: proxy operator + best-grid, frozen (source-val only, NO test) ----
     _pre = args.backbone in SV._PRETRAINED
-    probe = SV.train(sX, sY, args.epochs, 0, args.device,
-                     lr=2e-4 if _pre else 1e-3,
-                     head_only_epochs=(2 if _pre else 0),   # audit: proxy shares 2-stage recipe
-                     backbone_lr=(2e-5 if _pre else None), warmup_epochs=2)
-    scores = {}
-    for arm in [a for a in ARMS if a != "single_only"]:
-        cX, cY = build_arm(arm, vX, vY, byc_v, 20, np.random.default_rng(1))
-        n_c = len(cX) - len(vX)
-        scores[arm] = evidence_margin(SV.predict(probe, cX[:n_c], args.device), cY[:n_c])
-    ranking = sorted(scores, key=scores.get, reverse=True)
+    if args.skip_proxy:
+        # proxy already established (mixup winner, 4x reproduced across recipes); skip the
+        # 10-min probe so each chunked invocation stays lean (Windows torch slows after a
+        # few in-process trainings). Frozen ranking recorded from prior proxy manifests.
+        scores = {}
+        ranking = ["mixup", "cutmix", "summation", "partition", "fcm_pm"]
+        print("=== PROXY SKIPPED (frozen winner=mixup from prior manifests) ===", flush=True)
+    else:
+        probe = SV.train(sX, sY, args.epochs, 0, args.device,
+                         lr=2e-4 if _pre else 1e-3,
+                         head_only_epochs=(2 if _pre else 0),   # audit: proxy shares 2-stage recipe
+                         backbone_lr=(2e-5 if _pre else None), warmup_epochs=2)
+        scores = {}
+        for arm in [a for a in ARMS if a != "single_only"]:
+            cX, cY = build_arm(arm, vX, vY, byc_v, 20, np.random.default_rng(1))
+            n_c = len(cX) - len(vX)
+            scores[arm] = evidence_margin(SV.predict(probe, cX[:n_c], args.device), cY[:n_c])
+        ranking = sorted(scores, key=scores.get, reverse=True)
     # FCM-PM geometry FIXED at primary g=3, 9x9 (audit: no grid search -- avoids the
     # "searched g4/16 not primary" criticism; g3/9x9 is the pre-declared primary).
     best = {"best_g": 3, "best_grid": 9, "note": "fixed primary (no grid search)"}
