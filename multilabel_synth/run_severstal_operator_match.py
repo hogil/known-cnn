@@ -160,7 +160,8 @@ def main():
     with open(os.path.join(OUTDIR, "proxy_manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
     print("=== PROXY (source-val; NO test) ===")
-    for a in ranking: print(f"  {a:12s} margin={scores[a]:+.4f}")
+    for a in ranking:
+        if a in scores: print(f"  {a:12s} margin={scores[a]:+.4f}")
     print(f"best-grid g={best['best_g']} grid={best['best_grid']} | WINNER={ranking[0]} | hash={manifest['hash']}")
     if not args.run_test:
         print(f"[OUT] {os.path.abspath(os.path.join(OUTDIR,'proxy_manifest.json'))} (Phase A only)")
