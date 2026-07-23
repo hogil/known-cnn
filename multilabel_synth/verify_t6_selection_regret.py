@@ -89,8 +89,48 @@ def t6d_rate(seed=0):
     return ms, regs, slope
 
 
+# ---- T6-FCM: grid-complement footprint-coherence probability ----
+from math import comb
+from itertools import combinations
+
+
+def fcm_coherence_formula(N, m, r_a, r_b):
+    """P(both footprints fully preserved) = C(N-r_a-r_b, m-r_a)/C(N,m): the mask
+    (m of N cells -> source A) contains ALL r_a footprint-A cells and NONE of the
+    r_b footprint-B cells (disjoint footprints)."""
+    if m - r_a < 0 or N - r_a - r_b < m - r_a:
+        return 0.0
+    return comb(N - r_a - r_b, m - r_a) / comb(N, m)
+
+
+def fcm_coherence_brute(N, m, r_a, r_b):
+    """Exact enumeration for small N: fraction of m-subsets containing footprint_A
+    (cells 0..r_a-1) and avoiding footprint_B (cells r_a..r_a+r_b-1)."""
+    fa = set(range(r_a)); fb = set(range(r_a, r_a + r_b))
+    good = tot = 0
+    for s in combinations(range(N), m):
+        tot += 1; ss = set(s)
+        if fa <= ss and not (fb & ss):
+            good += 1
+    return good / tot
+
+
 def main():
-    print("== T6a: 2-world selection game (Delta=0.4) ==")
+    print("== T6-FCM: footprint-coherence formula vs brute (small N) ==")
+    maxerr = 0.0
+    for (N, m, ra, rb) in [(9, 3, 1, 1), (9, 3, 2, 1), (10, 4, 2, 2), (12, 4, 3, 2), (9, 3, 2, 2)]:
+        f = fcm_coherence_formula(N, m, ra, rb); b = fcm_coherence_brute(N, m, ra, rb)
+        maxerr = max(maxerr, abs(f - b))
+        print(f"  N={N} m={m} r_a={ra} r_b={rb}: formula={f:.5f} brute={b:.5f} |d|={abs(f-b):.1e}")
+    print(f"  max |formula-brute| = {maxerr:.2e} ({'PASS' if maxerr<1e-9 else 'FAIL'})")
+    print("  chip grid g=9 (N=81,m=27): compact (r_a=r_b=1) vs extended footprints:")
+    for r in (1, 2, 3, 5, 8):
+        p = fcm_coherence_formula(81, 27, r, r)
+        print(f"    r_a=r_b={r:2d}: P(both preserved)={p:.4f}")
+    print("  => compact footprints survive; extended footprints decay fast"
+          " (mechanism for grid_complement failing on continuous defects).")
+
+    print("\n== T6a: 2-world selection game (Delta=0.4) ==")
     det, rand, D = t6a(0.4)
     print(f"  deterministic worst-case regret = {det:.3f}  (= Delta = {D})")
     print(f"  randomized (1/2,1/2) worst-case  = {rand:.3f}  (= Delta/2 = {D/2})")
