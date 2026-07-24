@@ -176,25 +176,30 @@ trained on SYNTHETIC data (not on the `m` positives), so each `hat u_j` is a mea
 independence needed; shared eval samples do not break the union bound); `argmax hat
 u_j` costs `<= 2 max_j |hat u_j - u_j|`.
 
-**Proof (lower, Fano -- closes the gate-1 gap the audit flagged).** Build `K`
-hypotheses `H_1..H_K`; in `H_k` arm `k` has utility mean `1/2 + Delta`, all others
-`1/2`. Two hypotheses `H_j, H_k` differ in exactly two arms, each observed with `m`
-i.i.d. Bernoulli draws, so
-`KL(H_j || H_k) <= 2 m * KL(Ber(1/2+Delta) || Ber(1/2)) <= C m Delta^2`
-(`C` absolute, using `KL(Ber(1/2+Delta)||Ber(1/2)) <= 4 Delta^2/(1-4Delta^2)`). By
-Fano's inequality, any selector's mis-identification probability satisfies
-`P_err >= 1 - (C m Delta^2 + log 2)/log K`. Set `Delta = c sqrt(log K / m)` with `c`
-small enough that `C c^2 <= 1/4`; then `P_err >= 1/2 - log2/log K >= 1/4` for
-`K >= 4`. On a mis-identification the chosen arm has mean `1/2`, i.e. regret `= Delta`,
-so `E[reg] >= Delta * P_err >= (c/4) sqrt(log K / m) = Omega(sqrt(log K/m))`. QED.
+**Proof (lower, Fano -- closes the gate-1 gap the audit flagged; regime `m >~ log K`).**
+Build `K` hypotheses `H_1..H_K`; in `H_k` arm `k` has utility mean `1/2 + Delta`, all
+others `1/2`. Two hypotheses `H_j, H_k` differ in exactly two arms (arm `j` and arm
+`k`), each observed with `m` i.i.d. Bernoulli draws, contributing OPPOSITE-direction
+KLs `KL(Ber(1/2+Delta)||Ber(1/2))` and `KL(Ber(1/2)||Ber(1/2+Delta))`; both are
+`<= 4 Delta^2/(1-4 Delta^2)`, so
+`KL(H_j||H_k) <= 2 m * 4 Delta^2/(1-4Delta^2) = C m Delta^2` with `C` absolute for
+`Delta <= 1/4` (needs `m >~ log K` so the gap below is `< 1/4`). The construction is
+symmetric, so average pairwise KL `= max` pairwise KL and Fano's `I(theta;X) <= avg
+KL` loses nothing. Fano's inequality gives mis-ID probability
+`P_err >= 1 - (C m Delta^2 + log 2)/log K`. Set `Delta = c sqrt(log K/m)` with `c`
+small enough that `C c^2 <= 1/4`; then `P_err >= 3/4 - log2/log K >= 1/4` for
+`K >= 4`. On a mis-identification the chosen arm has mean EXACTLY `1/2`, i.e. regret
+`= Delta` (no case gives `< Delta`), so `E[reg] >= Delta * P_err >= (c/4)
+sqrt(log K/m) = Omega(sqrt(log K/m))`. QED.
 
-**Machine check (`verify_t6_selection_regret.py`).** (i) `t6d` (`K=2`) log-log slope
-`-0.500` verifies the `1/sqrt m` factor. (ii) `t6d_fano_lower`: at the hard gap
-`Delta_K = 0.5 sqrt(log K/m)`, the mis-ID probability STAYS bounded away from 0 and
-GROWS with `K` (`P_err = 0.27, 0.40, 0.47, 0.52, 0.58, 0.60` for `K=2..64`), so
-regret `= Delta_K * P_err` tracks `sqrt(log K/m)` -- the Fano construction bites, the
-`log K` teeth are REAL (min `P_err = 0.27 > 0.1`, PASS). This is now PROVEN + checked,
-not cited.
+**Machine check (`verify_t6_selection_regret.py`, honesty-corrected).** (i) `t6d`
+(`K=2`) log-log slope `-0.500` verifies the `1/sqrt m` factor. (ii) `t6d_fano_lower`
+COMPUTES the exact Fano floor `Fano_RHS = 1 - (I + log2)/log K` at the PROOF-VALID gap
+`c = 0.17` (so `C c^2 <= 1/4`; an earlier version used `c = 0.5` where `Fano_RHS < 0`
+is VACUOUS -- audit catch, fixed): `Fano_RHS = 0.384, 0.551, 0.634, 0.684, 0.718` for
+`K = 4..64` -- POSITIVE and GROWING with `K`; the plug-in `argmax` `P_err` (0.65-0.93)
+exceeds the floor, and `reg_floor = Delta * Fano_RHS = Omega(sqrt(log K/m))`. So the
+Fano LOWER bound (not just plug-in achievability) is now correctly verified.
 
 **F1 corollary.** When the target pair has prevalence `> 0`, bit-F1 is locally
 Lipschitz in the bounded utility, so the same `Theta(sqrt(log K/m))` rate transfers

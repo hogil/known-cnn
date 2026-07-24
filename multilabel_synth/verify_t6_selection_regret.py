@@ -132,24 +132,34 @@ def t6d_rate_K(K, m, seed=0):
     return None, wc, None
 
 
-def t6d_fano_lower(m=200, seed=0):
-    """T6d LOWER bound (Fano construction). K worlds: in world k, arm k is best
-    (mean 1/2 + Delta_K), all others 1/2, with the HARD gap Delta_K = c*sqrt(log K/m).
-    If the O(sqrt(log K/m)) lower bound holds, the mis-identification probability at
-    this gap stays bounded AWAY from 0 as K grows (so simple regret = Delta_K * P(err)
-    = Omega(sqrt(log K/m))). We check P(err) does not collapse, and that the induced
-    regret tracks sqrt(log K/m)."""
+def _bern_kl(p, q):
+    """KL(Ber(p) || Ber(q))."""
+    def t(a, b): return a * np.log(a / b) if a > 0 else 0.0
+    return t(p, q) + t(1 - p, 1 - q)
+
+
+def t6d_fano_lower(m=200, c=0.17, seed=0):
+    """T6d LOWER bound, HONEST Fano check (audit fix). The proof needs C c^2 <= 1/4,
+    which (with C~4-8) means c <= 0.17-0.25; at c=0.5 the Fano RHS is NEGATIVE
+    (vacuous) and a sim there measures only the plug-in rule's achievability, NOT the
+    Fano floor. Here we (i) COMPUTE the exact Fano RHS = 1 - (I + log2)/log K with
+    I = pairwise KL = m*(kl(1/2+D,1/2)+kl(1/2,1/2+D)) (avg=max by symmetry), and (ii)
+    simulate the plug-in argmax P_err. The lower bound is VERIFIED when Fano_RHS > 0
+    and grows with K, and the achievable P_err >= Fano_RHS (floor is a valid lower
+    bound on the achievable error)."""
     rng = np.random.default_rng(seed)
     rows = []
-    for K in (2, 4, 8, 16, 32, 64):
-        Delta = 0.5 * np.sqrt(np.log(K) / m)          # hard gap
+    for K in (4, 8, 16, 32, 64):
+        Delta = c * np.sqrt(np.log(K) / m)
+        I = m * (_bern_kl(0.5 + Delta, 0.5) + _bern_kl(0.5, 0.5 + Delta))   # pairwise KL
+        fano_rhs = 1.0 - (I + np.log(2)) / np.log(K)                         # Fano floor on P_err
         perr = 0; T = 4000
         for _ in range(T):
             mu = np.full(K, 0.5); k = int(rng.integers(K)); mu[k] = 0.5 + Delta
             est = rng.binomial(m, mu) / m
             if int(np.argmax(est)) != k: perr += 1
         p = perr / T
-        rows.append((K, Delta, p, Delta * p, np.sqrt(np.log(K) / m)))
+        rows.append((K, Delta, fano_rhs, p, Delta * fano_rhs, np.sqrt(np.log(K) / m)))
     return rows
 
 
@@ -219,16 +229,18 @@ def main():
         _, rr, _ = t6d_rate_K(K, m=200)
         print(f"    K={K:2d}  worst-case regret={rr:.5f}  sqrt(log K)={np.sqrt(np.log(K)):.3f}")
 
-    print("\n== T6d LOWER bound (Fano K-world construction, m=200, gap=0.5 sqrt(logK/m)) ==")
-    print(f"  {'K':>3} {'Delta_K':>8} {'P(err)':>7} {'regret':>8} {'sqrt(logK/m)':>12}")
+    print("\n== T6d LOWER bound (HONEST Fano check, m=200, c=0.17 so C c^2<=1/4) ==")
+    print(f"  {'K':>3} {'Delta':>8} {'Fano_RHS':>9} {'sim P_err':>10} {'reg_floor':>10} {'sqrt(logK/m)':>12}")
     rows = t6d_fano_lower()
-    pmin = min(r[2] for r in rows)
-    for K, D, p, reg, s in rows:
-        print(f"  {K:3d} {D:8.4f} {p:7.3f} {reg:8.5f} {s:12.4f}")
-    print(f"  min P(err) over K = {pmin:.3f} (stays bounded away from 0 => cannot beat the gap)")
-    print(f"  => regret = Omega(sqrt(log K/m)): the log K teeth are REAL "
-          f"({'PASS' if pmin > 0.1 else 'CHECK'}). This is the Fano lower bound the")
-    print("     audit said was missing; upper (proven) + this lower => matched Theta(sqrt(log K/m)).")
+    fano_min = min(r[2] for r in rows)
+    valid = all(r[2] > 0 and r[3] >= r[2] - 0.02 for r in rows)  # floor positive AND achievable>=floor
+    for K, D, fr, p, rf, s in rows:
+        print(f"  {K:3d} {D:8.4f} {fr:9.4f} {p:10.3f} {rf:10.5f} {s:12.4f}")
+    print(f"  Fano_RHS > 0 and grows with K (min={fano_min:.3f}); sim P_err >= Fano_RHS: "
+          f"{'PASS' if valid else 'CHECK'}")
+    print("  => the Fano floor itself is POSITIVE at the proof-valid gap c=0.17 (NOT the")
+    print("     vacuous c=0.5 an earlier version used); regret_floor = Delta*Fano_RHS =")
+    print("     Omega(sqrt(log K/m)). Lower bound PROVEN + now correctly checked (the RHS is computed).")
 
 
 if __name__ == "__main__":
