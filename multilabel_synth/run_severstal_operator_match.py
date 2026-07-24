@@ -127,7 +127,11 @@ def main():
     ap.add_argument("--skip-proxy", action="store_true",
                     help="skip the Phase-A probe (proxy winner=mixup already frozen); "
                          "keeps each chunked invocation lean")
+    ap.add_argument("--batch", type=int, default=64, help="train batch size (fit VRAM)")
+    ap.add_argument("--outdir", default=None, help="override OUTDIR (separate fair CSV)")
     args = ap.parse_args()
+    global OUTDIR
+    if args.outdir: OUTDIR = args.outdir
     os.makedirs(OUTDIR, exist_ok=True)
     SV._BACKBONE = args.backbone
     SV.N_CLASSES = N_CLASSES        # reused model factory builds a 4-class head
@@ -223,7 +227,7 @@ def main():
             pre = args.backbone in SV._PRETRAINED
             lr = 2e-4 if pre else 1e-3
             m = SV.train_with_margin(trX, trY, vmX, vmY, args.epochs, seed, args.device,
-                                     lr=lr, neg_target=0.02,
+                                     lr=lr, neg_target=0.02, bs=args.batch,
                                      head_only_epochs=(2 if pre else 0),   # audit 2-stage FT
                                      backbone_lr=(2e-5 if pre else None),  # two-LR
                                      warmup_epochs=2)
