@@ -270,12 +270,26 @@ grid, the grid-complement operator preserves both real steel defects with probab
 ~0 -- the mechanism for why `grid_complement`/`fcm_pm` fails on Severstal is now
 MEASURED, not asserted.
 
-**Honest scope.** This upgrades T6-FCM from "unvalidated hypothesis" to a
-MEASURED-CONSISTENT mechanism: exact formula (proven) + measured extended footprints +
-computed `P(preserved)~0`. It is still not a same-domain mask-ABLATION causal proof
-(that would train with vs without the grid mask and compare); the `fcm_pm_full` run
-(complete complement set + Pair-Mask, in progress) is the closest ablation. Report as
-"measured-consistent mechanism," pending the `fcm_pm_full` result.
+**Honest scope (+ footprint-JUDGE refinements).** This upgrades T6-FCM from
+"unvalidated hypothesis" to a MEASURED-CONSISTENT mechanism: exact formula (proven) +
+measured extended footprints + computed `P(preserved)~0`. Adversarial-JUDGE verified
+the RLE decode (512x256, column-major -- robust), the deployed grid (`N=81,m=27`), and
+`P~0` (robust to a 5%-coverage threshold and to using only the smaller defect,
+`P(8,8)=1e-5`). Three honest limits it flagged:
+1. **`P~0` is the STRICT "no pixel severed" notion.** Under a lenient "core survives
+   (>=25% of a cell)" notion, median `r` collapses to `1` and `P` jumps to `0.225`. So
+   the measurement shows FULL preservation is ~0, NOT that DETECTION fails -- the
+   full-preservation -> detection-failure link is exactly the mask-ablation still open.
+2. **"median r=14" is not the load-bearing fact.** The `P<0.05` knee is at `r~=2-3`;
+   any non-point defect set (`r>=3`) already gives `P~0`. The operative claim is "steel
+   defects are not single-cell," not the precise `14`.
+3. **Formula idealization.** All 235 multi-images have exactly 2 defects; 38% share
+   >=1 grid cell (disjointness violated -> `P=0` by degeneracy there); the formula
+   models a uniform-random `m`-subset while the operator is a checkerboard partition --
+   directionally conservative, not exact.
+Still not a same-domain mask-ABLATION causal proof (train with vs without the grid
+mask); the `fcm_pm_full` run is the closest. Report as "measured-consistent mechanism,
+strict-preservation sense," pending `fcm_pm_full`.
 
 ---
 
