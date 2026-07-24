@@ -42,11 +42,32 @@ def synth_combos(arm, byc, imgs, n_per_pair, rng, grid=9, n_groups=3):
     return np.stack(Xo).astype(np.uint8), np.stack(Yo)
 
 
+def synth_combos_fcmpm_full(sX, sY, n_target, seed, grid=9, n_groups=3):
+    """FULL FCM-PM (synthesis/fcmpm_image.synth_fcmpm): complete complement set
+    (all n_groups checkerboard groups) + one Pair-Mask view per group. Unlike the
+    simplified `fcm_pm` arm (one random grid image), this is the operator the paper
+    actually defines. Returns (X uint8 HWC, Y multihot)."""
+    from .synthesis.fcmpm_image import synth_fcmpm
+    chw = np.transpose(sX.astype(np.float32), (0, 3, 1, 2))   # N,H,W,C -> N,C,H,W
+    vpp = 2 * n_groups
+    n_views = max(vpp, int(round(n_target / vpp)) * vpp)      # divisible by views_per_pair
+    fx, fy = synth_fcmpm(chw, sY, n_views, seed,
+                         grid_rows=grid, grid_columns=grid, n_groups=n_groups,
+                         layout="checkerboard")
+    X = np.clip(np.transpose(fx, (0, 2, 3, 1)), 0, 255).astype(np.uint8)  # -> HWC uint8
+    return X, fy.astype(np.float32)
+
+
 def build_arm(arm, sX, sY, byc, n_per_pair, rng, grid=9, n_groups=3, match_n=None):
     if arm == "single_only":
         if match_n and match_n > len(sX):
             idx = rng.integers(0, len(sX), size=match_n); return sX[idx], sY[idx]
         return sX, sY
+    if arm == "fcm_pm_full":
+        n_pairs = len(byc) * (len(byc) - 1) // 2
+        cX, cY = synth_combos_fcmpm_full(sX, sY, n_pairs * n_per_pair,
+                                         int(rng.integers(1 << 30)), grid, n_groups)
+        return np.concatenate([cX, sX]), np.concatenate([cY, sY])
     cX, cY = synth_combos(arm, byc, sX, n_per_pair, rng, grid, n_groups)
     return np.concatenate([cX, sX]), np.concatenate([cY, sY])
 
