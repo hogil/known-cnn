@@ -83,6 +83,40 @@ full FCM-PM's merit can be drawn from this arm.
    committed; the operator ranking within B1 is test-blind but the dataset is already
    opened. Do NOT call this an untouched/sealed confirmation.
 
+## Addendum (260725): REAL full FCM-PM tested (addresses the "not real FCM-PM" audit gap)
+
+The audit's #2 point was that the `fcm_pm` arm was a simplified single grid-swap, not
+full FCM-PM. We wired the real operator (`synthesis/fcmpm_image.synth_fcmpm`: complete
+complement set + Pair-Mask views) as `fcm_pm_full` and ran a fair batch-16 3-arm
+comparison (single_only / partition / fcm_pm_full, 5 seeds; separate CSV
+`severstal_fcmpmfull_b16/`, so NOT comparable to the batch-64 30-row set above).
+
+```
+| Arm (batch-16) | F1@FAR1% (mean, range)   | F1@FAR5% | mAP    |
+|----------------|--------------------------|----------|--------|
+| partition      | 0.1078 (0.081 - 0.165)   | 0.1767   | 0.9168 |
+| fcm_pm_full    | 0.0520 (0.005 - 0.131)   | 0.1045   | 0.9249 |
+| single_only    | 0.0174 (0.002 - 0.050)   | 0.0611   | 0.9216 |
+```
+```
+| Paired (F1@FAR1%, seed-matched) |    d    | wins | 95% CI            | Wilcx | verdict |
+|---------------------------------|---------|------|-------------------|-------|---------|
+| partition   - single_only       | +0.0903 | 5/5  | [+0.064, +0.117]  | 0.062 | sig     |
+| fcm_pm_full - single_only       | +0.0346 | 3/5  | [-0.057, +0.126]  | 0.625 | NOT sig |
+| partition   - fcm_pm_full       | +0.0558 | 3/5  | [-0.054, +0.166]  | 0.312 | NOT sig |
+```
+
+**Honest finding.** Even the REAL full FCM-PM does NOT reliably beat single_only on
+Severstal (d=+0.035 but 3/5, CI crosses 0, Wilcoxon 0.625 -- and highly variable: one
+seed 0.131, three near 0.007). partition beats single_only significantly (5/5, CI>0)
+and has 2x the mean of fcm_pm_full (though partition-vs-fcm_pm_full is not significant
+at n=5 due to fcm_pm_full's variance). So the earlier "the arm wasn't real FCM-PM"
+caveat is now closed: real FCM-PM ALSO fails to reliably help on continuous-defect
+steel -- consistent with the measured footprint mechanism (grid-complement destroys
+extended defects). Caveats: n=5, batch-16 (VRAM-limited, not the batch-64 protocol),
+fcm_pm_full high variance. This CONFIRMS FCM-PM is domain-specific (chip grid, not
+steel); it does not change the honest ICLR ~28-33%.
+
 ## Cross-domain operator picture (consistent OBSERVATION, not causal)
 
 The best-mean content-blind operator differs by domain defect geometry — chip
