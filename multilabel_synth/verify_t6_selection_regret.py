@@ -138,6 +138,30 @@ def _bern_kl(p, q):
     return t(p, q) + t(1 - p, 1 - q)
 
 
+def t6_dichotomy_check(seed=0):
+    """T6-DICHOTOMY (corollary of T6b): V(I)=0 IFF some operator (column) dominates in
+    every world (row); otherwise V(I)>0 and grows with the best-operator disagreement.
+    Reconciles the T6a NEGATIVE probe (partition dominated both worlds -> V=0, selection
+    trivial) with T6a impossibility (needs genuine disagreement). Check on random +
+    constructed instances that V_LP == 0 exactly when a dominant column exists."""
+    rng = np.random.default_rng(seed)
+    ok = True
+    # (a) constructed dominant-column instances -> V must be 0
+    for _ in range(50):
+        M, K = rng.integers(2, 5), rng.integers(2, 5)
+        u = rng.uniform(0, 0.6, size=(M, K)); u[:, 0] = rng.uniform(0.7, 1.0, size=M)  # col 0 dominates
+        V, _ = minimax_primal(u)
+        ok = ok and abs(V) < 1e-9
+    # (b) disagreement instances (each world has a different best) -> V must be > 0
+    minV = 1e9
+    for _ in range(50):
+        K = rng.integers(2, 5); u = np.full((K, K), 0.5)
+        for w in range(K): u[w, w] = 0.9          # world w prefers op w -> no dominant col
+        V, _ = minimax_primal(u); minV = min(minV, V)
+        ok = ok and V > 1e-6
+    return ok, minV
+
+
 def t6d_fano_lower(m=200, c=0.17, seed=0):
     """T6d LOWER bound, HONEST Fano check (audit fix). The proof needs C c^2 <= 1/4,
     which (with C~4-8) means c <= 0.17-0.25; at c=0.5 the Fano RHS is NEGATIVE
@@ -179,6 +203,13 @@ def main():
     print("  multi-defect median (r_a,r_b)=(17,8) -> P(both preserved) ~ 0.0003 (mean),")
     print("  <0.05 for 100% of multi images => extended defects destroyed by the grid mask")
     print("  (mechanism MEASURED-consistent; still not a same-domain mask-ablation proof).")
+
+    print("\n== T6-DICHOTOMY: V(I)=0 iff a dominant operator exists (reconciles T6a probe) ==")
+    dok, minV = t6_dichotomy_check()
+    print(f"  dominant-column instances -> V==0, disagreement instances -> V>0 (min {minV:.3f}): "
+          f"{'PASS' if dok else 'FAIL'}")
+    print("  => the T6a NEGATIVE probe (partition dominated both worlds) is the V=0 case;")
+    print("     T6a impossibility bites only when worlds genuinely disagree on the best op.")
 
     print("\n== T6a: 2-world selection game (Delta=0.4) ==")
     det, rand, D = t6a(0.4)

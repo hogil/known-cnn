@@ -158,6 +158,27 @@ help -- we do not claim to know which; the floor is the guaranteed part.)
 
 ---
 
+## Corollary T6-DICHOTOMY (when selection is free vs impossible) [immediate from T6b; reconciles the T6a probe]
+
+*Not a new theorem -- a direct reading of `V(I)` that reconciles the T6a NEGATIVE
+probe with the impossibility.* From T6b, `V(I) = 0` **iff** some operator `j*`
+attains `max_k u_k(Q)` for every `Q in U(I)` (a DOMINANT operator: within-floor of the
+best in every consistent world); then the selector plays `j*` and pays nothing.
+`V(I) > 0` iff the consistent worlds genuinely DISAGREE on the best operator (T6a's
+construction), and then `V(I) >= Delta/2`. So source-only operator selection is FREE
+when a dominant operator exists and IMPOSSIBLE (regret `>= Delta/2`) only under
+genuine disagreement. (Machine check `t6_dichotomy_check`: `V=0` on all constructed
+dominant-column instances, `V>0` (min 0.200) on all disagreement instances.)
+
+**Reconciliation.** The Round-3 realizability probe found partition-synth DOMINATED
+both worlds of a natural bar family -> that family is the `V(I)=0` case (selection
+trivial, pick partition), NOT a counterexample to T6b. Empirically partition tends to
+be near-dominant (bar family; Severstal partition-wins), so `V(I)` is often small in
+practice; T6a's `Delta/2` floor bites only on domains engineered/observed to reverse
+the best operator (chip grid-complement vs Severstal whole-object). This is the honest
+unified picture: the impossibility is real but CONDITIONAL on operator disagreement,
+which is itself domain-dependent and not always present.
+
 ## Theorem T6d (minimal positive resource collapses the regret) [UPPER + Fano LOWER proven; matched Theta(sqrt(log K / m))]
 
 **Claim.** Given `m` i.i.d. genuine target multi-positive validation examples (the
