@@ -303,8 +303,10 @@ counterpart."
 An independent opus proof-auditor (tasked to refute) rated the cluster and returned
 **gate NOT MET**. Corrected status of each piece:
 - **T6a** — game value `Delta/2` proven; the utility-inversion REALIZABILITY is a
-  learning assumption (empirically motivated), so the impossibility is at the ORACLE
-  level, conditional for learners. Machine check is arithmetic on the assumed matrix.
+  learning assumption, now with a NEGATIVE probe (Round 3): a natural controlled family
+  did NOT realize the flip (partition-synth generalized to both worlds). So the
+  impossibility is ORACLE-level and its learner-level realizability has a counter-family
+  -- weaker than first written. Machine check is arithmetic on the assumed matrix.
 - **T6b** — SOUND (Sion; `reg` convex in the utility vector so hull-invariant, now
   machine-checked to 1.7e-16). Strongest piece. The LP-duality check is unconditional
   (von Neumann), so it validates the derivation, not the infinite game.
@@ -320,10 +322,19 @@ An independent opus proof-auditor (tasked to refute) rated the cluster and retur
 
 **Gate (plan Section 5): 1 of 3 items CLOSED (Round 1).**
 - [CLOSED] T6d Fano `log K` lower bound -- proven + machine-checked (`t6d_fano_lower`).
-- [OPEN] T6a utility-inversion realizability -- still an assumption (may be genuinely
-  unprovable without a learner model; candidate: a concrete two-operator construction
-  on a controlled composition family where the trained-model utility flip is verified
-  empirically -> would turn the assumption into a checked fact for at least one family).
+- [OPEN, with a NEGATIVE probe] T6a utility-inversion realizability. Round-3 attempt
+  (`verify_t6a_realizability.py`) built a controlled 2-class bar family with identical
+  single marginals and two co-occurrence worlds (overlay vs side-by-side), trained a
+  tiny CNN on summation-synth vs partition-synth, and measured which operator wins per
+  world. Result: NO inversion -- partition-synth was best or tied on BOTH worlds (World
+  A overlay: 1.00 = 1.00; World B side-by-side: partition 1.00 vs summation 0.83). So
+  in a natural presence-detection family the utility does NOT flip; partition-synth
+  generalizes (consistent with partition winning broadly on Severstal). This is an
+  honest NEGATIVE: T6a's realizability is NOT automatic and appears to fail in easy
+  appearance-invariant regimes -- it would need a harder task where the co-occurrence
+  APPEARANCE (not mere presence) is the label-determining cue (the T1 appearance-floor
+  regime). Until such a family is exhibited, T6a's impossibility stays ORACLE-level and
+  its learner-level realizability is not just unproven but has one counter-family.
 - [OPEN] T6-FCM mechanism -- needs a same-domain same-`g` mask ablation with measured
   footprints (a GPU experiment, queued for the next GPU-free round).
 
