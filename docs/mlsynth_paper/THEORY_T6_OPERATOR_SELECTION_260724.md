@@ -243,17 +243,39 @@ cells are chosen freely from the `N - r_a - r_b` non-footprint cells. Ratio to
 a DERIVATION identity, since the formula IS the closed form of that count; not a
 domain test.)
 
-**Honest scope of the mechanism (audit finding 5).** The DEPLOYED Severstal arm uses
-`g=3` (`N=9, m=3`), NOT `g=9`. At `g=3` the decay is COARSE: `P(1,1)=0.25`,
-`P(2,2)=0.06`, `P(3,3)=0.012`, and only `r <= 3` is even feasible -- the
-"super-polynomial destruction of extended defects" story is WEAK at the grid actually
-run. The `g=9` numbers (`0.225, 0.050, 0.011, ...`) are a hypothetical. Moreover NO
-footprint-size of real steel defects was measured, and no same-domain mask ablation
-was run. So T6-FCM is: an EXACT formula (proven) + an UNVALIDATED mechanism HYPOTHESIS
-for the chip-vs-Severstal reversal (footprint model asserted, grid mismatched to the
-deployed arm). Report the formula as the contribution; the reversal-explanation as a
-hypothesis to be tested by a same-domain, same-`g` mask ablation with measured
-footprints -- not as a result.
+**Deployed grid + MEASURED footprints (Round 4 -- corrects an earlier error).** A
+prior revision wrote "deployed arm is `g=3` (`N=9,m=3`)" after over-trusting a
+sub-agent audit that misread `g3` (which denotes `n_groups=3`) as grid-size 3. The
+code is unambiguous: `synth_pair(..., grid=9)` builds `9x9 = 81` cells and assigns
+`81 // 3 = 27` to source A. **Deployed grid: `N=81, m=27`.** So the `g=9` coherence
+numbers ARE the deployed ones.
+
+We then MEASURED real steel-defect footprints (`measure_severstal_footprints.py`:
+decode the RLE masks, count 9x9 grid cells each defect touches -- image-level, no
+training):
+```
+| class | n    | mean r | median r | p10 | p90 |
+|-------|------|--------|----------|-----|-----|
+| 0     |  532 |    9.1 |        7 |   3 |  17 |
+| 1     |  138 |    7.9 |        8 |   5 |   9 |
+| 2     | 3095 |   18.7 |       17 |   6 |  37 |
+| 3     |  470 |   17.5 |       15 |   6 |  33 |
+| ALL   | 4235 |   17.0 |       14 |   5 |  35 |
+```
+Steel defects are indeed EXTENDED: `r = 8-19` cells (of 81), median 14, NOT compact
+`r = 1-2`. Plugging measured multi-defect footprints (median `(r_a,r_b) = (17,8)`)
+into `P(both) = C(N-r_a-r_b, m-r_a)/C(N,m)`: **`P(both preserved) = 0.0003` mean,
+`0.0000` median, `< 0.05` for 100% of multi-defect images**. So at the deployed 9x9
+grid, the grid-complement operator preserves both real steel defects with probability
+~0 -- the mechanism for why `grid_complement`/`fcm_pm` fails on Severstal is now
+MEASURED, not asserted.
+
+**Honest scope.** This upgrades T6-FCM from "unvalidated hypothesis" to a
+MEASURED-CONSISTENT mechanism: exact formula (proven) + measured extended footprints +
+computed `P(preserved)~0`. It is still not a same-domain mask-ABLATION causal proof
+(that would train with vs without the grid mask and compare); the `fcm_pm_full` run
+(complete complement set + Pair-Mask, in progress) is the closest ablation. Report as
+"measured-consistent mechanism," pending the `fcm_pm_full` result.
 
 ---
 
@@ -315,8 +337,9 @@ An independent opus proof-auditor (tasked to refute) rated the cluster and retur
 - **T6d** — UPPER + Fano LOWER now BOTH proven; matched `Theta(sqrt(log K/m))` in `m`
   AND `K` (gate item 1 CLOSED: Fano construction written + machine-checked, `P_err`
   stays >0 and grows with `K`). The soundest cluster piece alongside T6b.
-- **T6-FCM** — formula exact/proven; the reversal-mechanism is an unvalidated
-  HYPOTHESIS (footprint model asserted, grid `g=9` mismatched to the deployed `g=3`).
+- **T6-FCM** — formula exact/proven; deployed grid confirmed `N=81,m=27`; steel
+  footprints MEASURED (median `r=14`, extended) -> measured `P(both preserved)~0`, so
+  the reversal-mechanism is now MEASURED-CONSISTENT (still not a mask-ablation proof).
 - **T6-HEDGE** — bound correct with constant `2 L_u`; VACUOUS in the hard case
   (`delta = Omega(A*)`); re-expresses rather than escapes the impossibility.
 
@@ -335,8 +358,12 @@ An independent opus proof-auditor (tasked to refute) rated the cluster and retur
   APPEARANCE (not mere presence) is the label-determining cue (the T1 appearance-floor
   regime). Until such a family is exhibited, T6a's impossibility stays ORACLE-level and
   its learner-level realizability is not just unproven but has one counter-family.
-- [OPEN] T6-FCM mechanism -- needs a same-domain same-`g` mask ablation with measured
-  footprints (a GPU experiment, queued for the next GPU-free round).
+- [PARTLY CLOSED] T6-FCM mechanism. Round 4 corrected the deployed grid (`N=81,m=27`,
+  not `N=9,m=3` -- earlier sub-agent misread) and MEASURED real steel footprints
+  (`measure_severstal_footprints.py`): median `r=14` of 81 (extended), giving measured
+  `P(both preserved) ~ 0.0003` (< 0.05 for 100% of multi-defect images). The mechanism
+  is now MEASURED-CONSISTENT. Still OPEN: a same-domain mask ABLATION (train with vs
+  without the grid mask); the `fcm_pm_full` run is the closest such comparison.
 
 **Honest probability (decision range, not a measurement).** With soundness locked and
 T6 added but the gate NOT met: ICLR ~**28-33%** (the auditor's independent number;

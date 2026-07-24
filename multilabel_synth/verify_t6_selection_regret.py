@@ -172,15 +172,13 @@ def main():
         print(f"  N={N} m={m} r_a={ra} r_b={rb}: formula={f:.5f} brute={b:.5f} |d|={abs(f-b):.1e}")
     print(f"  max |formula-brute| = {maxerr:.2e} ({'PASS' if maxerr<1e-9 else 'FAIL'})")
     print("  [NOTE] formula==brute is a DERIVATION identity check, NOT a domain test.")
-    print("  hypothetical g=9 (N=81,m=27) -- NOT the deployed arm:")
-    for r in (1, 2, 3, 5, 8):
+    print("  DEPLOYED Severstal FCM grid = 9x9 (N=81, m=27; 'g3'=n_groups=3, NOT grid 3):")
+    for r in (1, 2, 3, 5, 8, 14):
         print(f"    r_a=r_b={r:2d}: P(both)={fcm_coherence_formula(81,27,r,r):.4f}")
-    print("  DEPLOYED Severstal arm g=3 (N=9,m=3) -- decay is COARSE here (audit finding 5):")
-    for r in (1, 2, 3):
-        print(f"    r_a=r_b={r:2d}: P(both)={fcm_coherence_formula(9,3,r,r):.4f}")
-    print("  => at the deployed g=3 the 'super-polynomial destruction' story is WEAK"
-          " (P(1,1)=0.25, only r<=3 feasible); mechanism = HYPOTHESIS, not validated"
-          " (no footprint-size measurement, no same-domain mask ablation).")
+    print("  MEASURED steel footprints (measure_severstal_footprints.py): median r=14,")
+    print("  multi-defect median (r_a,r_b)=(17,8) -> P(both preserved) ~ 0.0003 (mean),")
+    print("  <0.05 for 100% of multi images => extended defects destroyed by the grid mask")
+    print("  (mechanism MEASURED-consistent; still not a same-domain mask-ablation proof).")
 
     print("\n== T6a: 2-world selection game (Delta=0.4) ==")
     det, rand, D = t6a(0.4)
